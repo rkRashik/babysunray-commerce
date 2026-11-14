@@ -88,7 +88,9 @@ describe("destructive reset statements", () => {
       '"public"."user_access"',
       '"public"."variants"',
     ]);
-    expect(fn).toBe('drop function if exists "public"."stock_movements_reject_change"() restrict;');
+    expect(fn).toBe(
+      'drop function if exists "public"."stock_movements_reject_change"(), "public"."user_access_revoke_sessions"() restrict;',
+    );
     expect(history).toBe('drop table if exists "drizzle"."__drizzle_migrations" restrict;');
   });
 });

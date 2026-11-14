@@ -83,3 +83,20 @@ export async function count(pool: Pool, sql: string, params: unknown[] = []): Pr
   const { rows } = await pool.query<Record<string, unknown>>(sql, params);
   return Number(Object.values(rows[0])[0]);
 }
+
+/**
+ * Signs in the way a native (non-browser) client does: no Origin, no cookie, no Sec-Fetch-* headers.
+ * Returns the signed Bearer token from the `set-auth-token` response header.
+ */
+export async function signInNative(auth: Auth, email: string, password: string) {
+  const response = await auth.handler(
+    new Request(`${BASE_URL}/api/auth/sign-in/email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    }),
+  );
+  return { response, token: response.headers.get("set-auth-token") };
+}
+
+export const bearer = (token: string) => new Headers({ authorization: `Bearer ${token}` });

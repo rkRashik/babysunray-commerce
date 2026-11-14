@@ -30,6 +30,7 @@ function askHidden(question: string): Promise<string> {
     let value = "";
     const finish = () => {
       stdin.off("data", onData);
+      stdin.off("end", onEnd);
       stdin.setRawMode(false);
       stdin.pause();
       process.stdout.write("\n");
@@ -50,11 +51,17 @@ function askHidden(question: string): Promise<string> {
         else value += ch;
       }
     };
+    // Input closed before Enter (for example Ctrl+Z on Windows): stop with a message, never silently.
+    const onEnd = () => {
+      finish();
+      reject(new Error("Input closed. Nothing was created."));
+    };
     process.stdout.write(question);
     stdin.setEncoding("utf8");
     stdin.setRawMode(true);
     stdin.resume();
     stdin.on("data", onData);
+    stdin.once("end", onEnd);
   });
 }
 

@@ -91,6 +91,10 @@ describe("migrations", () => {
       "select tgenabled from pg_trigger where tgname = 'stock_movements_append_only' and not tgisinternal",
     );
     expect(trigger.rows).toEqual([{ tgenabled: "O" }]);
+    const revoke = await client.query(
+      "select tgenabled from pg_trigger where tgname = 'user_access_revoke_sessions' and not tgisinternal",
+    );
+    expect(revoke.rows).toEqual([{ tgenabled: "O" }]);
   });
 
   it("is a no-op when run again on an up-to-date schema", async () => {

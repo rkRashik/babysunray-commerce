@@ -36,6 +36,13 @@
       "when": 1794682500232,
       "tag": "0004_stock_movements_user_actor",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794688935920,
+      "tag": "0005_revoke_sessions_on_access_loss",
+      "breakpoints": true
     }
   ]
 }

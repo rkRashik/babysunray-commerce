@@ -77,7 +77,7 @@ describe("authenticated actors", () => {
     ]) {
       expect(await errorCodeOf(receiveStock(db, { sku, quantity: 1, actor: forged as Actor }))).toBe("INVALID_INPUT");
     }
-    expect(() => actorFor({ userId: auditorId, role: "owner" })).toThrow("principal from getPrincipal");
+    expect(() => actorFor({ userId: auditorId, role: "owner" })).toThrow("verified principal");
     expect((await listStockMovements(db, sku)).length).toBe(0);
   });
 

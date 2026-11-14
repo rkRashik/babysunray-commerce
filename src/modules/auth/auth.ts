@@ -1,6 +1,8 @@
 import "server-only";
-import { APIError, BASE_ERROR_CODES, betterAuth } from "better-auth";
+import { APIError, BASE_ERROR_CODES, type BetterAuthPlugin, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { createAuthMiddleware } from "better-auth/api";
+import { bearer } from "better-auth/plugins";
 import type { Db } from "@/db/database";
 import { authAccounts, authRateLimits, authSessions, authUsers, authVerifications } from "@/db/schema";
 import { findActiveRole } from "./access";
@@ -50,6 +52,45 @@ export const DISABLED_PATHS = [
   "/account-info",
 ];
 
+const SET_AUTH_TOKEN = "set-auth-token";
+
+// Browsers always send at least one of these (Sec-Fetch-* and Origin cannot be removed by page scripts).
+// Native clients send none of them.
+function isBrowserRequest(headers: Headers | undefined): boolean {
+  if (!headers) return false;
+  if (headers.has("cookie") || headers.has("origin")) return true;
+  for (const name of headers.keys()) if (name.startsWith("sec-fetch-")) return true;
+  return false;
+}
+
+/**
+ * The Bearer plugin adds the signed session token as a readable `set-auth-token` response header to every
+ * response that sets the session cookie, including a browser's sign-in and its daily session refresh.
+ * That would hand page scripts the credential the HttpOnly cookie hides. This plugin runs after it and
+ * removes the header from browser requests, so only native (non-browser) clients receive a token.
+ */
+const browserTokenGuard = {
+  id: "browser-token-guard",
+  hooks: {
+    after: [
+      {
+        matcher: (ctx) => isBrowserRequest(ctx.request?.headers ?? ctx.headers),
+        handler: createAuthMiddleware(async (ctx) => {
+          const headers = ctx.context.responseHeaders;
+          if (!headers?.has(SET_AUTH_TOKEN)) return;
+          headers.delete(SET_AUTH_TOKEN);
+          const exposed = (headers.get("access-control-expose-headers") ?? "")
+            .split(",")
+            .map((h) => h.trim())
+            .filter((h) => h && h.toLowerCase() !== SET_AUTH_TOKEN);
+          if (exposed.length) headers.set("access-control-expose-headers", exposed.join(", "));
+          else headers.delete("access-control-expose-headers");
+        }),
+      },
+    ],
+  },
+} satisfies BetterAuthPlugin;
+
 /**
  * The Better Auth instance for one installation: email and password only, public sign-up refused,
  * sessions in PostgreSQL with no cookie cache, PostgreSQL-backed rate limiting, CSRF and origin checks on
@@ -94,6 +135,10 @@ export function createAuth(db: Db, settings: AuthSettings) {
       ipAddress: { ipAddressHeaders: [] },
     },
     telemetry: { enabled: false },
+    // Bearer transport for /api/v1 and future native clients (ADR-0004). requireSignature: only the signed
+    // token is accepted; the raw token that get-session and list-sessions return in their JSON is not.
+    // Order matters: the guard must run after the Bearer plugin's response hook.
+    plugins: [bearer({ requireSignature: true }), browserTokenGuard],
     databaseHooks: {
       session: {
         create: {

@@ -103,8 +103,9 @@ describe("endpoint surface", () => {
     expect(await sessions()).toBe(0);
   });
 
-  it("has no Bearer-token authentication", async () => {
+  it("refuses the raw session token as a Bearer token, and Bearer on the browser path", async () => {
     await ownerCookie();
+    // get-session and list-sessions return this raw token in their JSON; it must not be a credential.
     const { rows } = await pool.query("select token from auth_sessions");
     const response = await call(auth, "GET", "/get-session", { headers: { authorization: `Bearer ${rows[0].token}` } });
     expect(await response.json()).toBeNull();
