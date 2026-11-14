@@ -2,9 +2,9 @@
 
 Bilingual (Bangla/English) e-commerce website and private Owner Office for BabySunray, a single-founder baby and kidswear business in Bangladesh.
 
-**Phase:** foundation and decisions. A local Git repository exists (branch `main`, no remote). The Next.js app is scaffolded as an engineering base only; `src/app/page.tsx` is a status page, not the approved homepage. There is no database, authentication, test suite or deployment yet. Do not create them unless the current gate authorises it.
+**Phase:** foundation and decisions. A local Git repository exists (branch `main`, no remote). The Next.js app is scaffolded as an engineering base only; `src/app/page.tsx` is a status page, not the approved homepage. There is no application database schema, authentication or deployment yet. Local PostgreSQL test tooling exists (the local databases are created by the founder from `db/local-setup.sql`); there are no business tables. Do not create the rest unless the current gate authorises it.
 
-Commands (see README.md): `npm install`, `npm run dev`, `npm run typecheck`, `npm run lint`, `npm run build`. There is no test script yet.
+Commands (see README.md): `npm install`, `npm run dev`, `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` (unit), `npm run test:db` (PostgreSQL integration; needs `TEST_DATABASE_URL`, local `_test` database only). Never point tests at a development, shared or hosted database.
 
 ## Authoritative documents
 

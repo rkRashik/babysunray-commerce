@@ -4,7 +4,7 @@ The website and private Owner Office for BabySunray, a Bangladesh-focused baby a
 
 ## Status
 
-**Foundation and decisions phase.** The Next.js application is scaffolded as an engineering base only. `src/app/page.tsx` is a development-status page that proves the framework renders; it is not the approved homepage. There are no storefront or Owner Office features, database, authentication, tests or deployment. A local Git repository exists (branch `main`, no remote).
+**Foundation and decisions phase.** The Next.js application is scaffolded as an engineering base only. `src/app/page.tsx` is a development-status page that proves the framework renders; it is not the approved homepage. There are no storefront or Owner Office features, application database schema, authentication or deployment. Local PostgreSQL tooling for development and integration tests is in place (see below). The two local databases are created by the founder with `db/local-setup.sql`; no business tables exist. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`).
 
 Requirements and the stack decision are drafts under founder review.
 
@@ -19,11 +19,34 @@ npm run typecheck  # TypeScript strict check
 npm run lint       # ESLint
 npm run build      # production build
 npm start          # serve the production build
+npm test           # unit tests (Vitest); no database needed
+npm run test:db    # database integration tests; needs PostgreSQL and TEST_DATABASE_URL
 ```
 
-No automated test script exists yet.
+`npm run test:db` fails, rather than skipping, when `TEST_DATABASE_URL` is missing, PostgreSQL is unreachable, or the URL does not point at a local database whose name ends in `_test`.
 
 Version constraints (checked 2026-11-14): TypeScript is held at 6.0.x because `typescript-eslint` supports TypeScript below 6.1. ESLint is held at 9.x because `eslint-config-next` depends on plugins that do not yet declare ESLint 10 support. Revisit both when the plugins update.
+
+## Local PostgreSQL
+
+Development uses a local PostgreSQL 18 server. Hosting and the ORM are undecided; the tests use the plain `pg` driver. The setup creates two isolated databases, each with its own non-superuser role that cannot connect to the other database:
+
+| Database | Role | Purpose |
+|---|---|---|
+| `babysunray_dev` | `babysunray_dev` | local development |
+| `babysunray_test` | `babysunray_test` | integration tests |
+
+One-time setup, run by you as a PostgreSQL superuser (it never overwrites: it stops if a role or database already exists):
+
+```
+psql -U postgres -f db/local-setup.sql
+psql -U postgres -c "\password babysunray_dev"
+psql -U postgres -c "\password babysunray_test"
+```
+
+`\password` prompts without echo, so no password is stored in a file or shell history. Then copy `.env.example` to `.env.local` and fill in the two connection strings (`DATABASE_URL`, `TEST_DATABASE_URL`). `.env.local` is gitignored. Connection strings are server-side only: never prefix them with `NEXT_PUBLIC_`.
+
+The PostgreSQL service on this machine requires a password for `postgres`, so the setup above was not run by Claude Code. The same script, tests and checks were run against a temporary PostgreSQL 18.6 cluster that was deleted afterwards.
 
 ## Documentation
 
