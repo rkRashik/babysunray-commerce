@@ -84,7 +84,7 @@ describe("migrations", () => {
     await client.query("insert into products (slug, name_en) values ('mig-keep', 'Kept')");
     await client.query("create table unexpected_probe (n int)");
     try {
-      await expect(resetAndMigrate(process.env.TEST_DATABASE_URL)).rejects.toThrow("relation public.unexpected_probe");
+      await expect(resetAndMigrate(process.env.TEST_DATABASE_URL)).rejects.toThrow("relation:public.unexpected_probe:r");
       const kept = await client.query("select count(*)::int as n from products where slug = 'mig-keep'");
       expect(kept.rows[0].n).toBe(1);
     } finally {

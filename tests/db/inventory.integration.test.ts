@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Db } from "../../src/db/database";
 import type { Actor } from "../../src/modules/actor";
+import { deactivateVariant } from "../../src/modules/catalogue/service";
 import { MAX_STOCK_QUANTITY } from "../../src/modules/inventory/rules";
 import {
   adjustStock,
@@ -56,6 +57,17 @@ describe("stock receipts", () => {
     }
     expect((await getStockLevel(db, sku)).onHand).toBe(0);
     expect(await movementCount(variantId)).toBe(0);
+  });
+
+  it("accepts physical stock for an inactive SKU without reactivating it", async () => {
+    const { sku, variantId } = await newSku();
+    await deactivateVariant(db, variantId);
+    const received = await receiveStock(db, { sku, quantity: 4, actor: TEST_ACTOR });
+    expect(received.onHand).toBe(4);
+    const adjusted = await adjustStock(db, { sku, quantityDelta: -1, reason: "Counted", actor: TEST_ACTOR });
+    expect(adjusted.onHand).toBe(3);
+    const { rows } = await pool.query("select status from variants where id = $1", [variantId]);
+    expect(rows[0].status).toBe("inactive");
   });
 
   it("rejects an unknown SKU", async () => {

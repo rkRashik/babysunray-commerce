@@ -30,6 +30,21 @@ describe("products", () => {
     expect(product.createdAt).toBeInstanceOf(Date);
   });
 
+  it("keeps Bangla and other Unicode text in names and descriptions", async () => {
+    const product = await createProduct(db, {
+      slug: "cat-bangla",
+      nameBn: "নরম সুতির রম্পার",
+      nameEn: "Soft Cotton Romper – “Sunray”",
+      descriptionBn: "শিশুদের জন্য আরামদায়ক পোশাক।",
+    });
+    const { rows } = await pool.query("select name_bn, name_en, description_bn from products where id = $1", [product.id]);
+    expect(rows[0]).toEqual({
+      name_bn: "নরম সুতির রম্পার",
+      name_en: "Soft Cotton Romper – “Sunray”",
+      description_bn: "শিশুদের জন্য আরামদায়ক পোশাক।",
+    });
+  });
+
   it("requires a name in at least one language, in the service and in the database", async () => {
     expect(await errorCodeOf(createProduct(db, { slug: "cat-no-name", nameEn: "  " }))).toBe("INVALID_INPUT");
     expect(await errorCodeOf(pool.query("insert into products (slug) values ('cat-no-name')"))).toBe("23514");
@@ -43,6 +58,14 @@ describe("products", () => {
   it("rejects an invalid slug and blank names at the database level", async () => {
     expect(await errorCodeOf(pool.query("insert into products (slug, name_en) values ('Bad Slug', 'x')"))).toBe("23514");
     expect(await errorCodeOf(pool.query("insert into products (slug, name_en) values ('cat-blank', ' ')"))).toBe("23514");
+  });
+
+  it("allows only lowercase ASCII letters, digits and single hyphens in a slug, in the service and the database", async () => {
+    for (const slug of ["cat-Upper", "cat_under", "cat--double", "-cat", "cat-", "cat romper", "নরম-রম্পার", "cat-é"]) {
+      expect(await errorCodeOf(createProduct(db, { slug, nameEn: "Test" }))).toBe("INVALID_INPUT");
+      expect(await errorCodeOf(pool.query("insert into products (slug, name_en) values ($1, 'x')", [slug]))).toBe("23514");
+    }
+    expect((await createProduct(db, { slug: "cat-2-pack", nameEn: "Test" })).slug).toBe("cat-2-pack");
   });
 
   it("only allows draft and archived, so no product can become sellable yet", async () => {
@@ -84,14 +107,56 @@ describe("variants", () => {
     }
   });
 
+  it("accepts uppercase letters, digits, hyphens and underscores, and normalises input", async () => {
+    const product = await createProduct(db, { slug: "cat-sku-ok", nameEn: "Test Romper" });
+    const skus: [string, string][] = [
+      ["cat-ok-001", "CAT-OK-001"],
+      ["  CAT_OK_002  ", "CAT_OK_002"],
+      ["CAT-OK_3-x", "CAT-OK_3-X"],
+      ["A".repeat(64), "A".repeat(64)],
+    ];
+    for (const [input, stored] of skus) {
+      expect((await createVariant(db, { productId: product.id, sku: input, pricePaisa: 100 })).sku).toBe(stored);
+    }
+  });
+
+  it("rejects internal spaces, symbols, Unicode, empty and over-long SKUs in the service", async () => {
+    const product = await createProduct(db, { slug: "cat-sku-bad", nameEn: "Test Romper" });
+    for (const sku of ["CAT BAD 1", "CAT.BAD", "CAT/BAD", "CAT-বেবি", "CAT-ß", "CAT-É", "", "   ", "A".repeat(65)]) {
+      expect(await errorCodeOf(createVariant(db, { productId: product.id, sku, pricePaisa: 100 }))).toBe("INVALID_INPUT");
+    }
+    const { rows } = await pool.query("select count(*)::int as n from variants where product_id = $1", [product.id]);
+    expect(rows[0].n).toBe(0);
+  });
+
   it("stores only canonical SKUs at the database level", async () => {
     const product = await createProduct(db, { slug: "cat-sku-db", nameEn: "Test Romper" });
-    for (const sku of ["cat-lower", " CAT-SPACE", ""]) {
+    const bad = [
+      "cat-lower",
+      " CAT-SPACE",
+      "CAT-SPACE ",
+      "CAT SPACE",
+      "CAT.DOT",
+      "CAT-বেবি",
+      "CAT-É",
+      "CAT-ß",
+      "CAT\tTAB",
+      "CAT\nNEWLINE",
+      "CAT-ONE\n",
+      "CAT\u00a0NBSP",
+      "",
+      "A".repeat(65),
+    ];
+    for (const sku of bad) {
       expect(
         await errorCodeOf(
           pool.query("insert into variants (product_id, sku, price_paisa) values ($1, $2, 100)", [product.id, sku]),
         ),
+        JSON.stringify(sku),
       ).toBe("23514");
+    }
+    for (const sku of ["CAT-DB_1", "B".repeat(64), "_", "-"]) {
+      await pool.query("insert into variants (product_id, sku, price_paisa) values ($1, $2, 100)", [product.id, sku]);
     }
   });
 

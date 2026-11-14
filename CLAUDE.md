@@ -4,7 +4,7 @@ Bilingual (Bangla/English) e-commerce website and private Owner Office for BabyS
 
 **Phase:** foundation and decisions. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`, branch `main`). The Next.js app is scaffolded as an engineering base only; `src/app/page.tsx` is a status page, not the approved homepage. The catalogue and stock schema (`src/db/schema.ts`, migrations in `drizzle/`) and their internal services (`src/modules/`) exist; orders, reservations, authentication, API endpoints, UI features and deployment do not. The local databases are created by the founder from `db/local-setup.sql`. Do not create the rest unless the current gate authorises it.
 
-Commands (see README.md): `npm install`, `npm run dev`, `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` (unit), `npm run test:db` (PostgreSQL integration; needs `TEST_DATABASE_URL`, local `babysunray_test` database and role only), `npm run db:generate`, `npm run db:check`, `npm run db:migrate` (local development database only). Never point tests at a development, shared or hosted database. Never use `drizzle-kit push`.
+Commands (see README.md): `npm install`, `npm run dev`, `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` (unit), `npm run test:db` (PostgreSQL integration; needs `TEST_DATABASE_URL`, local `babysunray_test` database and role only), `npm run db:generate`, `npm run db:check`, `npm run db:migrate` (only the local `babysunray_dev` database; it verifies the target and refuses anything else). Never point tests at a development, shared or hosted database. Run migrations only through `npm run db:migrate`, never `drizzle-kit push` or `drizzle-kit migrate` directly.
 
 ## Project goals (founder-confirmed; requirements B-8 to B-13)
 

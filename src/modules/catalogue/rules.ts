@@ -1,19 +1,24 @@
 import { invalidInput } from "../domain-error";
 
 // Input validation for the catalogue. The same limits are enforced by CHECK constraints in src/db/schema.ts.
-// Length limits are technical bounds, not merchandising policy; the SKU format itself is not decided (I-10).
+// Length limits are technical bounds, not merchandising policy.
 
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-const CONTROL_CHARACTER = /\p{Cc}/u;
+// Canonical stored SKU: ASCII uppercase letters, digits, hyphen and underscore (founder-approved, Gate G.3a).
+const SKU = /^[A-Z0-9_-]{1,64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Canonical SKU: surrounding whitespace removed, Unicode NFC, uppercase. */
+/**
+ * Canonical SKU: surrounding whitespace removed and lowercase ASCII letters uppercased, then validated.
+ * Only a-z is converted (not toUpperCase()), so a Unicode letter can never turn into ASCII; it is rejected.
+ */
 export function normalizeSku(raw: string): string {
   if (typeof raw !== "string") throw invalidInput("sku", "must be text");
-  const sku = raw.trim().normalize("NFC").toUpperCase();
+  const sku = raw.trim().replace(/[a-z]/g, (c) => c.toUpperCase());
   if (sku.length === 0) throw invalidInput("sku", "is required");
-  if (sku.length > 64) throw invalidInput("sku", "must be at most 64 characters");
-  if (CONTROL_CHARACTER.test(sku)) throw invalidInput("sku", "must not contain control characters");
+  if (!SKU.test(sku)) {
+    throw invalidInput("sku", "must be 1-64 characters: letters A-Z, digits, hyphen and underscore only");
+  }
   return sku;
 }
 

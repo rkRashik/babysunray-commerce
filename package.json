@@ -15,7 +15,7 @@
     "test:db": "vitest run --config vitest.integration.config.mts",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "node scripts/migrate-dev.mts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.4",

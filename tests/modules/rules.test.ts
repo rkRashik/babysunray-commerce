@@ -31,19 +31,31 @@ describe("normalizeSku", () => {
     expect(normalizeSku("Bs-Romper-01")).toBe("BS-ROMPER-01");
   });
 
-  it("does not impose a format beyond technical bounds", () => {
-    expect(normalizeSku("a/b 1.2_x")).toBe("A/B 1.2_X");
+  it("accepts uppercase letters, digits, hyphens and underscores", () => {
+    expect(normalizeSku("BABY-001")).toBe("BABY-001");
+    expect(normalizeSku("baby-001")).toBe("BABY-001");
+    expect(normalizeSku("  BABY_002  ")).toBe("BABY_002");
+    expect(normalizeSku("-_-")).toBe("-_-");
   });
 
-  it("uses Unicode NFC so look-alike encodings are one SKU", () => {
-    expect(normalizeSku("é")).toBe(normalizeSku("é"));
+  it("rejects internal spaces and other symbols", () => {
+    for (const bad of ["BABY 003", "A/B", "A.B", "A+B", "A\tB", "A\nB", "A\u0000B", "A B"]) {
+      expect(codeOf(() => normalizeSku(bad))).toBe("INVALID_INPUT");
+    }
   });
 
-  it("rejects empty, too long and control-character SKUs", () => {
+  it("rejects Unicode letters instead of converting them", () => {
+    // toUpperCase() would turn "ß" into "SS" and pass; only a-z may be converted.
+    for (const bad of ["BABYß", "baß", "বেবি-১", "BABYÉ", "é", "ＡBC", "ı"]) {
+      expect(codeOf(() => normalizeSku(bad))).toBe("INVALID_INPUT");
+    }
+  });
+
+  it("rejects empty and too long SKUs and keeps the 64-character bound", () => {
     expect(codeOf(() => normalizeSku("   "))).toBe("INVALID_INPUT");
+    expect(codeOf(() => normalizeSku(""))).toBe("INVALID_INPUT");
     expect(codeOf(() => normalizeSku("A".repeat(65)))).toBe("INVALID_INPUT");
     expect(normalizeSku("A".repeat(64))).toHaveLength(64);
-    expect(codeOf(() => normalizeSku("A\u0000B"))).toBe("INVALID_INPUT");
     expect(codeOf(() => normalizeSku(42 as unknown as string))).toBe("INVALID_INPUT");
   });
 });

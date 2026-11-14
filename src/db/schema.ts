@@ -43,8 +43,8 @@ export const variants = pgTable(
     productId: uuid("product_id")
       .notNull()
       .references(() => products.id, { onDelete: "restrict" }),
-    // Stored only in canonical form (trimmed, uppercase, NFC), so a plain unique constraint
-    // also rejects case and whitespace variants of an existing SKU.
+    // Stored only in canonical form (ASCII uppercase letters, digits, hyphen, underscore; 1-64 characters),
+    // so a plain unique constraint also rejects case and whitespace variants of an existing SKU.
     sku: text("sku").notNull().unique("variants_sku_key"),
     size: text("size"),
     colour: text("colour"),
@@ -56,10 +56,7 @@ export const variants = pgTable(
   },
   (t) => [
     index("variants_product_id_idx").on(t.productId),
-    check(
-      "variants_sku_canonical",
-      sql`${t.sku} = upper(btrim(${t.sku})) and ${t.sku} is nfc normalized and ${t.sku} !~ '[[:cntrl:]]' and length(${t.sku}) between 1 and 64`,
-    ),
+    check("variants_sku_canonical", sql`${t.sku} ~ '^[A-Z0-9_-]{1,64}$'`),
     check(
       "variants_labels_valid",
       sql`btrim(${t.size}) <> '' and length(${t.size}) <= 64 and btrim(${t.colour}) <> '' and length(${t.colour}) <= 64`,

@@ -15,6 +15,13 @@
       "when": 1794644768148,
       "tag": "0001_stock_movements_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794654300101,
+      "tag": "0002_sku_ascii_format",
+      "breakpoints": true
     }
   ]
 }
