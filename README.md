@@ -6,7 +6,7 @@ Long-term goals (founder-confirmed; see requirements B-8 to B-13): a complete, p
 
 ## Status
 
-**Foundation and decisions phase.** The Next.js application is scaffolded as an engineering base only. `src/app/page.tsx` is a development-status page that proves the framework renders; it is not the approved homepage. There are no storefront or Owner Office features, application database schema, authentication or deployment. Local PostgreSQL tooling for development and integration tests is in place (see below). The two local databases are created by the founder with `db/local-setup.sql`; no business tables exist. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`).
+**Foundation and decisions phase.** The Next.js application is scaffolded as an engineering base only. `src/app/page.tsx` is a development-status page that proves the framework renders; it is not the approved homepage. There are no storefront or Owner Office features, orders, authentication, API endpoints or deployment. The first backend domain foundation exists: a catalogue and stock schema with internal services and PostgreSQL integration tests (see Catalogue and inventory). The two local databases are created by the founder with `db/local-setup.sql`. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`).
 
 Requirements and the stack decision are drafts under founder review.
 
@@ -23,15 +23,24 @@ npm run build      # production build
 npm start          # serve the production build
 npm test           # unit tests (Vitest); no database needed
 npm run test:db    # database integration tests; needs PostgreSQL and TEST_DATABASE_URL
+npm run db:generate  # generate a SQL migration from src/db/schema.ts (review it before committing)
+npm run db:check     # check the migration files and snapshots are consistent
+npm run db:migrate   # apply pending migrations to the local DATABASE_URL
 ```
 
-`npm run test:db` fails, rather than skipping, when `TEST_DATABASE_URL` is missing, PostgreSQL is unreachable, or the URL does not point at a local database whose name ends in `_test`.
+`npm run test:db` fails, rather than skipping, when `TEST_DATABASE_URL` is missing or PostgreSQL is unreachable. Before it changes anything it checks that:
+
+- the URL names a local host, the `babysunray_test` database and the `babysunray_test` role, and has no query parameters;
+- `DATABASE_URL` does not name the same database;
+- PostgreSQL itself reports that database and role, a non-superuser session and a loopback server address.
+
+Each run then drops only the objects the migrations create (it stops, changing nothing, if it finds any other object), replays every migration from scratch, and runs the tests. Test files use their own fictional fixture rows and run one at a time.
 
 Version constraints (checked 2026-11-14): TypeScript is held at 6.0.x because `typescript-eslint` supports TypeScript below 6.1. ESLint is held at 9.x because `eslint-config-next` depends on plugins that do not yet declare ESLint 10 support. Revisit both when the plugins update.
 
 ## Local PostgreSQL
 
-Development uses a local PostgreSQL 18 server. Hosting and the ORM are undecided; the tests use the plain `pg` driver. The setup creates two isolated databases, each with its own non-superuser role that cannot connect to the other database:
+Development uses a local PostgreSQL 18 server, accessed through Drizzle ORM over the `pg` driver ([ADR-0002](docs/adr/0002-drizzle-and-inventory-foundation.md)). Hosting is undecided. The setup creates two isolated databases, each with its own non-superuser role that cannot connect to the other database:
 
 | Database | Role | Purpose |
 |---|---|---|
@@ -50,18 +59,47 @@ psql -U postgres -c "\password babysunray_test"
 
 The PostgreSQL service on this machine requires a password for `postgres`, so the setup above was not run by Claude Code. The same script, tests and checks were run against a temporary PostgreSQL 18.6 cluster that was deleted afterwards.
 
+## Database migrations
+
+The schema is defined in `src/db/schema.ts`. `npm run db:generate` writes a SQL migration into `drizzle/` with its snapshot metadata; review the SQL (no unexpected `DROP`, destructive `ALTER` or privilege change) and commit it with the schema change. Triggers and other SQL that Drizzle cannot express go into a custom migration (`npx drizzle-kit generate --custom --name=<name>`). Never edit a migration that has been applied; add a new one. `drizzle-kit push` is not used.
+
+- **Development:** `npm run db:migrate` applies pending migrations to `DATABASE_URL`, which must be a local host. A production procedure waits for the hosting decision.
+- **Tests:** `npm run test:db` replays all migrations into `babysunray_test` on every run (see above). It does not use `drizzle-kit`.
+
+What the checks cover: `db:check` checks only that the migration files and snapshots are consistent with each other. Running `db:generate` and getting "No schema changes" shows the TypeScript schema matches the committed migrations. Neither compares a live database with the schema; the migration integration test checks the tables, constraints and trigger in the freshly migrated test database.
+
+## Catalogue and inventory
+
+Implemented as internal server-only services (no API endpoints or screens yet), in `src/modules/catalogue` and `src/modules/inventory`. Each service takes a Drizzle handle from its caller and throws a `DomainError` with a stable code for expected failures.
+
+| Capability | Notes |
+|---|---|
+| Create a draft product; archive it | Products are `draft` or `archived` only. Nothing is publishable until publication rules are approved. Never deleted. |
+| Create a variant (SKU) with its zero stock balance; deactivate it | SKU stored trimmed, NFC and uppercase, unique. Price in integer paisa. Never deleted. |
+| Receive stock; adjust stock with a reason | One transaction per change: conditional balance update plus ledger row. Stock never goes below zero. |
+| Read a SKU's balance and movement history | For internal use and tests. |
+
+Known limits:
+
+- No reservations, holds, orders, cancellations, returns or RTO. Checkout overselling (G-1) is not tested because checkout does not exist.
+- Stock operations are not idempotent yet: a retried receipt is recorded twice. The design is deferred (ADR-0002).
+- Ledger rows record only `system` actors until authentication exists.
+- The append-only ledger trigger can be removed by the table owner or a superuser (ADR-0002).
+- Drizzle error messages include query parameters; never log or display them as is.
+
 ## Documentation
 
 | Document | Purpose | Status |
 |---|---|---|
 | [Product requirements](docs/product/requirements.md) | What the product must do, with open decisions | Draft — Founder Review |
 | [ADR-0001: Application stack](docs/adr/0001-application-stack.md) | Confirmed technology and unresolved choices | Draft — Founder Review |
+| [ADR-0002: Drizzle and inventory foundation](docs/adr/0002-drizzle-and-inventory-foundation.md) | ORM, catalogue, stock ledger and money decisions | Draft — Founder Review (decisions founder-approved) |
 | [CLAUDE.md](CLAUDE.md) | Working rules for Claude Code in this repository | Active |
 
 ## Stack
 
-Confirmed: Next.js (App Router), React, TypeScript, Node.js, PostgreSQL, Tailwind CSS, one modular monolith.
-Not yet decided: ORM (Drizzle is proposed and founder-endorsed; explicit approval pending), authentication, production and database hosting, final visual design. The API style (a versioned REST API inside the same application, proposed) is not approved either. See the ADR.
+Confirmed: Next.js (App Router), React, TypeScript, Node.js, PostgreSQL, Tailwind CSS, one modular monolith, Drizzle ORM (ADR-0002).
+Not yet decided: authentication, production and database hosting, final visual design. The API style (a versioned REST API inside the same application, proposed) is not approved either. See the ADR.
 
 ## Data handling
 

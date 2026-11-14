@@ -1,0 +1,48 @@
+import { invalidInput } from "../domain-error";
+
+// Input validation for the catalogue. The same limits are enforced by CHECK constraints in src/db/schema.ts.
+// Length limits are technical bounds, not merchandising policy; the SKU format itself is not decided (I-10).
+
+const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const CONTROL_CHARACTER = /\p{Cc}/u;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Canonical SKU: surrounding whitespace removed, Unicode NFC, uppercase. */
+export function normalizeSku(raw: string): string {
+  if (typeof raw !== "string") throw invalidInput("sku", "must be text");
+  const sku = raw.trim().normalize("NFC").toUpperCase();
+  if (sku.length === 0) throw invalidInput("sku", "is required");
+  if (sku.length > 64) throw invalidInput("sku", "must be at most 64 characters");
+  if (CONTROL_CHARACTER.test(sku)) throw invalidInput("sku", "must not contain control characters");
+  return sku;
+}
+
+/** URL slug: lowercase ASCII letters and digits separated by single hyphens. */
+export function validateSlug(raw: string): string {
+  if (typeof raw !== "string") throw invalidInput("slug", "must be text");
+  const slug = raw.trim();
+  if (!SLUG.test(slug) || slug.length > 100) {
+    throw invalidInput("slug", "must be 1-100 lowercase letters, digits and single hyphens");
+  }
+  return slug;
+}
+
+/** Optional free text: trimmed; empty or missing becomes null. */
+export function optionalText(raw: string | null | undefined, field: string, maxLength: number): string | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "string") throw invalidInput(field, "must be text");
+  const text = raw.trim();
+  if (text.length > maxLength) throw invalidInput(field, `must be at most ${maxLength} characters`);
+  return text.length === 0 ? null : text;
+}
+
+/** Price in integer paisa: positive, and exact as a JavaScript number. */
+export function validatePricePaisa(raw: number): number {
+  if (!Number.isSafeInteger(raw) || raw <= 0) throw invalidInput("pricePaisa", "must be a positive whole number of paisa");
+  return raw;
+}
+
+export function validateId(raw: string, field: string): string {
+  if (typeof raw !== "string" || !UUID.test(raw)) throw invalidInput(field, "must be a UUID");
+  return raw.toLowerCase();
+}

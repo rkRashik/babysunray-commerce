@@ -1,6 +1,6 @@
 # BabySunray: Product Requirements
 
-**Status:** Draft — Founder Review (revision A.2)
+**Status:** Draft — Founder Review (revision A.3)
 **Purpose:** The single source of truth for what BabySunray's website and Owner Office must do. Technology choices live in [ADR-0001](../adr/0001-application-stack.md). Visual design is not specified here.
 **Last updated:** 2026-11-14
 
@@ -17,6 +17,7 @@ Each requirement carries a basis:
 
 Labels were audited in revision A.1: items that came only from advisor text, or that are implementation details of a founder outcome, are marked **P** or **F + P**. Nothing here is approved merely because it is written down.
 Revision A.2 records the founder's long-term outcomes (B-8 to B-13), adds API and reuse requirements (sections 2.3 and 2.4) and engineering expectations (section 9.1), and adds IDs I-9 to I-12, O-15, O-16, OF-9, OF-10 and G-11 to G-14. No existing ID, basis label or gate was changed.
+Revision A.3 records the founder's Gate G.3 approval (14 Nov 2026) to implement the technical defaults in open decision 18 and Drizzle (decision 2), and closes decision 16. Approval to implement a **P** item does not turn it into **F**: basis labels are unchanged. Only the parts named in decision 18 are approved; the rest of each item keeps its status. What was built is recorded in [ADR-0002](../adr/0002-drizzle-and-inventory-foundation.md).
 Choices the founder has not made are collected in [section 12](#12-open-decisions) rather than guessed. Earlier AI recommendations (the discarded prototype, the earlier Cloudflare proposal) have **not** been promoted to F.
 
 ## 1. Business context
@@ -179,8 +180,8 @@ O-9 to O-14 are **business rules the founder must define**. No order state trans
 | I-6 | A product cannot be published until bilingual text, cm measurements and an approved fabric statement exist. | P |
 | I-7 | **Returned and RTO goods are inspected before they are sellable.** Goods awaiting inspection are held apart from sellable stock (quarantine) and enter sellable stock only through a recorded decision. The inspection criteria and outcomes are business rules (O-13, O-14). | P |
 | I-8 | **Inventory reconciliation:** the owner can compare counted physical stock with system stock. Differences are recorded as reasoned ledger adjustments, never as silent edits. The counting routine and its frequency are to be defined. | P |
-| I-9 | A product has one or more variants. Each variant is a sellable SKU with its own price and its own stock (extends I-1). Founder-endorsed default; **implementation approval pending**. | P |
-| I-10 | SKUs are entered by the founder, normalised (case and surrounding whitespace) and unique across the catalogue. The format is to be agreed. Founder-endorsed default; **implementation approval pending**. | P |
+| I-9 | A product has one or more variants. Each variant is a sellable SKU with its own price and its own stock (extends I-1). Implementation approved by the founder (Gate G.3). | P |
+| I-10 | SKUs are entered by the founder, normalised (case and surrounding whitespace) and unique across the catalogue. The format is to be agreed. Normalisation and uniqueness: implementation approved by the founder (Gate G.3). | P |
 | I-11 | Products and variants that are referenced by stock history, orders or audit records are deactivated or archived, never silently deleted. Audit-relevant records are never removed without a recorded, authorised action. | P |
 | I-12 | Owner Office product, stock and order listings are searchable, filterable and paginated with a stable sort. Customer-facing search is undecided (S-14). | P |
 
@@ -198,7 +199,7 @@ A private area for the founder, with security boundaries that anticipate later s
 | OF-6 | Privileged and sensitive actions (exports, stock adjustments, status changes) are written to an audit log with actor and time. | P |
 | OF-7 | Staff roles are not built now. Permission checks are written so roles can be added without rewriting them. | F |
 | OF-8 | **COD courier settlement:** for each cash-on-delivery consignment the owner can record the amount expected, the amount the courier remitted, courier fees or deductions, the date received, and any unresolved difference. All amounts and fees are entered by the owner. None are assumed here. How courier statements are reconciled is to be defined. | P |
-| OF-9 | Audit and ledger entries record the real acting identity (extends I-3 and OF-6). Before an authentication solution exists, entries carry an explicit non-user source label; the system never invents or reuses a person's identity. Founder-endorsed default (truthful actor auditing); **implementation approval pending**. | P |
+| OF-9 | Audit and ledger entries record the real acting identity (extends I-3 and OF-6). Before an authentication solution exists, entries carry an explicit non-user source label; the system never invents or reuses a person's identity. Truthful actor auditing: implementation approved by the founder (Gate G.3). | P |
 | OF-10 | The approved authentication solution (OF-5) handles passwords: no hand-written password hashing or session protocol. Admin and Staff permissions are enforced on the server for every privileged operation, and session or token lifetime suits the client type (API-10). Roles themselves are not built now (OF-7). | P |
 
 ## 7. Data portability, reports and recovery
@@ -313,7 +314,7 @@ Also out of scope: a separate backend server, Express, microservices, a monorepo
 | # | Decision | Notes |
 |---|---|---|
 | 1 | Production hosting and database host | Must satisfy BDT 0 (C-1), commercial use and restore (G-8). A sub-BDT-1,500/year Bangladesh plan may be evaluated (C-3). |
-| 2 | ORM: Drizzle or Prisma | Drizzle is proposed (Gate G.2 review) and the founder has positively endorsed it. **Explicit implementation approval is pending.** Prisma remains the alternative. |
+| 2 | ORM: Drizzle or Prisma | **Resolved:** Drizzle, approved by the founder in Gate G.3 (14 Nov 2026). See ADR-0002. |
 | 3 | Authentication solution | Must satisfy OF-5. |
 | 4 | Final UI design | Colours, typography, layout. Needs design research and approval (BR-6). |
 | 5 | Business rules O-9 to O-14 | Reservation timing, pending verification, cancellation, release and expiry, returns, RTO. Needed before schema work (G-10). |
@@ -327,9 +328,9 @@ Also out of scope: a separate backend server, Express, microservices, a monorepo
 | 13 | Repository visibility | Private first or public (R-1). |
 | 14 | Product photo workflow | Depends on hosting (I-5). |
 | 15 | Off-device backup location | Founder chooses (K-4). |
-| 16 | Approval to start local PostgreSQL development | Separate gate (section 10). |
+| 16 | Approval to start local PostgreSQL development | **Resolved:** approved by the founder; the local PostgreSQL development and test foundation exists (README.md). |
 | 17 | API contract: endpoint structure, versioning policy, OpenAPI tooling, native-client credentials | Proposed REST under `/api/v1` with Route Handlers is not approved (API-2, API-9, API-10, API-12). |
-| 18 | Approval of the proposed technical defaults: Drizzle; Product → Variant with variant-level price (I-9); founder-entered unique SKU and its format (I-10); `on_hand` balance plus append-only ledger (I-2); integer paisa and UTC (O-5, O-6); truthful actor auditing (OF-9) | Founder-endorsed. **Explicit implementation approval pending.** O-9 to O-14 stay open independently (item 5). |
+| 18 | Approval of the proposed technical defaults: Drizzle; Product → Variant with variant-level price (I-9); founder-entered unique SKU and its format (I-10); `on_hand` balance plus append-only ledger (I-2); integer paisa and UTC (O-5, O-6); truthful actor auditing (OF-9) | **Approved for implementation** in Gate G.3 (14 Nov 2026), except the SKU format (I-10), which is still to be agreed. "Reserved" and "available" stock (I-2) are not approved and wait for O-9 to O-12. O-9 to O-14 stay open independently (item 5). |
 | 19 | Reuse: configuration mechanism, licence review scope, terms of any handoff | RU-1 to RU-6. Commercial terms are a founder decision. |
 
 ## 13. Source materials
@@ -342,4 +343,5 @@ Also out of scope: a separate backend server, Express, microservices, a monorepo
 | Second technical advisor review (Gate A.1) | Label audit, business-rule gaps, recovery objectives, tracking security | Advisor input, applied as corrections by the founder's instruction. |
 | Architecture decision review (14 Nov 2026) | Acceptance gates, export and recovery details | Advisor proposal. Cloudflare-specific parts are not carried over. |
 | Founder instruction, Gate G.2b (14 Nov 2026) | Long-term outcomes (B-8 to B-13), API and reuse direction, engineering expectations | Outcomes are founder-stated. API, reuse and engineering methods are advisor proposals. |
+| Founder instruction, Gate G.3 (14 Nov 2026) | Approval to implement Drizzle and the technical defaults in decision 18; closes decision 16 | Approves implementation only; basis labels unchanged. |
 | Original BabySunray brand and business documents on the G: drive | Not read for this draft | Should be checked against sections 1 and 8 during review. |
