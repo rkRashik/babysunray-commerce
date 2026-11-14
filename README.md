@@ -92,7 +92,7 @@ Implemented as internal server-only services (no API endpoints or screens yet), 
 Known limits:
 
 - No reservations, holds, orders, cancellations, returns or RTO. Checkout overselling (G-1) is not tested because checkout does not exist.
-- Stock operations are not idempotent yet: a retried receipt is recorded twice. The design is deferred (ADR-0002).
+- The services themselves are not idempotent: called twice, `receiveStock` records two receipts. Clients use the idempotent operations in `src/modules/inventory/operations.ts` and `src/modules/catalogue/operations.ts`, which run once per client-generated key and user ([ADR-0005](docs/adr/0005-operation-idempotency.md)). Idempotency records are kept indefinitely until a retention policy is approved.
 - An inactive SKU can still receive physical stock; its status does not make it sellable, and nothing sells yet.
 - Ledger rows record a `system` actor or an authenticated `user` actor (the user's id, from a verified session; ADR-0003). No endpoint or screen changes stock yet.
 - The append-only ledger trigger can be removed by the table owner or a superuser (ADR-0002).
@@ -148,6 +148,7 @@ Not built: write endpoints (stock receipts and adjustments wait for operation-le
 | [ADR-0002: Drizzle and inventory foundation](docs/adr/0002-drizzle-and-inventory-foundation.md) | ORM, catalogue, stock ledger and money decisions | Draft — Founder Review (decisions founder-approved) |
 | [ADR-0003: Authentication foundation](docs/adr/0003-authentication-foundation.md) | Better Auth, sessions, Owner bootstrap, permissions, user actors | Draft — Founder Review (decisions founder-approved) |
 | [ADR-0004: API v1 and Bearer transport](docs/adr/0004-api-v1-and-bearer-transport.md) | Versioned read-only API, Bearer-only transport, OpenAPI | Draft — Founder Review |
+| [ADR-0005: Operation idempotency](docs/adr/0005-operation-idempotency.md) | One key per user and operation, committed with the operation | Draft — Founder Review |
 | [API guide](docs/api/README.md) | Calling `/api/v1`, errors, pagination, compatibility rules | Draft — Founder Review |
 | [CLAUDE.md](CLAUDE.md) | Working rules for Claude Code in this repository | Active |
 

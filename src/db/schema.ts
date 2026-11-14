@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 // Database schema. Changes go through reviewed migrations in drizzle/ (README: Database migrations).
 // Checks mirror the validation in src/modules so the database rejects bad data even if a caller skips it.
@@ -218,4 +218,52 @@ export const userAccess = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [check("user_access_role_valid", sql`${t.role} in ('owner')`)],
+);
+
+// Operation-level idempotency (src/modules/idempotency). One row per user and client-generated key: the row
+// is claimed by INSERT inside the business transaction, so it commits or rolls back with that operation,
+// and a concurrent request with the same key waits on the primary key until the first one finishes.
+// `result` is a reference to what was committed (for example a ledger row id), filled in before the same
+// transaction commits; a committed row with a null result is a bug (tested). No request body, header,
+// credential or personal data is stored: only a SHA-256 fingerprint of the canonical request. Rows are
+// kept; there is no expiry or reuse of old keys until a retention policy is approved (docs/api/README.md).
+export const idempotencyRecords = pgTable(
+  "idempotency_records",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    operation: text("operation").notNull(),
+    requestFingerprint: text("request_fingerprint").notNull(),
+    result: jsonb("result"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ name: "idempotency_records_pkey", columns: [t.userId, t.idempotencyKey] }),
+    check("idempotency_records_key_format", sql`${t.idempotencyKey} ~ '^[A-Za-z0-9_.:-]{16,128}$'`),
+    check("idempotency_records_operation_format", sql`${t.operation} ~ '^[a-z][a-z0-9.-]{0,63}$'`),
+    check("idempotency_records_fingerprint_format", sql`${t.requestFingerprint} ~ '^[0-9a-f]{64}$'`),
+    check("idempotency_records_result_object", sql`jsonb_typeof(${t.result}) = 'object'`),
+  ],
+);
+
+// /api/v1 request counters: one fixed window per verified user and category (read or write). Only an
+// authenticated request reaches the counter, so anonymous traffic cannot use up a user's quota. The limits
+// themselves are configuration (src/modules/rate-limit), not stored here.
+export const apiRateLimits = pgTable(
+  "api_rate_limits",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    bucket: text("bucket", { enum: ["read", "write"] }).notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    count: integer("count").notNull(),
+  },
+  (t) => [
+    primaryKey({ name: "api_rate_limits_pkey", columns: [t.userId, t.bucket] }),
+    check("api_rate_limits_bucket_valid", sql`${t.bucket} in ('read', 'write')`),
+    check("api_rate_limits_count_positive", sql`${t.count} >= 1`),
+  ],
 );

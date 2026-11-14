@@ -126,6 +126,17 @@ export async function listStockMovementsPage(
   return { items: rows.slice(0, limit), hasMore: rows.length > limit };
 }
 
+/** One ledger row with its SKU. Ledger rows never change, so this is exactly what was committed. */
+export async function getStockMovement(db: Db, movementId: number): Promise<{ sku: string; movement: StockMovement }> {
+  const [row] = await db
+    .select({ sku: variants.sku, movement: stockMovements })
+    .from(stockMovements)
+    .innerJoin(variants, eq(variants.id, stockMovements.variantId))
+    .where(eq(stockMovements.id, movementId));
+  if (!row) throw new Error("Stock movement not found.");
+  return row;
+}
+
 async function findVariantId(db: Pick<Db, "select">, sku: string): Promise<string> {
   const [variant] = await db.select({ id: variants.id }).from(variants).where(eq(variants.sku, sku));
   if (!variant) throw new DomainError("VARIANT_NOT_FOUND", "No variant has this SKU.");

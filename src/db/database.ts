@@ -1,8 +1,13 @@
 import "server-only";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { NodePgQueryResultHKT } from "drizzle-orm/node-postgres";
+import type { PgDatabase } from "drizzle-orm/pg-core";
 
-/** A Drizzle handle over a node-postgres pool. Services receive it from the caller; none is created here. */
-export type Db = NodePgDatabase;
+/**
+ * A Drizzle handle over node-postgres: the pool-backed database or an open transaction. Services receive it
+ * from the caller; none is created here. Given a transaction, a service's own `db.transaction` becomes a
+ * savepoint inside it, so several services can commit (or roll back) as one operation.
+ */
+export type Db = PgDatabase<NodePgQueryResultHKT>;
 
 /**
  * The PostgreSQL SQLSTATE of a failed query, looking through Drizzle's error wrapper.

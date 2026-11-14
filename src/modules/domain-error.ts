@@ -6,6 +6,7 @@ export type DomainErrorCode =
   | "SKU_TAKEN"
   | "INSUFFICIENT_STOCK"
   | "STOCK_LIMIT_EXCEEDED"
+  | "IDEMPOTENCY_KEY_REUSED"
   | "UNAUTHENTICATED"
   | "FORBIDDEN";
 

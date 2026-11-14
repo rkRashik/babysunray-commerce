@@ -43,6 +43,13 @@
       "when": 1794688935920,
       "tag": "0005_revoke_sessions_on_access_loss",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794691997263,
+      "tag": "0006_operation_idempotency_and_api_rate_limits",
+      "breakpoints": true
     }
   ]
 }

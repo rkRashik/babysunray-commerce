@@ -3,6 +3,7 @@ import { hashPassword } from "better-auth/crypto";
 import type { Pool } from "pg";
 import type { Db } from "../../src/db/database";
 import { type Auth, createAuth } from "../../src/modules/auth/auth";
+import { getPrincipal } from "../../src/modules/auth/principal";
 
 // Fictional identities only (example.test is a reserved, non-routable domain).
 export const BASE_URL = "http://localhost:3000";
@@ -100,3 +101,12 @@ export async function signInNative(auth: Auth, email: string, password: string) 
 }
 
 export const bearer = (token: string) => new Headers({ authorization: `Bearer ${token}` });
+
+/** Creates a fictional Owner, signs in through Better Auth's HTTP handler and returns the verified principal. */
+export async function createVerifiedOwner(auth: Auth, db: Db, pool: Pool, email: string, password = "fictional owner long password") {
+  const userId = await createTestUser(pool, { email, password, role: "owner" });
+  const { cookie } = await signIn(auth, email, password);
+  const principal = await getPrincipal(auth, db, headersWith(cookie));
+  if (!principal) throw new Error("Test owner could not sign in.");
+  return { userId, cookie, principal };
+}

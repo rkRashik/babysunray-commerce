@@ -147,6 +147,12 @@ export async function listProducts(
   };
 }
 
+export async function getVariant(db: Db, variantId: string): Promise<Variant> {
+  const [variant] = await db.select().from(variants).where(eq(variants.id, validateId(variantId, "variantId")));
+  if (!variant) throw new DomainError("VARIANT_NOT_FOUND", "Variant not found.");
+  return variant;
+}
+
 /** One product with its variants (ordered by SKU). */
 export async function getProductWithVariants(db: Db, productId: string): Promise<Product & { variants: Variant[] }> {
   const id = validateId(productId, "productId");

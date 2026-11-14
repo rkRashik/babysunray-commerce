@@ -26,18 +26,18 @@ export async function createTestVariant(db: Db, prefix: string) {
 }
 
 /**
- * Makes every INSERT into `table` fail while `run` executes, to simulate a failure in the middle of a
- * transaction. The trigger and function are removed afterwards; if a crash leaves them behind, the next
+ * Makes every INSERT (or UPDATE) on `table` fail while `run` executes, to simulate a failure in the middle
+ * of a transaction. The trigger and function are removed afterwards; if a crash leaves them behind, the next
  * `npm run test:db` stops at the unexpected-object check instead of dropping them.
  */
-export async function withFailingInserts<T>(pool: Pool, table: string, run: () => Promise<T>): Promise<T> {
+export async function withFailingInserts<T>(pool: Pool, table: string, run: () => Promise<T>, event: "insert" | "update" = "insert"): Promise<T> {
   await pool.query(
     `create function test_injected_failure() returns trigger language plpgsql as
      $$ begin raise exception 'injected test failure'; end $$`,
   );
   try {
     await pool.query(
-      `create trigger test_injected_failure before insert on "${table}"
+      `create trigger test_injected_failure before ${event} on "${table}"
        for each row execute function test_injected_failure()`,
     );
     return await run();

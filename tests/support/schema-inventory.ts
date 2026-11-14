@@ -71,6 +71,8 @@ const EXPECTED_DEFAULTS: Record<string, string> = {
   "public.variants.status": "'active'::text",
   "public.variants.created_at": "now()",
   "public.variants.updated_at": "now()",
+  // Migration 0006: operation idempotency (api_rate_limits has no defaults).
+  "public.idempotency_records.created_at": "now()",
   "drizzle.__drizzle_migrations.id": "nextval('drizzle.__drizzle_migrations_id_seq'::regclass)",
 };
 
@@ -117,6 +119,11 @@ export function expectedObjects(): Set<string> {
         expected.add(`constraint:${SCHEMA}.${name}.${column.uniqueName}`);
         expected.add(`relation:${SCHEMA}.${column.uniqueName}:i`);
       }
+    }
+    // A composite primary key (primaryKey({ name, columns })) is in config.primaryKeys, not on the columns.
+    for (const pk of config.primaryKeys) {
+      expected.add(`constraint:${SCHEMA}.${name}.${pk.getName()}`);
+      expected.add(`relation:${SCHEMA}.${pk.getName()}:i`);
     }
     for (const index of config.indexes) expected.add(`relation:${SCHEMA}.${index.config.name}:i`);
     for (const check of config.checks) expected.add(`constraint:${SCHEMA}.${name}.${check.name}`);
