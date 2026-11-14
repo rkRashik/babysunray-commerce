@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, check, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 // Database schema. Changes go through reviewed migrations in drizzle/ (README: Database migrations).
 // Checks mirror the validation in src/modules so the database rejects bad data even if a caller skips it.
@@ -90,9 +90,12 @@ export const stockMovements = pgTable(
     movementType: text("movement_type", { enum: ["receipt", "adjustment"] }).notNull(),
     quantityDelta: integer("quantity_delta").notNull(),
     reason: text("reason"),
-    // Only non-user system actors exist until authentication is approved (requirement OF-9).
-    actorType: text("actor_type", { enum: ["system"] }).notNull(),
+    // A named system source, or an authenticated user (requirement OF-9, ADR-0003). For a user, actor_ref
+    // is the user's immutable id as text and actor_user_id the same id, so the row always names a user that
+    // exists. Users referenced here cannot be deleted.
+    actorType: text("actor_type", { enum: ["system", "user"] }).notNull(),
     actorRef: text("actor_ref").notNull(),
+    actorUserId: uuid("actor_user_id").references(() => authUsers.id, { onDelete: "restrict" }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -106,7 +109,113 @@ export const stockMovements = pgTable(
       "stock_movements_reason_valid",
       sql`(${t.movementType} <> 'adjustment' or ${t.reason} is not null) and btrim(${t.reason}) <> '' and length(${t.reason}) <= 500`,
     ),
-    check("stock_movements_actor_type_valid", sql`${t.actorType} in ('system')`),
+    check("stock_movements_actor_type_valid", sql`${t.actorType} in ('system', 'user')`),
     check("stock_movements_actor_ref_format", sql`${t.actorRef} ~ '^[a-z0-9][a-z0-9._:-]{0,99}$'`),
+    check(
+      "stock_movements_actor_user_consistent",
+      sql`(${t.actorType} = 'system' and ${t.actorUserId} is null) or (${t.actorType} = 'user' and ${t.actorUserId} is not null and ${t.actorRef} = ${t.actorUserId}::text)`,
+    ),
   ],
+);
+
+// Authentication tables used by Better Auth (ADR-0003). Columns follow the official Drizzle schema that
+// @better-auth/drizzle-adapter 1.7.25 generates for this configuration (email and password, UUID ids,
+// database rate limiting), with project naming and timestamptz. The adapter maps Better Auth's model names
+// (user, session, ...) to these tables in src/modules/auth/auth.ts. Never add a role or permission here:
+// authorisation state lives in user_access, which no Better Auth endpoint can write.
+
+export const authUsers = pgTable(
+  "auth_users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    // Better Auth lowercases emails before writing and looking them up; the check keeps direct writes in line.
+    email: text("email").notNull().unique("auth_users_email_key"),
+    emailVerified: boolean("email_verified").notNull().default(false),
+    image: text("image"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [check("auth_users_email_lowercase", sql`${t.email} = lower(${t.email})`)],
+);
+
+export const authSessions = pgTable(
+  "auth_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    token: text("token").notNull().unique("auth_sessions_token_key"),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+  },
+  (t) => [index("auth_sessions_user_id_idx").on(t.userId)],
+);
+
+// Credential and (unused) provider accounts. For email and password, provider_id is 'credential' and
+// password holds Better Auth's scrypt hash, never the password itself.
+export const authAccounts = pgTable(
+  "auth_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
+    scope: text("scope"),
+    password: text("password"),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [index("auth_accounts_user_id_idx").on(t.userId)],
+);
+
+// Part of Better Auth's core schema. Nothing in this gate writes it (email verification and password reset
+// endpoints are disabled), but the library requires the table.
+export const authVerifications = pgTable(
+  "auth_verifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("auth_verifications_identifier_idx").on(t.identifier)],
+);
+
+// Rate-limit counters shared by every application process. key is "<client ip>|<path>"; no credentials.
+export const authRateLimits = pgTable("auth_rate_limits", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  key: text("key").notNull().unique("auth_rate_limits_key_key"),
+  count: integer("count").notNull(),
+  lastRequest: bigint("last_request", { mode: "number" }).notNull(),
+});
+
+// Application authorisation state, owned by this project and not by Better Auth. A user without a row, or
+// with disabled_at set, has no permissions and cannot start a session. Only the local Owner bootstrap
+// (scripts/bootstrap-owner.mts) writes it today.
+export const userAccess = pgTable(
+  "user_access",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["owner"] }).notNull(),
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [check("user_access_role_valid", sql`${t.role} in ('owner')`)],
 );

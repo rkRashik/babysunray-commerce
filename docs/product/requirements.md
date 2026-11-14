@@ -1,8 +1,8 @@
 # BabySunray: Product Requirements
 
-**Status:** Draft — Founder Review (revision A.4)
+**Status:** Draft — Founder Review (revision A.5)
 **Purpose:** The single source of truth for what BabySunray's website and Owner Office must do. Technology choices live in [ADR-0001](../adr/0001-application-stack.md). Visual design is not specified here.
-**Last updated:** 2026-11-14
+**Last updated:** 2026-11-15
 
 ## How to read this document
 
@@ -19,6 +19,7 @@ Labels were audited in revision A.1: items that came only from advisor text, or 
 Revision A.2 records the founder's long-term outcomes (B-8 to B-13), adds API and reuse requirements (sections 2.3 and 2.4) and engineering expectations (section 9.1), and adds IDs I-9 to I-12, O-15, O-16, OF-9, OF-10 and G-11 to G-14. No existing ID, basis label or gate was changed.
 Revision A.3 records the founder's Gate G.3 approval (14 Nov 2026) to implement the technical defaults in open decision 18 and Drizzle (decision 2), and closes decision 16. Approval to implement a **P** item does not turn it into **F**: basis labels are unchanged. Only the parts named in decision 18 are approved; the rest of each item keeps its status. What was built is recorded in [ADR-0002](../adr/0002-drizzle-and-inventory-foundation.md).
 Revision A.4 records the founder's Gate G.3a technical defaults (SKU character set, strictly positive price, ASCII slugs, stock on inactive SKUs). Basis labels are unchanged.
+Revision A.5 records the founder's Gate H.2 approval (15 Nov 2026) of the authentication solution (open decision 3) and of the versioned REST and OpenAPI direction (open decision 17). What was built is recorded in [ADR-0003](../adr/0003-authentication-foundation.md). Basis labels are unchanged; OF-5's recovery path and API-10's native-client credentials remain open.
 Choices the founder has not made are collected in [section 12](#12-open-decisions) rather than guessed. Earlier AI recommendations (the discarded prototype, the earlier Cloudflare proposal) have **not** been promoted to F.
 
 ## 1. Business context
@@ -316,7 +317,7 @@ Also out of scope: a separate backend server, Express, microservices, a monorepo
 |---|---|---|
 | 1 | Production hosting and database host | Must satisfy BDT 0 (C-1), commercial use and restore (G-8). A sub-BDT-1,500/year Bangladesh plan may be evaluated (C-3). |
 | 2 | ORM: Drizzle or Prisma | **Resolved:** Drizzle, approved by the founder in Gate G.3 (14 Nov 2026). See ADR-0002. |
-| 3 | Authentication solution | Must satisfy OF-5. |
+| 3 | Authentication solution | **Resolved:** Better Auth, email and password, database browser sessions, no public sign-up, local Owner bootstrap, Owner-first permissions; approved by the founder in Gate H.2 (15 Nov 2026). See ADR-0003. Still open: the lost-device recovery path OF-5 requires (not built), 2FA, and native-client credentials (API-10). |
 | 4 | Final UI design | Colours, typography, layout. Needs design research and approval (BR-6). |
 | 5 | Business rules O-9 to O-14 | Reservation timing, pending verification, cancellation, release and expiry, returns, RTO. Needed before schema work (G-10). |
 | 6 | RPO and RTO | Founder approval (K-9). |
@@ -330,7 +331,7 @@ Also out of scope: a separate backend server, Express, microservices, a monorepo
 | 14 | Product photo workflow | Depends on hosting (I-5). |
 | 15 | Off-device backup location | Founder chooses (K-4). |
 | 16 | Approval to start local PostgreSQL development | **Resolved:** approved by the founder; the local PostgreSQL development and test foundation exists (README.md). |
-| 17 | API contract: endpoint structure, versioning policy, OpenAPI tooling, native-client credentials | Proposed REST under `/api/v1` with Route Handlers is not approved (API-2, API-9, API-10, API-12). |
+| 17 | API contract: endpoint structure, versioning policy, OpenAPI tooling, native-client credentials | Direction approved by the founder in Gate H.2 (15 Nov 2026): versioned REST under `/api/v1`, described in OpenAPI. Not implemented. Endpoint paths, versioning policy, OpenAPI tooling and native-client credentials remain open (API-9, API-10, API-12). |
 | 18 | Approval of the proposed technical defaults: Drizzle; Product → Variant with variant-level price (I-9); founder-entered unique SKU and its format (I-10); `on_hand` balance plus append-only ledger (I-2); integer paisa and UTC (O-5, O-6); truthful actor auditing (OF-9) | **Approved for implementation** in Gate G.3 (14 Nov 2026). Gate G.3a approved the SKU character set (ASCII letters, digits, hyphen, underscore), strictly positive prices and ASCII slugs; the SKU structure (I-10) is still to be agreed. "Reserved" and "available" stock (I-2) are not approved and wait for O-9 to O-12. O-9 to O-14 stay open independently (item 5). |
 | 19 | Reuse: configuration mechanism, licence review scope, terms of any handoff | RU-1 to RU-6. Commercial terms are a founder decision. |
 
@@ -346,4 +347,5 @@ Also out of scope: a separate backend server, Express, microservices, a monorepo
 | Founder instruction, Gate G.2b (14 Nov 2026) | Long-term outcomes (B-8 to B-13), API and reuse direction, engineering expectations | Outcomes are founder-stated. API, reuse and engineering methods are advisor proposals. |
 | Founder instruction, Gate G.3 (14 Nov 2026) | Approval to implement Drizzle and the technical defaults in decision 18; closes decision 16 | Approves implementation only; basis labels unchanged. |
 | Founder instruction, Gate G.3a (14 Nov 2026) | SKU character set, strictly positive price, ASCII slugs, stock on inactive SKUs | Technical defaults; basis labels unchanged. |
+| Founder instruction, Gate H.2 (15 Nov 2026) | Authentication solution and its scope (decision 3); REST and OpenAPI direction (decision 17) | Approves implementation of the named scope only; basis labels unchanged. |
 | Original BabySunray brand and business documents on the G: drive | Not read for this draft | Should be checked against sections 1 and 8 during review. |

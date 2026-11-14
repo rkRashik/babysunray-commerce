@@ -1,6 +1,6 @@
 // Fail-closed checks for commands that change a database: the development migration and the
 // destructive test reset. Not imported by application code. Plain TypeScript (no aliases, no
-// server-only) so Node can run it directly from scripts/ and drizzle.config.ts can load it.
+// server-only) so Node can run it directly from scripts/.
 //
 // These are application-level safeguards against mistakes (a stale environment variable, the wrong
 // database). They are not a security boundary: anyone who can run arbitrary commands can bypass them.

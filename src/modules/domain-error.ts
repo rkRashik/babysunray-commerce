@@ -5,7 +5,9 @@ export type DomainErrorCode =
   | "SLUG_TAKEN"
   | "SKU_TAKEN"
   | "INSUFFICIENT_STOCK"
-  | "STOCK_LIMIT_EXCEEDED";
+  | "STOCK_LIMIT_EXCEEDED"
+  | "UNAUTHENTICATED"
+  | "FORBIDDEN";
 
 /**
  * An expected business failure with a stable code. Its message is safe to show and contains no

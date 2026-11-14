@@ -37,13 +37,30 @@ describe("migrations", () => {
     const tables = await client.query(
       "select table_name from information_schema.tables where table_schema = 'public' order by table_name",
     );
-    expect(tables.rows.map((r) => r.table_name)).toEqual(["inventory_balances", "products", "stock_movements", "variants"]);
+    expect(tables.rows.map((r) => r.table_name)).toEqual([
+      "auth_accounts",
+      "auth_rate_limits",
+      "auth_sessions",
+      "auth_users",
+      "auth_verifications",
+      "inventory_balances",
+      "products",
+      "stock_movements",
+      "user_access",
+      "variants",
+    ]);
 
     const constraints = await client.query(
       `select conname from pg_constraint c join pg_namespace n on n.oid = c.connamespace
         where n.nspname = 'public' and contype in ('c', 'u', 'f') order by conname`,
     );
     expect(constraints.rows.map((r) => r.conname)).toEqual([
+      "auth_accounts_user_id_auth_users_id_fk",
+      "auth_rate_limits_key_key",
+      "auth_sessions_token_key",
+      "auth_sessions_user_id_auth_users_id_fk",
+      "auth_users_email_key",
+      "auth_users_email_lowercase",
       "inventory_balances_on_hand_nonnegative",
       "inventory_balances_variant_id_variants_id_fk",
       "products_descriptions_valid",
@@ -54,10 +71,14 @@ describe("migrations", () => {
       "products_status_valid",
       "stock_movements_actor_ref_format",
       "stock_movements_actor_type_valid",
+      "stock_movements_actor_user_consistent",
+      "stock_movements_actor_user_id_auth_users_id_fk",
       "stock_movements_delta_valid",
       "stock_movements_reason_valid",
       "stock_movements_type_valid",
       "stock_movements_variant_id_variants_id_fk",
+      "user_access_role_valid",
+      "user_access_user_id_auth_users_id_fk",
       "variants_labels_valid",
       "variants_price_range",
       "variants_product_id_products_id_fk",

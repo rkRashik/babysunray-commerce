@@ -136,7 +136,7 @@ describe("stock adjustments", () => {
 });
 
 describe("actors", () => {
-  it("rejects user actors and free-text references in the service and in the database", async () => {
+  it("rejects forged user actors and free-text references in the service and in the database", async () => {
     const { sku, variantId } = await newSku();
     const fakeUser = { type: "user", ref: "owner" } as unknown as Actor;
     expect(await errorCodeOf(receiveStock(db, { sku, quantity: 1, actor: fakeUser }))).toBe("INVALID_INPUT");

@@ -121,7 +121,7 @@ describe("validateActor", () => {
     expect(validateActor({ type: "system", ref: "seed:dev" })).toEqual({ type: "system", ref: "seed:dev" });
   });
 
-  it("rejects user actors and free-text references", () => {
+  it("rejects forged user actors and free-text references", () => {
     expect(codeOf(() => validateActor({ type: "user", ref: "owner" } as unknown as Actor))).toBe("INVALID_INPUT");
     expect(codeOf(() => validateActor({ type: "system", ref: "Jane Doe" }))).toBe("INVALID_INPUT");
     expect(codeOf(() => validateActor({ type: "system", ref: "" }))).toBe("INVALID_INPUT");

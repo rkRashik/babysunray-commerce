@@ -1,11 +1,11 @@
 # ADR-0001: Application stack
 
-**Status:** Draft — Founder Review (revision A.2)
+**Status:** Draft — Founder Review (revision A.3)
 **Date:** 2026-11-14
 **Deciders:** Founder
 **Related:** [Product requirements](../product/requirements.md)
 
-**In short:** The stack choices in "Decision" are **confirmed by the founder**. The ORM is now decided (Drizzle, [ADR-0002](0002-drizzle-and-inventory-foundation.md)). Hosting, database host, authentication, the API contract style and the final UI design are **unresolved**. Revision A.2 clarifies that future Windows and Android clients use the same backend capabilities inside the same monolith; it adds no new technology.
+**In short:** The stack choices in "Decision" are **confirmed by the founder**. The ORM is decided (Drizzle, [ADR-0002](0002-drizzle-and-inventory-foundation.md)) and so is authentication (Better Auth, [ADR-0003](0003-authentication-foundation.md)). Hosting, database host, the API contract details and the final UI design are **unresolved**. Revision A.3 records the authentication decision and the founder's approval of the versioned REST and OpenAPI direction (Gate H.2). Revision A.2 clarifies that future Windows and Android clients use the same backend capabilities inside the same monolith; it adds no new technology.
 
 ## Context
 
@@ -40,17 +40,17 @@ These follow from the decision. They are expectations, not additional approvals.
 
 ## Unresolved
 
-Item 3 is decided (see the table). The others are not, and none may be treated as chosen until the founder approves it.
+Items 3 and 4 are decided (see the table). The others are not, and none may be treated as chosen until the founder approves it.
 
 | # | Item | State | What is needed | Recorded in |
 |---|---|---|---|---|
 | 1 | **Production hosting** | Open | A zero-cost option that permits commercial use and runs Next.js. A Bangladesh-hosted plan under BDT 1,500 per year may be evaluated as an alternative. Purchase needs separate founder approval. | ADR |
 | 2 | **Database host** | Open | PostgreSQL hosting with backups and a restore procedure that fit the budget and the approved RPO and RTO (requirement K-9). | ADR (with item 1 if they share a decision) |
 | 3 | **ORM** | **Decided:** Drizzle, approved by the founder for implementation in Gate G.3 (2026-11-14). | None. | [ADR-0002](0002-drizzle-and-inventory-foundation.md) |
-| 4 | **Authentication** | Open | An established solution, not a custom protocol. Sessions, CSRF protection, lost-device recovery, and a credential strategy for future native clients (requirement API-10). | ADR |
+| 4 | **Authentication** | **Decided:** Better Auth with email and password and database browser sessions, approved by the founder for implementation in Gate H.2 (2026-11-15). Still open within it: lost-device recovery, 2FA and the native-client credential strategy (requirement API-10). | Founder decisions on those open parts. | [ADR-0003](0003-authentication-foundation.md) |
 | 5 | **Final UI design** | Open | Colours, typography, layout and components need design research and founder approval. The logo is a brand reference only. | Design documents |
 | 6 | Internationalisation, test tooling, CI, image handling, XLSX library | Open (test tooling: Vitest, recorded in README.md) | Chosen when the work reaches them. | README.md or the pull request. An ADR only if the choice turns out to be material. |
-| 7 | **API contract** | Proposed, not approved | A versioned REST API (for example under `/api/v1`) implemented with Next.js Route Handlers and described in OpenAPI, over the same domain services the website calls directly. Endpoint paths, versioning policy and native-client authentication are decided in later gates (requirements API-1 to API-12). | ADR |
+| 7 | **API contract** | Direction approved by the founder in Gate H.2 (2026-11-15): versioned REST under `/api/v1` with an OpenAPI description. Nothing implemented. | A versioned REST API (for example under `/api/v1`) implemented with Next.js Route Handlers and described in OpenAPI, over the same domain services the website calls directly. Endpoint paths, versioning policy and native-client authentication are decided in later gates (requirements API-1 to API-12). | ADR |
 
 ## Known risks
 

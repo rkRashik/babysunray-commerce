@@ -2,9 +2,9 @@
 
 Bilingual (Bangla/English) e-commerce website and private Owner Office for BabySunray, a single-founder baby and kidswear business in Bangladesh.
 
-**Phase:** foundation and decisions. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`, branch `main`). The Next.js app is scaffolded as an engineering base only; `src/app/page.tsx` is a status page, not the approved homepage. The catalogue and stock schema (`src/db/schema.ts`, migrations in `drizzle/`) and their internal services (`src/modules/`) exist; orders, reservations, authentication, API endpoints, UI features and deployment do not. The local databases are created by the founder from `db/local-setup.sql`. Do not create the rest unless the current gate authorises it.
+**Phase:** foundation and decisions. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`, branch `main`). The Next.js app is scaffolded as an engineering base only; `src/app/page.tsx` is a status page, not the approved homepage. The catalogue and stock schema (`src/db/schema.ts`, migrations in `drizzle/`), their internal services (`src/modules/`) and the authentication and authorisation foundation (`src/modules/auth`, Better Auth routes under `/api/auth`) exist; orders, reservations, business API endpoints, login and Owner Office UI, account recovery, 2FA and deployment do not. The local databases are created by the founder from `db/local-setup.sql`. Do not create the rest unless the current gate authorises it.
 
-Commands (see README.md): `npm install`, `npm run dev`, `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` (unit), `npm run test:db` (PostgreSQL integration; needs `TEST_DATABASE_URL`, local `babysunray_test` database and role only), `npm run db:generate`, `npm run db:check`, `npm run db:migrate` (only the local `babysunray_dev` database; it verifies the target and refuses anything else). Never point tests at a development, shared or hosted database. Run migrations only through `npm run db:migrate`, never `drizzle-kit push` or `drizzle-kit migrate` directly.
+Commands (see README.md): `npm install`, `npm run dev`, `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` (unit), `npm run test:db` (PostgreSQL integration; needs `TEST_DATABASE_URL`, local `babysunray_test` database and role only), `npm run db:generate`, `npm run db:check`, `npm run db:migrate` (only the local `babysunray_dev` database; it verifies the target and refuses anything else), `npm run auth:bootstrap-owner` (creates the first Owner; interactive, for the founder to run; never run it or choose credentials on the founder's behalf). Never point tests at a development, shared or hosted database. Run migrations only through `npm run db:migrate`, never `drizzle-kit push`, `drizzle-kit migrate` or `auth migrate` (the project config refuses the drizzle-kit ones).
 
 ## Project goals (founder-confirmed; requirements B-8 to B-13)
 
@@ -17,6 +17,7 @@ Read the relevant one before working on a subject. They override anything here.
 - `docs/product/requirements.md`: what the product must do. Basis labels: **F** founder-stated, **P** proposed (not approved), **F + P** founder-stated core with a proposed detail (only the F part is approved), **Q** open. Never treat P, Q or the P part of F + P as approved, unless the document records the founder's implementation approval for that specific item (for example open decision 18, Gate G.3).
 - `docs/adr/0001-application-stack.md`: confirmed stack and unresolved choices.
 - `docs/adr/0002-drizzle-and-inventory-foundation.md`: Drizzle, catalogue, stock ledger and money decisions, and what they do not cover.
+- `docs/adr/0003-authentication-foundation.md`: Better Auth, sessions, Owner bootstrap, permissions and user actors, and what they do not cover.
 
 When a document and the code disagree, stop and report it. Do not silently reconcile.
 
@@ -30,9 +31,9 @@ The founder owns every product, business, budget and architecture decision. Work
 
 ## Stack
 
-Confirmed: Next.js (App Router), React, TypeScript, Node.js, PostgreSQL, Tailwind CSS with a custom design system, one modular monolith with no separate backend server, Drizzle ORM with reviewed SQL migrations (`docs/adr/0002-drizzle-and-inventory-foundation.md`).
+Confirmed: Next.js (App Router), React, TypeScript, Node.js, PostgreSQL, Tailwind CSS with a custom design system, one modular monolith with no separate backend server, Drizzle ORM with reviewed SQL migrations (`docs/adr/0002-drizzle-and-inventory-foundation.md`), Better Auth with email and password and database browser sessions (`docs/adr/0003-authentication-foundation.md`).
 
-Unresolved, do not choose: authentication, the API contract style (versioned REST inside the monolith is proposed, not approved), production hosting, database hosting, final UI design (colours, typography, layout), business rules O-9 to O-14, RPO/RTO.
+Approved as a direction only, not built: versioned REST under `/api/v1` with OpenAPI. Unresolved, do not choose: account recovery, 2FA, native-client credentials, API endpoint paths and versioning policy, production hosting, database hosting, final UI design (colours, typography, layout), business rules O-9 to O-14, RPO/RTO.
 
 The logo and its three colours are a brand reference only. They are not the website palette.
 

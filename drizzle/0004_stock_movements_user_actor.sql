@@ -1,0 +1,5 @@
+ALTER TABLE "stock_movements" DROP CONSTRAINT "stock_movements_actor_type_valid";--> statement-breakpoint
+ALTER TABLE "stock_movements" ADD COLUMN "actor_user_id" uuid;--> statement-breakpoint
+ALTER TABLE "stock_movements" ADD CONSTRAINT "stock_movements_actor_user_id_auth_users_id_fk" FOREIGN KEY ("actor_user_id") REFERENCES "public"."auth_users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "stock_movements" ADD CONSTRAINT "stock_movements_actor_user_consistent" CHECK (("stock_movements"."actor_type" = 'system' and "stock_movements"."actor_user_id" is null) or ("stock_movements"."actor_type" = 'user' and "stock_movements"."actor_user_id" is not null and "stock_movements"."actor_ref" = "stock_movements"."actor_user_id"::text));--> statement-breakpoint
+ALTER TABLE "stock_movements" ADD CONSTRAINT "stock_movements_actor_type_valid" CHECK ("stock_movements"."actor_type" in ('system', 'user'));

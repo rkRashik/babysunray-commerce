@@ -25,7 +25,7 @@ Requirement EN-2 asks for reviewed, repeatable migrations; EN-3 asks for paramet
 | Writes | Each stock change runs one transaction: conditional `UPDATE` of the balance (`on_hand + delta >= 0`) with the affected-row count checked, then the ledger insert. Any failure rolls back both. |
 | Slugs | Lowercase ASCII letters, digits and single hyphens (product URLs). Names and descriptions keep full Unicode, including Bangla. |
 | Inactive SKUs | May receive physical stock. Inactive status does not authorise selling; selling logic does not exist yet. |
-| Actors | Ledger rows record `actor_type` and `actor_ref`. Only `system` actors (named machine sources) are allowed until authentication is approved; the database rejects anything else (OF-9). |
+| Actors | Ledger rows record `actor_type` and `actor_ref`. Only `system` actors (named machine sources) are allowed until authentication is approved; the database rejects anything else (OF-9). Extended by [ADR-0003](0003-authentication-foundation.md): authenticated `user` actors, migration `0004`. |
 
 ## Consequences
 

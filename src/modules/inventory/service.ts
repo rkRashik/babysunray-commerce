@@ -74,6 +74,7 @@ async function recordMovement(db: Db, m: Movement): Promise<StockChange> {
           reason: m.reason,
           actorType: m.actor.type,
           actorRef: m.actor.ref,
+          actorUserId: m.actor.type === "user" ? m.actor.ref : null,
         })
         .returning();
       return { onHand: balance.onHand, movement };

@@ -88,6 +88,13 @@ const CASES: { name: string; plant: string; remove: string; listed: string; stil
     stillThere: "select 1 from pg_attribute where attname = 'probe_col' and not attisdropped",
   },
   {
+    name: "column on an authentication table",
+    plant: "alter table auth_users add column probe_col int",
+    remove: "alter table auth_users drop column if exists probe_col",
+    listed: "column:public.auth_users.probe_col",
+    stillThere: "select 1 from pg_attribute where attname = 'probe_col' and not attisdropped",
+  },
+  {
     name: "sequence",
     plant: "create sequence probe_seq",
     remove: "drop sequence if exists probe_seq",

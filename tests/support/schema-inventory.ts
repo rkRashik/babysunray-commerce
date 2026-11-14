@@ -42,6 +42,21 @@ const MANUAL_OBJECTS = [
 // The only column defaults the migrations create, as PostgreSQL prints them (pg_get_expr, with the
 // search_path pinned to public). Identity columns have no default row and are not listed.
 const EXPECTED_DEFAULTS: Record<string, string> = {
+  // Migration 0003: authentication and access tables.
+  "public.auth_users.id": "gen_random_uuid()",
+  "public.auth_users.email_verified": "false",
+  "public.auth_users.created_at": "now()",
+  "public.auth_users.updated_at": "now()",
+  "public.auth_sessions.id": "gen_random_uuid()",
+  "public.auth_sessions.created_at": "now()",
+  "public.auth_accounts.id": "gen_random_uuid()",
+  "public.auth_accounts.created_at": "now()",
+  "public.auth_verifications.id": "gen_random_uuid()",
+  "public.auth_verifications.created_at": "now()",
+  "public.auth_verifications.updated_at": "now()",
+  "public.auth_rate_limits.id": "gen_random_uuid()",
+  "public.user_access.created_at": "now()",
+  "public.user_access.updated_at": "now()",
   "public.inventory_balances.on_hand": "0",
   "public.inventory_balances.updated_at": "now()",
   "public.products.id": "gen_random_uuid()",

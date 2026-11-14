@@ -77,9 +77,15 @@ describe("destructive reset statements", () => {
     const [tables, fn, history] = DROP_MANAGED_STATEMENTS;
     const tableList = tables.replace(/^drop table if exists /, "").replace(/ restrict;$/, "").split(", ");
     expect(tableList.sort()).toEqual([
+      '"public"."auth_accounts"',
+      '"public"."auth_rate_limits"',
+      '"public"."auth_sessions"',
+      '"public"."auth_users"',
+      '"public"."auth_verifications"',
       '"public"."inventory_balances"',
       '"public"."products"',
       '"public"."stock_movements"',
+      '"public"."user_access"',
       '"public"."variants"',
     ]);
     expect(fn).toBe('drop function if exists "public"."stock_movements_reject_change"() restrict;');

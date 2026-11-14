@@ -22,6 +22,20 @@
       "when": 1794654300101,
       "tag": "0002_sku_ascii_format",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794682378286,
+      "tag": "0003_auth_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794682500232,
+      "tag": "0004_stock_movements_user_actor",
+      "breakpoints": true
     }
   ]
 }

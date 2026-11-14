@@ -1,15 +1,14 @@
 import { defineConfig } from "drizzle-kit";
-import { DEV_TARGET, parseSafeDatabaseUrl, resolveDatabaseUrl } from "./src/db/connection-guard.mts";
 
-// `generate` and `check` only read and write local files, so they need no database. Any other
-// drizzle-kit command is refused except `migrate`, which gets credentials only if DATABASE_URL names
-// the local development database and role. Use `npm run db:migrate`, which also asks PostgreSQL to
-// confirm the connection and pins the session search_path (this path does neither). This config cannot stop a direct `drizzle-kit ... --config <other file>`
-// or a command-line URL; those bypass it (README.md, Database migrations).
+// Only `generate` and `check` are supported: they read and write local files and need no database. Every
+// other drizzle-kit command, including `migrate` and `push`, is refused, and this config never carries
+// database credentials. Apply migrations with `npm run db:migrate`, which checks the target with
+// PostgreSQL and pins the session search_path first. This config cannot stop
+// `drizzle-kit ... --config <other file>` or command-line credentials (README.md, Database migrations).
 const command = process.argv[2];
-const READ_ONLY = ["generate", "check"];
+const SUPPORTED = ["generate", "check"];
 
-if (command !== undefined && !READ_ONLY.includes(command) && command !== "migrate") {
+if (command !== undefined && !SUPPORTED.includes(command)) {
   throw new Error(`drizzle-kit ${command} is not supported in this project. See README.md (Database migrations).`);
 }
 
@@ -17,9 +16,6 @@ export default defineConfig({
   dialect: "postgresql",
   schema: "./src/db/schema.ts",
   out: "./drizzle",
-  ...(command === "migrate"
-    ? { dbCredentials: { ...parseSafeDatabaseUrl(resolveDatabaseUrl(), DEV_TARGET), ssl: false as const } }
-    : {}),
   strict: true,
   verbose: true,
 });
