@@ -1,0 +1,66 @@
+# Dependencies
+node_modules/
+
+# Next.js and build output
+/.next/
+/out/
+/build/
+/dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# Test output
+/coverage/
+/playwright-report/
+/test-results/
+/blob-report/
+
+# Environment and secrets (.env.example is committed, with variable names only)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Database dumps, backups and exports: may contain customer data
+*.dump
+*.backup
+*.sql.gz
+# Anchored to the root so source folders such as src/modules/reports/exports/ stay tracked
+/backups/
+/exports/
+/private/
+
+# Internal archives and business documents: kept outside the repository
+*.zip
+*.7z
+*.rar
+*.docx
+*.pptx
+
+# Local review output
+/screenshots/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local deployment state
+.vercel/
+
+# Claude Code: personal settings stay local
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Windows and macOS
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store

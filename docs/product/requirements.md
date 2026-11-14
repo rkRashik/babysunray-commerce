@@ -1,0 +1,251 @@
+# BabySunray: Product Requirements
+
+**Status:** Draft — Founder Review (revision A.1)
+**Purpose:** The single source of truth for what BabySunray's website and Owner Office must do. Technology choices live in [ADR-0001](../adr/0001-application-stack.md). Visual design is not specified here.
+**Last updated:** 2026-11-14
+
+## How to read this document
+
+Each requirement carries a basis:
+
+| Basis | Meaning |
+|---|---|
+| **F** | A business outcome or constraint stated by the founder (founder decisions as recorded in the briefs, or direct instruction). Binding. |
+| **P** | Proposed by an advisor or AI review: a technical or operational method, or a business rule the founder has not yet approved. Not scope until the founder confirms it. |
+| **F + P** | The outcome is founder-stated. The specific rule or method given is proposed. |
+| **Q** | Open question. Do not implement. |
+
+Labels were audited in revision A.1: items that came only from advisor text, or that are implementation details of a founder outcome, are marked **P** or **F + P**. Nothing here is approved merely because it is written down.
+Choices the founder has not made are collected in [section 12](#12-open-decisions) rather than guessed. Earlier AI recommendations (the discarded prototype, the earlier Cloudflare proposal) have **not** been promoted to F.
+
+## 1. Business context
+
+| ID | Requirement | Basis |
+|---|---|---|
+| B-1 | Brand: **BabySunray**. Domain `babysunray.com` is already owned. | F |
+| B-2 | Initial business: Bangladesh-focused baby and kids clothing, online-first, social-led discovery, nationwide delivery managed from Dhaka. Accessories, essentials and toys may follow after validation. | F |
+| B-3 | Single founder operates the business and maintains the platform personally. Staff may be added later; no partner, equity, investor or profit-distribution logic is authorised. | F |
+| B-4 | Sales channels: the website, plus Facebook, Instagram, Messenger and WhatsApp. Orders taken on Messenger or WhatsApp must live in the same records as website orders. | F |
+| B-5 | Business launch and website launch are separate. A website outage must not stop customer service or lose an order record. | F |
+| B-6 | No fixed launch date. Readiness gates outrank dates. A December 2026 soft launch was a planning target for the business, not a commitment for the custom platform. | F |
+| B-7 | The platform should be maintainable and portfolio-grade. Generic code is kept apart from BabySunray's assets and data, but multi-tenant SaaS is **not** in scope. | F |
+
+## 2. Constraints
+
+### 2.1 Budget
+
+| ID | Requirement | Basis |
+|---|---|---|
+| C-1 | Default website infrastructure and software budget is **BDT 0**: no paid hosting, database, SMS, backup service, image service, commercial licence or subscription. | F |
+| C-2 | No free trial, auto-converting plan, billing activation or card verification without separate founder approval. | F |
+| C-3 | A Bangladesh-based hosting plan costing **less than BDT 1,500 per year** may be *evaluated* as an optional alternative. It must not be purchased without separate founder approval. | F |
+| C-4 | The domain is already paid. Future domain renewal, courier fees and normal business costs are tracked separately from website infrastructure cost. | F |
+| C-5 | Do not promise that the site will be free or reliable forever. Verify current terms and limits before relying on any free tier. | F |
+
+### 2.2 Repository and data handling
+
+| ID | Requirement | Basis |
+|---|---|---|
+| R-1 | Source is kept GitHub-ready. Visibility (private first, or public) is an open decision, see section 12. | F + Q |
+| R-2 | Never commit: financial or source ZIPs, the Founder Fieldbook, customer personal data, database exports or backups, secrets, supplier or business contacts, internal review files. | F |
+| R-3 | Documentation is short and human-readable. No generated filler. Dependencies are kept minimal. | F |
+
+## 3. Customer experience
+
+| ID | Requirement | Basis |
+|---|---|---|
+| S-1 | Full **Bangla and English** experience, including interface labels, policies, size information, address forms and order messages. Currency is BDT. | F |
+| S-2 | Premium, restrained, editorial, warm and clean. Explicitly **not** a generic template look. Mobile quality equals desktop quality. | F |
+| S-3 | **Guest checkout.** No account creation is forced. | F |
+| S-4 | **Cash on delivery (COD)** at launch. Online payment is a later option, subject to merchant approval. *Proposed:* the site does not collect card numbers while on a free-tier host (see ADR-0001). | F + P |
+| S-5 | Assisted ordering (founder enters an order taken on Messenger or WhatsApp) is supported. | F |
+| S-6 | Product pages show sizes in **cm**, variant availability, fabric and care, and a delivery and return explanation. | P |
+| S-7 | The delivery charge is shown before the customer submits the order. | P |
+| S-8 | Checkout is short and labelled for first-time online buyers. After submission the order is shown as *received* and not as *confirmed* until verified. What verification means is a business rule (O-10). | P |
+| S-9 | Customers can follow an order privately without an account, using an opaque, randomly generated tracking link. Lookup by order number plus the last four phone digits is **not** acceptable. SMS one-time codes must not be a required paid dependency. | P |
+| S-10 | Public URLs, analytics and logs contain no customer personal data. | P |
+| S-11 | Product claims, fabric statements and policies are never invented. Competitor product photos are not used. | F |
+| S-12 | Loading, error and offline states are designed. If the order service is unavailable the site says the order was **not** recorded and offers a manual contact route. | P |
+| S-13 | Accessibility: sufficient text contrast, visible focus, persistent field labels, large touch targets. | P |
+| S-14 | **Search, customer accounts, wishlists and reviews: launch scope undecided.** They are neither included nor excluded until the founder decides. | Q |
+| S-15 | A tracking link is a credential and is protected as one. It is long and random; it expires; the owner can revoke or regenerate it. It must not appear in analytics, server or access logs, error reports, or requests to third parties. The tracking page sends no referrer, loads no third-party scripts or embeds, is not cached or indexed, and shows only minimal, masked information. Lookups are rate-limited and failures return one generic message. | P |
+| S-16 | The tracking link's lifetime, and what happens to it after delivery, cancellation or return, are to be defined. | Q |
+| S-17 | **Public checkout is disabled until the founder has approved and published** the delivery, return/exchange and privacy policies, and any terms checkout depends on. Placeholder or "pending" text is not an acceptable public policy. Drafts may exist internally. | F |
+
+## 4. Orders and fulfilment
+
+Order data uses **separate** lifecycle dimensions. A change to one must not overwrite another.
+
+| Dimension | Meaning | Values |
+|---|---|---|
+| Order status | Where the order stands as a commercial record | to be defined |
+| Fulfilment status | Physical preparation and delivery | to be defined |
+| Payment status | Money expected, collected and settled | to be defined |
+| Return / refund status | Returns, exchanges and refunds | to be defined |
+
+**Order source** (website, Messenger, WhatsApp, other) is an attribute of the order, **not** a lifecycle status.
+
+| ID | Requirement | Basis |
+|---|---|---|
+| O-1 | The four lifecycle dimensions above are stored and displayed separately. Their allowed values and transitions are written once the business rules below are approved. | F |
+| O-2 | Order source is a separate attribute. | F |
+| O-3 | Orders are submitted **idempotently**: repeating a submission with the same key creates one order. | P |
+| O-4 | Stock is checked and held consistently under the reservation rules (O-9 to O-12). No order exists in a state that contradicts those rules, and no hold exists without a corresponding order. | P |
+| O-5 | Money is stored as integer minor units (paisa). Display uses BDT formatting. | P |
+| O-6 | Timestamps are stored unambiguously (UTC) and displayed in Asia/Dhaka. | P |
+| O-7 | Phone numbers and order identifiers are text, so leading zeros survive. Bangladesh mobile numbers are validated and normalised. | P |
+| O-8 | Delivery charges are configured by the owner, never hardcoded. How they depend on district or area is open. | Q |
+| O-9 | **Reservation timing:** when stock is held for an order (at submission, at verification, at dispatch, or otherwise). | Q |
+| O-10 | **Pending-verification orders:** what verification is, who performs it, whether such orders hold stock, and how long they may wait. | Q |
+| O-11 | **Cancellation:** who may cancel and when, and the effect on stock, payment and tracking. | Q |
+| O-12 | **Reservation release and expiry:** whether holds expire automatically or are released by hand, the time limits, and any notice to the customer. | Q |
+| O-13 | **Returns and exchanges:** eligibility, time window, condition requirements, refund method, and effect on stock. | Q |
+| O-14 | **RTO (undelivered or refused parcels returned to the shop):** handling, cost recording, inspection and restock. | Q |
+
+O-9 to O-14 are **business rules the founder must define**. No order state transitions, reservation logic or database schema that depends on them are implemented until the founder has approved them in writing (gate G-10). This document does not propose specific policies or amounts.
+
+## 5. Catalogue and inventory
+
+| ID | Requirement | Basis |
+|---|---|---|
+| I-1 | Products have variants and SKUs (for example size and colour) with stock per SKU. | F |
+| I-2 | Stock is tracked as on hand, reserved and available, backed by an **append-only movement ledger**. The meaning of "reserved" follows O-9 to O-12. | P |
+| I-3 | Every manual stock adjustment records a reason and who made it. | P |
+| I-4 | Overselling is not allowed, including when several customers order the last unit at once and for multi-item carts. | P |
+| I-5 | Product photos: how the owner adds and changes images depends on hosting (browser upload versus a local build and deploy step). Open. | Q |
+| I-6 | A product cannot be published until bilingual text, cm measurements and an approved fabric statement exist. | P |
+| I-7 | **Returned and RTO goods are inspected before they are sellable.** Goods awaiting inspection are held apart from sellable stock (quarantine) and enter sellable stock only through a recorded decision. The inspection criteria and outcomes are business rules (O-13, O-14). | P |
+| I-8 | **Inventory reconciliation:** the owner can compare counted physical stock with system stock. Differences are recorded as reasoned ledger adjustments, never as silent edits. The counting routine and its frequency are to be defined. | P |
+
+## 6. Owner Office
+
+A private area for the founder, with security boundaries that anticipate later staff roles.
+
+| ID | Requirement | Basis |
+|---|---|---|
+| OF-1 | Manage products, pricing, stock, orders (website and assisted), expenses, fulfilment, configuration and reports. Phased delivery is acceptable. | F |
+| OF-2 | A practical dashboard, not an executive analytics page. No fictional KPIs. | P |
+| OF-3 | Cash-on-delivery money is shown in separate buckets: expected, collected by the courier, settled to the owner. Whether an order counts as *expected* depends on verification (O-10). | P |
+| OF-4 | Every Office page and API enforces authentication and authorisation. Each is covered by a negative test. | P |
+| OF-5 | Authentication uses an established solution, not a custom-designed protocol. It includes session expiry, CSRF protection and a recovery path for a lost device. Which solution is open. | P + Q |
+| OF-6 | Privileged and sensitive actions (exports, stock adjustments, status changes) are written to an audit log with actor and time. | P |
+| OF-7 | Staff roles are not built now. Permission checks are written so roles can be added without rewriting them. | F |
+| OF-8 | **COD courier settlement:** for each cash-on-delivery consignment the owner can record the amount expected, the amount the courier remitted, courier fees or deductions, the date received, and any unresolved difference. All amounts and fees are entered by the owner. None are assumed here. How courier statements are reconciled is to be defined. | P |
+
+## 7. Data portability, reports and recovery
+
+Launch-critical, not a later phase.
+
+### 7.1 Exports
+
+| ID | Requirement | Basis |
+|---|---|---|
+| D-1 | Owner can export to **Excel (.xlsx)**, **CSV** and **JSON**. | F |
+| D-2 | CSV is UTF-8 and opens correctly in desktop Excel with Bangla text. CSV and spreadsheet formula injection is prevented. | P |
+| D-3 | JSON includes a schema version, export time, timezone, and IDs and relations preserved. | P |
+| D-4 | Phone numbers and order IDs stay as text in every format. Amounts avoid floating-point approximation. | P |
+| D-5 | Filters include date range, channel, order status and payment status. A **complete** export is independent of on-screen pagination. Every export is clearly labelled complete or filtered. | P |
+| D-6 | Exports of customer personal data are owner-only and logged. Download links are not public or predictable. | P |
+| D-7 | A report is consistent: totals and relations are the same throughout one export. | P |
+| D-8 | Data sets to cover, as they become active: catalogue and variants, stock and movement ledger, orders and items, assisted-order source, fulfilment and tracking, COD expected/collected/settled, returns and refunds, expenses and cash movements, customers, settings and policies, audit log. | P |
+
+### 7.2 Print
+
+| ID | Requirement | Basis |
+|---|---|---|
+| D-9 | Print-ready reports exist for the owner. *Proposed:* A4, showing business name, title, date range, generated time, page numbers and totals, without clipped columns. | F + P |
+| D-10 | Routine printed summaries omit customer phone and address. | P |
+
+### 7.3 Backup and recovery
+
+The founder requires **verified backup and recovery**. The items below are the proposed means.
+
+An export is a readable snapshot. It is **not** a disaster-recovery backup. Spreadsheet, CSV and JSON exports, including daily ones, never replace complete database backups (K-10).
+
+| ID | Requirement | Basis |
+|---|---|---|
+| K-1 | Consistent, restore-tested logical database backups, including schema, relations and migration history. | P |
+| K-2 | Uploaded media is backed up with a manifest mapping files to products. | P |
+| K-3 | Source, migrations and configuration templates (no secrets) are kept in Git. | P |
+| K-4 | An encrypted local copy **and** a separate off-device copy, in a place chosen by the founder. | P |
+| K-5 | Backup frequency is **derived from the approved RPO (K-9)** and from what the chosen host and a one-person routine can realistically sustain. A weekly full backup is a proposed *minimum*, and is not enough if the RPO is shorter. A backup is also taken before migrations and risky bulk edits. | P |
+| K-6 | A **restore drill** into a fresh environment checks counts, sample orders and stock, foreign keys, images, Bangla text and absence of duplicate orders, and measures the time taken against the RTO. The date and result are recorded. A backup without a successful restore is not considered verified. | P |
+| K-7 | Outage fallback: locally kept order, stock, cash and courier sheets, plus a written procedure to avoid duplicates and reconcile when the service returns. | F + P |
+| K-8 | Each backup target's retention window and its limits are written down in the operations runbook. | P |
+| K-9 | **The founder approves a recovery point objective (RPO)** (how much recent data may be lost) **and a recovery time objective (RTO)** (how long the shop may be without its records) before launch. Backup frequency, off-device copy and restore drills are set to meet them. | Q |
+| K-10 | Spreadsheet, CSV and JSON exports do not satisfy K-1. Both exist, for different purposes. | P |
+
+## 8. Brand
+
+| ID | Requirement | Basis |
+|---|---|---|
+| BR-1 | Approved direction: **A / Warm Cocoa, Refined Timeless Boutique**. The wordmark silhouette, small sunrise arc and three rays above "Sunray" are preserved. No lower swoosh, no detached sun. | F |
+| BR-2 | Approved logo colours: Deep Cocoa `#332923`, Muted Amber `#C28B56`, Warm Ivory `#F9F6F1`. | F |
+| BR-3 | The logo is not redesigned and no replacement font is substituted without approval. Refinements may be proposed as options only. | F |
+| BR-4 | The current vector is a trace of a raster original. A clean vector master is needed before print, favicon or small-size use. It is a reference, not trademark clearance. | F |
+| BR-5 | *Little Days. Warm Moments.* is a proposed communication line. It is not registered, not locked, and not part of the logo artwork. | F |
+| BR-6 | The logo identity is approved as a brand reference. **The website's colour system, layout, typography and visual design are not yet decided.** The earlier design prototype is discarded and is not approved. Interface colours that must hold contrast on text and controls are a design decision still to be made. | F |
+
+## 9. Quality and acceptance gates
+
+These must be demonstrated before the matching feature is called ready. Evidence is recorded, not assumed.
+
+| ID | Gate |
+|---|---|
+| G-1 | Under the approved reservation rules, parallel orders for the last unit never oversell. A failed reservation leaves no order, item or hold. Multi-item carts and retries are included. |
+| G-2 | A repeated submission with the same idempotency key yields one order, including after a timeout and retry. |
+| G-3 | Every Office route and API rejects unauthenticated and unauthorised requests. |
+| G-4 | Tracking links cannot be enumerated or guessed. Expiry and revocation work. No link or personal data appears in logs, analytics, error reports, referrer headers or third-party requests. Generic errors and rate limits apply. |
+| G-5 | XLSX, CSV and JSON exports open correctly on Windows desktop Excel and common mobile browsers, with Bangla text, text phone numbers and no formula execution. |
+| G-6 | A full restore drill passes (K-6) and meets the approved RTO. The backup routine meets the approved RPO. |
+| G-7 | Delivery, return/exchange and privacy policies are **founder-approved and published** before public checkout is enabled. Placeholder text does not satisfy this gate (S-17). |
+| G-8 | The chosen production hosting is confirmed to permit commercial use, its limits and failure behaviour are tested, and its backup and restore capability is verified. |
+| G-9 | Usability: at least five informal testers including one first-time online buyer, on a mid-range Android phone. |
+| G-10 | The business rules O-9 to O-14 are approved in writing before the schema and logic that depend on them are implemented. |
+
+## 10. Phasing (proposed)
+
+| Phase | Outcome | Basis |
+|---|---|---|
+| 0 | Documentation and decisions: requirements, stack ADR, business rules (O-9 to O-14), RPO and RTO, hosting and ORM decisions, design research and approved design system | P |
+| 1 | Local PostgreSQL development and tests (only after separate founder approval): catalogue, stock and Owner Office foundation, with exports and backup working on demo data | P |
+| 2 | Guest COD checkout, confirmation, tracking, assisted orders | P |
+| 3 | Reports, print, restore drill, outage procedure, then launch review against section 9 | P |
+
+Local development does not require approved hosting. **Production deployment** requires validated hosting, backups and commercial-use terms (G-8). Order and scope can change after founder review.
+
+## 11. Out of scope for now
+
+Multi-tenant or SaaS features, partner or profit-sharing logic, online card payment, staff roles, and SMS or one-time codes as a required dependency, unless the founder adds them. Search, accounts, wishlists and reviews are **undecided**, not excluded (S-14).
+
+## 12. Open decisions
+
+| # | Decision | Notes |
+|---|---|---|
+| 1 | Production hosting and database host | Must satisfy BDT 0 (C-1), commercial use and restore (G-8). A sub-BDT-1,500/year Bangladesh plan may be evaluated (C-3). |
+| 2 | ORM: Drizzle or Prisma | Evaluation pending. |
+| 3 | Authentication solution | Must satisfy OF-5. |
+| 4 | Final UI design | Colours, typography, layout. Needs design research and approval (BR-6). |
+| 5 | Business rules O-9 to O-14 | Reservation timing, pending verification, cancellation, release and expiry, returns, RTO. Needed before schema work (G-10). |
+| 6 | RPO and RTO | Founder approval (K-9). |
+| 7 | Policies: delivery, return/exchange, privacy | Founder-approved text required before public checkout (S-17, G-7). |
+| 8 | Delivery charges and zones | Owner to supply real values (O-8). |
+| 9 | Courier and COD settlement process, return inspection criteria, stock counting routine | Real processes not yet documented (OF-8, I-7, I-8). |
+| 10 | Tracking link lifetime | S-16. |
+| 11 | Lifecycle status values and transitions | Defined after item 5 (section 4). |
+| 12 | Launch scope of search, accounts, wishlist, reviews | Undecided (S-14). |
+| 13 | Repository visibility | Private first or public (R-1). |
+| 14 | Product photo workflow | Depends on hosting (I-5). |
+| 15 | Off-device backup location | Founder chooses (K-4). |
+| 16 | Approval to start local PostgreSQL development | Separate gate (section 10). |
+
+## 13. Source materials
+
+| Source | Used for | Note |
+|---|---|---|
+| Founder brief: review brief, section 2 | Business context, brand, channels, scope | Founder statement. |
+| Advisor alignment brief (14 Nov 2026), section 1 | Budget, portability, solo operation, repository standards | Founder decisions recorded by an advisor. Other sections are advisor text. |
+| Founder instruction, Gate A and A.1 (14 Nov 2026) | Lifecycle dimensions, budget wording, stack direction, brand status, corrections | Highest precedence. |
+| Second technical advisor review (Gate A.1) | Label audit, business-rule gaps, recovery objectives, tracking security | Advisor input, applied as corrections by the founder's instruction. |
+| Architecture decision review (14 Nov 2026) | Acceptance gates, export and recovery details | Advisor proposal. Cloudflare-specific parts are not carried over. |
+| Original BabySunray brand and business documents on the G: drive | Not read for this draft | Should be checked against sections 1 and 8 during review. |
