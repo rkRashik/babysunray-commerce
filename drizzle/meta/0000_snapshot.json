@@ -1,0 +1,427 @@
+{
+  "id": "730ad32d-0669-4e33-a73a-a4f819d25e79",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.inventory_balances": {
+      "name": "inventory_balances",
+      "schema": "",
+      "columns": {
+        "variant_id": {
+          "name": "variant_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "on_hand": {
+          "name": "on_hand",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "inventory_balances_variant_id_variants_id_fk": {
+          "name": "inventory_balances_variant_id_variants_id_fk",
+          "tableFrom": "inventory_balances",
+          "tableTo": "variants",
+          "columnsFrom": [
+            "variant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "inventory_balances_on_hand_nonnegative": {
+          "name": "inventory_balances_on_hand_nonnegative",
+          "value": "\"inventory_balances\".\"on_hand\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.products": {
+      "name": "products",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name_en": {
+          "name": "name_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name_bn": {
+          "name": "name_bn",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description_en": {
+          "name": "description_en",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description_bn": {
+          "name": "description_bn",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "products_slug_key": {
+          "name": "products_slug_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "slug"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "products_slug_format": {
+          "name": "products_slug_format",
+          "value": "\"products\".\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and length(\"products\".\"slug\") <= 100"
+        },
+        "products_status_valid": {
+          "name": "products_status_valid",
+          "value": "\"products\".\"status\" in ('draft', 'archived')"
+        },
+        "products_name_present": {
+          "name": "products_name_present",
+          "value": "\"products\".\"name_en\" is not null or \"products\".\"name_bn\" is not null"
+        },
+        "products_names_valid": {
+          "name": "products_names_valid",
+          "value": "btrim(\"products\".\"name_en\") <> '' and length(\"products\".\"name_en\") <= 200 and btrim(\"products\".\"name_bn\") <> '' and length(\"products\".\"name_bn\") <= 200"
+        },
+        "products_descriptions_valid": {
+          "name": "products_descriptions_valid",
+          "value": "btrim(\"products\".\"description_en\") <> '' and length(\"products\".\"description_en\") <= 5000 and btrim(\"products\".\"description_bn\") <> '' and length(\"products\".\"description_bn\") <= 5000"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.stock_movements": {
+      "name": "stock_movements",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "stock_movements_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "variant_id": {
+          "name": "variant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "movement_type": {
+          "name": "movement_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantity_delta": {
+          "name": "quantity_delta",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actor_type": {
+          "name": "actor_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_ref": {
+          "name": "actor_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "stock_movements_variant_id_id_idx": {
+          "name": "stock_movements_variant_id_id_idx",
+          "columns": [
+            {
+              "expression": "variant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "stock_movements_variant_id_variants_id_fk": {
+          "name": "stock_movements_variant_id_variants_id_fk",
+          "tableFrom": "stock_movements",
+          "tableTo": "variants",
+          "columnsFrom": [
+            "variant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "stock_movements_type_valid": {
+          "name": "stock_movements_type_valid",
+          "value": "\"stock_movements\".\"movement_type\" in ('receipt', 'adjustment')"
+        },
+        "stock_movements_delta_valid": {
+          "name": "stock_movements_delta_valid",
+          "value": "\"stock_movements\".\"quantity_delta\" <> 0 and (\"stock_movements\".\"movement_type\" <> 'receipt' or \"stock_movements\".\"quantity_delta\" > 0)"
+        },
+        "stock_movements_reason_valid": {
+          "name": "stock_movements_reason_valid",
+          "value": "(\"stock_movements\".\"movement_type\" <> 'adjustment' or \"stock_movements\".\"reason\" is not null) and btrim(\"stock_movements\".\"reason\") <> '' and length(\"stock_movements\".\"reason\") <= 500"
+        },
+        "stock_movements_actor_type_valid": {
+          "name": "stock_movements_actor_type_valid",
+          "value": "\"stock_movements\".\"actor_type\" in ('system')"
+        },
+        "stock_movements_actor_ref_format": {
+          "name": "stock_movements_actor_ref_format",
+          "value": "\"stock_movements\".\"actor_ref\" ~ '^[a-z0-9][a-z0-9._:-]{0,99}$'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.variants": {
+      "name": "variants",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "product_id": {
+          "name": "product_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sku": {
+          "name": "sku",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "size": {
+          "name": "size",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "colour": {
+          "name": "colour",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_paisa": {
+          "name": "price_paisa",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "variants_product_id_idx": {
+          "name": "variants_product_id_idx",
+          "columns": [
+            {
+              "expression": "product_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "variants_product_id_products_id_fk": {
+          "name": "variants_product_id_products_id_fk",
+          "tableFrom": "variants",
+          "tableTo": "products",
+          "columnsFrom": [
+            "product_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "variants_sku_key": {
+          "name": "variants_sku_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "sku"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "variants_sku_canonical": {
+          "name": "variants_sku_canonical",
+          "value": "\"variants\".\"sku\" = upper(btrim(\"variants\".\"sku\")) and \"variants\".\"sku\" is nfc normalized and \"variants\".\"sku\" !~ '[[:cntrl:]]' and length(\"variants\".\"sku\") between 1 and 64"
+        },
+        "variants_labels_valid": {
+          "name": "variants_labels_valid",
+          "value": "btrim(\"variants\".\"size\") <> '' and length(\"variants\".\"size\") <= 64 and btrim(\"variants\".\"colour\") <> '' and length(\"variants\".\"colour\") <= 64"
+        },
+        "variants_price_range": {
+          "name": "variants_price_range",
+          "value": "\"variants\".\"price_paisa\" > 0 and \"variants\".\"price_paisa\" <= 9007199254740991"
+        },
+        "variants_status_valid": {
+          "name": "variants_status_valid",
+          "value": "\"variants\".\"status\" in ('active', 'inactive')"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

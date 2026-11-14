@@ -1,3 +1,4 @@
+import path from "node:path";
 import { defineConfig } from "vitest/config";
 import { loadEnv } from "vite";
 
@@ -14,9 +15,15 @@ if (!testDatabaseUrl) {
 }
 
 export default defineConfig({
+  resolve: {
+    // Next.js resolves `server-only` at build time; outside Next.js the package throws on import.
+    alias: { "server-only": path.resolve("node_modules/server-only/empty.js"), "@": path.resolve("src") },
+  },
   test: {
     include: ["tests/**/*.integration.test.ts"],
     env: { TEST_DATABASE_URL: testDatabaseUrl },
+    // Replays all migrations into an empty schema before the tests (tests/support/global-setup.ts).
+    globalSetup: ["tests/support/global-setup.ts"],
     // Integration tests share one database; run files one at a time.
     fileParallelism: false,
   },
