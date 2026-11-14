@@ -1,10 +1,10 @@
 import "server-only";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, gt, sql } from "drizzle-orm";
 import { type Db, PG_NUMERIC_OUT_OF_RANGE, pgErrorCode } from "@/db/database";
 import { inventoryBalances, stockMovements, variants } from "@/db/schema";
 import { type Actor, validateActor } from "../actor";
 import { normalizeSku } from "../catalogue/rules";
-import { DomainError } from "../domain-error";
+import { DomainError, invalidInput } from "../domain-error";
 import { validateAdjustmentDelta, validateReason, validateReceiptQuantity } from "./rules";
 
 export type StockMovement = typeof stockMovements.$inferSelect;
@@ -102,6 +102,28 @@ export async function getStockLevel(db: Db, rawSku: string): Promise<{ variantId
 export async function listStockMovements(db: Db, rawSku: string): Promise<StockMovement[]> {
   const variantId = await findVariantId(db, normalizeSku(rawSku));
   return db.select().from(stockMovements).where(eq(stockMovements.variantId, variantId)).orderBy(asc(stockMovements.id));
+}
+
+/**
+ * One page of a SKU's movements, oldest first. The identity id is unique and increases with every insert,
+ * so it alone is a stable order; `afterId` continues from the last row of the previous page.
+ */
+export async function listStockMovementsPage(
+  db: Db,
+  rawSku: string,
+  options: { limit: number; afterId?: number },
+): Promise<{ items: StockMovement[]; hasMore: boolean }> {
+  const { limit, afterId } = options;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw invalidInput("limit", "must be 1 to 100");
+  if (afterId !== undefined && (!Number.isSafeInteger(afterId) || afterId < 0)) throw invalidInput("cursor", "is not valid");
+  const variantId = await findVariantId(db, normalizeSku(rawSku));
+  const rows = await db
+    .select()
+    .from(stockMovements)
+    .where(and(eq(stockMovements.variantId, variantId), afterId === undefined ? undefined : gt(stockMovements.id, afterId)))
+    .orderBy(asc(stockMovements.id))
+    .limit(limit + 1);
+  return { items: rows.slice(0, limit), hasMore: rows.length > limit };
 }
 
 async function findVariantId(db: Pick<Db, "select">, sku: string): Promise<string> {

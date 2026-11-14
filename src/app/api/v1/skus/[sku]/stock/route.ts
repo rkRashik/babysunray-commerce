@@ -1,0 +1,16 @@
+import { apiGet, methodNotAllowed, parsePath } from "@/api/v1/http";
+import { skuPath } from "@/api/v1/schemas";
+import { normalizeSku } from "@/modules/catalogue/rules";
+import { getStockLevel } from "@/modules/inventory/service";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+// GET /api/v1/skus/{sku}/stock: current on-hand quantity. Read only; stock changes have no API yet.
+export const GET = apiGet<{ sku: string }>("stock:read", async ({ params, db }) => {
+  const sku = normalizeSku(parsePath(params, skuPath).sku);
+  const level = await getStockLevel(db, sku);
+  return { data: { sku, variantId: level.variantId, onHand: level.onHand } };
+});
+
+export const { POST, PUT, PATCH, DELETE } = methodNotAllowed("GET");

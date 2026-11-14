@@ -16,7 +16,8 @@
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "db:migrate": "node scripts/migrate-dev.mts",
-    "auth:bootstrap-owner": "node scripts/bootstrap-owner.mts"
+    "auth:bootstrap-owner": "node scripts/bootstrap-owner.mts",
+    "test:contract": "vitest run tests/api && vitest run --config vitest.integration.config.mts tests/db/api.integration.test.ts"
   },
   "dependencies": {
     "better-auth": "1.7.25",
@@ -25,14 +26,18 @@
     "pg": "^8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "server-only": "0.0.1"
+    "server-only": "0.0.1",
+    "zod": "4.6.7"
   },
   "devDependencies": {
+    "@seriousme/openapi-schema-validator": "2.11.0",
     "@tailwindcss/postcss": "^4.3.5",
     "@types/node": "^24.19.2",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "drizzle-kit": "0.31.11",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.4.6",

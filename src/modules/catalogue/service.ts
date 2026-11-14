@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import {
   type Db,
   PG_CHECK_VIOLATION,
@@ -108,4 +108,50 @@ function mapWriteError(error: unknown, codes: Record<string, keyof typeof MESSAG
   // Validation above mirrors every CHECK constraint, so this only fires if they drift apart.
   if (sqlState === PG_CHECK_VIOLATION) return new DomainError("INVALID_INPUT", "The values are not valid.");
   return error;
+}
+
+/** Keyset position in the product list: PostgreSQL's exact created_at (microseconds) and the id. */
+export type ProductKey = { createdAt: string; id: string };
+export type ProductPage = { items: (Product & { key: ProductKey })[]; hasMore: boolean };
+
+// created_at as UTC text with microseconds, so a page boundary never loses precision in a JS Date.
+const createdAtKey = sql<string>`to_char(${products.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+
+/**
+ * Products oldest first, ordered by (created_at, id) so rows created in the same microsecond still have a
+ * fixed order. `after` continues from the last row of the previous page. For the Owner Office only: every
+ * product here is a draft or archived, and none is public.
+ */
+export async function listProducts(
+  db: Db,
+  options: { limit: number; status?: Product["status"]; after?: ProductKey },
+): Promise<ProductPage> {
+  const { limit, status, after } = options;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new DomainError("INVALID_INPUT", "limit must be 1 to 100.");
+  const rows = await db
+    .select({ product: products, key: createdAtKey })
+    .from(products)
+    .where(
+      and(
+        status ? eq(products.status, status) : undefined,
+        after
+          ? sql`(${products.createdAt}, ${products.id}) > (${after.createdAt}::timestamptz, ${validateId(after.id, "cursor")}::uuid)`
+          : undefined,
+      ),
+    )
+    .orderBy(asc(products.createdAt), asc(products.id))
+    .limit(limit + 1);
+  return {
+    items: rows.slice(0, limit).map((r) => ({ ...r.product, key: { createdAt: r.key, id: r.product.id } })),
+    hasMore: rows.length > limit,
+  };
+}
+
+/** One product with its variants (ordered by SKU). */
+export async function getProductWithVariants(db: Db, productId: string): Promise<Product & { variants: Variant[] }> {
+  const id = validateId(productId, "productId");
+  const [product] = await db.select().from(products).where(eq(products.id, id));
+  if (!product) throw new DomainError("PRODUCT_NOT_FOUND", "Product not found.");
+  const productVariants = await db.select().from(variants).where(eq(variants.productId, id)).orderBy(asc(variants.sku));
+  return { ...product, variants: productVariants };
 }

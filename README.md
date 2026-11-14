@@ -6,7 +6,7 @@ Long-term goals (founder-confirmed; see requirements B-8 to B-13): a complete, p
 
 ## Status
 
-**Foundation and decisions phase.** The Next.js application is scaffolded as an engineering base only. `src/app/page.tsx` is a development-status page that proves the framework renders; it is not the approved homepage. There are no storefront or Owner Office features, screens, orders, business API endpoints or deployment. The backend foundation exists: a catalogue and stock schema with internal services, and an authentication and authorisation foundation (see Catalogue and inventory, and Authentication), with PostgreSQL integration tests. The two local databases are created by the founder with `db/local-setup.sql`. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`).
+**Foundation and decisions phase.** The Next.js application is scaffolded as an engineering base only. `src/app/page.tsx` is a development-status page that proves the framework renders; it is not the approved homepage. There are no storefront or Owner Office features, screens, orders, write API endpoints or deployment. The backend foundation exists: a catalogue and stock schema with internal services, an authentication and authorisation foundation, and a read-only Owner API under `/api/v1` (see Catalogue and inventory, Authentication, and API), with PostgreSQL integration tests. The two local databases are created by the founder with `db/local-setup.sql`. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`).
 
 Requirements and the stack decision are drafts under founder review.
 
@@ -23,6 +23,7 @@ npm run build      # production build
 npm start          # serve the production build
 npm test           # unit tests (Vitest); no database needed
 npm run test:db    # database integration tests; needs PostgreSQL and TEST_DATABASE_URL
+npm run test:contract  # OpenAPI document validity, and every /api/v1 endpoint against it (needs TEST_DATABASE_URL)
 npm run db:generate  # generate a SQL migration from src/db/schema.ts (review it before committing)
 npm run db:check     # check the migration files and snapshots are consistent
 npm run db:migrate   # apply pending migrations to the local babysunray_dev database only
@@ -39,7 +40,9 @@ Each run then compares the database with what the migrations create (`tests/supp
 
 If the check passes, the reset drops only the migration-created tables, function and migration history, schema-qualified and with `RESTRICT` (no `CASCADE`, no dropping of schemas other than `drizzle`), in the same transaction as the check. It then replays every migration from scratch over a session whose `search_path` is pinned to `public` (see Database migrations), and runs the tests. When a migration adds an object Drizzle cannot derive (a trigger, function or sequence), add it to the manual list in `schema-inventory.ts` in the same change; when it adds or changes a column default, update the defaults list there. The reset deletes data by design, so it runs only on `babysunray_test`: both the URL and PostgreSQL's own answer must name that database and role. It never touches the development database. Test files use their own fictional fixture rows and run one at a time.
 
-`better-auth` lists `drizzle-kit` and `vitest` as optional peer dependencies, so npm no longer marks them as development-only in `package-lock.json`, and `npm audit --omit=dev` reports drizzle-kit's existing esbuild development-server advisory (moderate). They are still devDependencies; a production install procedure must exclude them (waits for hosting).
+`better-auth` lists `drizzle-kit` and `vitest` as optional peer dependencies, so npm marks them `devOptional` in `package-lock.json`, and `npm audit --omit=dev` reports four moderate findings: one advisory (GHSA-67mh-4wv8-2f99, esbuild ≤ 0.24.2 development server) along drizzle-kit → @esbuild-kit/esm-loader → @esbuild-kit/core-utils → esbuild 0.18.20. Checked 2026-11-15: drizzle-kit's code never imports @esbuild-kit, nothing starts an esbuild server, drizzle-kit is not in the Next.js build output, and `npm audit --omit=dev --omit=optional` reports 0. There is no non-breaking fix (drizzle-kit 0.31.11 is the latest stable). A production install must use `--omit=dev --omit=optional` (waits for hosting).
+
+API dependencies (2026-11-15): `zod` 4.6.7 (runtime; already present through Better Auth). Development only: `ajv` 8.20.0, `ajv-formats` 3.0.1 and `@seriousme/openapi-schema-validator` 2.11.0, for the contract tests. All MIT.
 
 Version constraints (checked 2026-11-14): TypeScript is held at 6.0.x because `typescript-eslint` supports TypeScript below 6.1. ESLint is held at 9.x because `eslint-config-next` depends on plugins that do not yet declare ESLint 10 support. Revisit both when the plugins update.
 
@@ -97,13 +100,15 @@ Known limits:
 
 ## Authentication
 
-Implemented as a server-side foundation only ([ADR-0003](docs/adr/0003-authentication-foundation.md)): Better Auth 1.7.25 with email and password, sessions stored in PostgreSQL and sent as an HttpOnly cookie, and Owner-first permissions in `src/modules/auth`. **There is no login page, Owner Office screen or business API yet**, and no account exists until you create one.
+Implemented as a server-side foundation only ([ADR-0003](docs/adr/0003-authentication-foundation.md)): Better Auth 1.7.25 with email and password, sessions stored in PostgreSQL and sent as an HttpOnly cookie, and Owner-first permissions in `src/modules/auth`. **There is no login page or Owner Office screen yet**, and no account exists until you create one. The read-only API is described under API.
 
 | Capability | Where |
 |---|---|
 | Sign-in, sign-out, session listing and revocation, password change | Better Auth's endpoints under `/api/auth` (`src/app/api/auth/[...all]/route.ts`). All other Better Auth endpoints, including public sign-up, answer 404. |
 | Verified principal and permission checks for server code | `getPrincipal`, `requirePrincipal`, `requirePermission` in `src/modules/auth/principal.ts`; roles and permissions in `permissions.ts`. |
-| Audit actor for an authenticated user | `actorFor(principal)`; stock movements then record the user's id. |
+| Audit actor for an authenticated user | `actorFor(principal)`; stock movements then record the user's id. No other code path creates a user actor. |
+| Losing access | Disabling a user (`user_access.disabled_at`) or removing the access row deletes all of that user's sessions at once (migration `0005`). |
+| Bearer tokens for non-browser clients | Only on `/api/v1` and Better Auth's own endpoints; never accepted by browser-side code, never sent to a browser (ADR-0004). |
 | First Owner | `npm run auth:bootstrap-owner` (below). |
 
 Setup: add `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` to `.env.local` (see `.env.example`; generate the secret with `openssl rand -base64 32`), then run `npm run db:migrate`. The application refuses to start authentication with a missing, short or placeholder secret, a URL that is not a bare origin, plain http outside localhost or in production, or any of `BETTER_AUTH_TRUSTED_ORIGINS`, `BETTER_AUTH_SECRETS` and `BETTER_AUTH_TELEMETRY`.
@@ -119,9 +124,20 @@ It works only in an interactive terminal, only against the local `babysunray_dev
 Known limits:
 
 - No account recovery: password reset, email verification and any email sending are disabled. If the Owner password is lost, there is no supported recovery path yet. No 2FA.
-- No Bearer tokens or other native-client credentials.
+- No native app exists. A non-browser client can obtain a Bearer token (ADR-0004); it lasts as long as a browser session.
 - Rate limiting is stored in PostgreSQL (3 sign-in attempts per 10 seconds per client). No client header is trusted for the client address, so locally every request counts as one client, and in production all clients would share the limit until a proxy setup is chosen with hosting.
 - Tested locally only. Production cookie, proxy, secret rotation and database-role settings wait for the hosting decision; nothing here is described as production-ready.
+
+## API
+
+Read-only, Owner-only endpoints under `/api/v1`, authenticated with a Bearer token only (browser cookies are refused). The contract is served at `/api/v1/openapi.json`; usage, errors, pagination and the compatibility rules are in [docs/api/README.md](docs/api/README.md), decisions in [ADR-0004](docs/adr/0004-api-v1-and-bearer-transport.md).
+
+| Endpoint | Permission |
+|---|---|
+| `GET /api/v1/products`, `GET /api/v1/products/{productId}` | `catalog:read` |
+| `GET /api/v1/skus/{sku}/stock`, `GET /api/v1/skus/{sku}/movements` | `stock:read` |
+
+Not built: write endpoints (stock receipts and adjustments wait for operation-level idempotency), public catalogue, orders, CORS and API rate limits. Unsupported methods answer 405 and unknown paths 404, both as problem responses.
 
 ## Documentation
 
@@ -131,12 +147,14 @@ Known limits:
 | [ADR-0001: Application stack](docs/adr/0001-application-stack.md) | Confirmed technology and unresolved choices | Draft — Founder Review |
 | [ADR-0002: Drizzle and inventory foundation](docs/adr/0002-drizzle-and-inventory-foundation.md) | ORM, catalogue, stock ledger and money decisions | Draft — Founder Review (decisions founder-approved) |
 | [ADR-0003: Authentication foundation](docs/adr/0003-authentication-foundation.md) | Better Auth, sessions, Owner bootstrap, permissions, user actors | Draft — Founder Review (decisions founder-approved) |
+| [ADR-0004: API v1 and Bearer transport](docs/adr/0004-api-v1-and-bearer-transport.md) | Versioned read-only API, Bearer-only transport, OpenAPI | Draft — Founder Review |
+| [API guide](docs/api/README.md) | Calling `/api/v1`, errors, pagination, compatibility rules | Draft — Founder Review |
 | [CLAUDE.md](CLAUDE.md) | Working rules for Claude Code in this repository | Active |
 
 ## Stack
 
 Confirmed: Next.js (App Router), React, TypeScript, Node.js, PostgreSQL, Tailwind CSS, one modular monolith, Drizzle ORM (ADR-0002), Better Auth (ADR-0003).
-Approved as a direction, not built: a versioned REST API under `/api/v1` with an OpenAPI description. Not yet decided: production and database hosting, final visual design, the API's endpoints, versioning policy and native-client credentials. See ADR-0001.
+Built: a read-only versioned REST API under `/api/v1` with OpenAPI 3.1 (ADR-0004). Not yet decided: production and database hosting, final visual design, write endpoints, CORS and API rate limits, native apps. See ADR-0001.
 
 ## Data handling
 
