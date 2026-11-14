@@ -4,9 +4,26 @@ The website and private Owner Office for BabySunray, a Bangladesh-focused baby a
 
 ## Status
 
-**Foundation and decisions phase.** The application has not been scaffolded: there is no source code, package manifest, database or deployment. A local Git repository exists (branch `main`, no remote). Installation, test and run instructions will be added when the project is created.
+**Foundation and decisions phase.** The Next.js application is scaffolded as an engineering base only. `src/app/page.tsx` is a development-status page that proves the framework renders; it is not the approved homepage. There are no storefront or Owner Office features, database, authentication, tests or deployment. A local Git repository exists (branch `main`, no remote).
 
 Requirements and the stack decision are drafts under founder review.
+
+## Development
+
+Requires Node.js 20.9 or newer (Next.js minimum). Verified on Node.js 24.19.0 and npm 11.17.0; `.nvmrc` records major version 24.
+
+```
+npm install        # install dependencies from package-lock.json
+npm run dev        # development server at http://localhost:3000
+npm run typecheck  # TypeScript strict check
+npm run lint       # ESLint
+npm run build      # production build
+npm start          # serve the production build
+```
+
+No automated test script exists yet.
+
+Version constraints (checked 2026-11-14): TypeScript is held at 6.0.x because `typescript-eslint` supports TypeScript below 6.1. ESLint is held at 9.x because `eslint-config-next` depends on plugins that do not yet declare ESLint 10 support. Revisit both when the plugins update.
 
 ## Documentation
 
