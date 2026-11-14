@@ -6,7 +6,7 @@ Long-term goals (founder-confirmed; see requirements B-8 to B-13): a complete, p
 
 ## Status
 
-**Foundation and decisions phase.** The Next.js application is scaffolded as an engineering base only. `src/app/page.tsx` is a development-status page that proves the framework renders; it is not the approved homepage. There are no storefront or Owner Office screens, orders or deployment. The backend foundation exists: a catalogue and stock schema with services and idempotent operations, an authentication and authorisation foundation, and an Owner API under `/api/v1` for the draft catalogue and physical stock (see Catalogue and inventory, Authentication, and API), with PostgreSQL integration tests. The two local databases are created by the founder with `db/local-setup.sql`. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`).
+**Foundation and decisions phase.** The Next.js application is scaffolded as an engineering base only. `src/app/page.tsx` is a development-status page that proves the framework renders; it is not the approved homepage. There is no storefront, no order handling and no deployment. The backend foundation exists: a catalogue and stock schema with services and idempotent operations, an authentication and authorisation foundation, an Owner API under `/api/v1` for the draft catalogue and physical stock, and a first functional Owner Office at `/office` for the same operations (see Catalogue and inventory, Authentication, API and Owner Office), with PostgreSQL integration tests. The Office is functional screens only, not an approved visual design. The two local databases are created by the founder with `db/local-setup.sql`. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`).
 
 Requirements and the stack decision are drafts under founder review.
 
@@ -80,7 +80,7 @@ What the checks cover: `db:check` checks only that the migration files and snaps
 
 ## Catalogue and inventory
 
-Implemented as server-only services in `src/modules/catalogue` and `src/modules/inventory`, with idempotent, permission-checked operations (`operations.ts`) that the API (see API) calls. Each service takes a Drizzle handle from its caller and throws a `DomainError` with a stable code for expected failures.
+Implemented as server-only services in `src/modules/catalogue` and `src/modules/inventory`, with idempotent, permission-checked operations (`operations.ts`) that the API and the Owner Office both call. Each service takes a Drizzle handle from its caller and throws a `DomainError` with a stable code for expected failures.
 
 | Capability | Notes |
 |---|---|
@@ -94,13 +94,13 @@ Known limits:
 - No reservations, holds, orders, cancellations, returns or RTO. Checkout overselling (G-1) is not tested because checkout does not exist.
 - The services themselves are not idempotent: called twice, `receiveStock` records two receipts. Clients use the idempotent operations in `src/modules/inventory/operations.ts` and `src/modules/catalogue/operations.ts`, which run once per client-generated key and user ([ADR-0005](docs/adr/0005-operation-idempotency.md)). Idempotency records are kept indefinitely until a retention policy is approved.
 - An inactive SKU can still receive physical stock; its status does not make it sellable, and nothing sells yet.
-- Ledger rows record a `system` actor or an authenticated `user` actor (the user's id, from a verified session; ADR-0003). Changes made through the API record the signed-in user.
+- Ledger rows record a `system` actor or an authenticated `user` actor (the user's id, from a verified session; ADR-0003). Changes made through the API or the Office record the signed-in user.
 - The append-only ledger trigger can be removed by the table owner or a superuser (ADR-0002).
 - Drizzle error messages include query parameters; never log or display them as is.
 
 ## Authentication
 
-Implemented as a server-side foundation only ([ADR-0003](docs/adr/0003-authentication-foundation.md)): Better Auth 1.7.25 with email and password, sessions stored in PostgreSQL and sent as an HttpOnly cookie, and Owner-first permissions in `src/modules/auth`. **There is no login page or Owner Office screen yet**, and no account exists until you create one. The read-only API is described under API.
+Implemented with Better Auth 1.7.25 ([ADR-0003](docs/adr/0003-authentication-foundation.md)): email and password, sessions stored in PostgreSQL and sent as an HttpOnly cookie, and Owner-first permissions in `src/modules/auth`. The sign-in page is `/office/login` (see Owner Office). No account exists until you create one. The API is described under API.
 
 | Capability | Where |
 |---|---|
@@ -140,6 +140,27 @@ Owner-only endpoints under `/api/v1`, authenticated with a Bearer token only (br
 | `GET /api/v1/skus/{sku}/stock`, `GET /api/v1/skus/{sku}/movements` | `stock:read` |
 
 Every write needs an `Idempotency-Key` and a JSON body of at most 64 KiB. Requests are rate limited per signed-in user (defaults 300 reads and 60 writes per minute; `API_RATE_LIMIT_READS_PER_MINUTE`, `API_RATE_LIMIT_WRITES_PER_MINUTE`). No CORS access is granted. Not built: public catalogue, orders, reservations, selling, and a limit for unauthenticated traffic (needs the hosting decision). Unsupported methods answer 405 and unknown paths 404, both as problem responses.
+
+## Owner Office
+
+A minimal, functional internal area at `/office` (`src/app/office`), built with the existing Next.js App Router and Tailwind CSS. Its neutral layout is **not** an approved design (open decision 4), and `src/app/page.tsx` is unchanged.
+
+| Screen | Does | Permission |
+|---|---|---|
+| `/office/login` | Email and password sign-in | none |
+| `/office` | Products (draft, archived), oldest first, 25 per page, status filter | `catalog:read` |
+| `/office/products/new` | Create a draft product (English and Bangla fields) | `catalog:write` |
+| `/office/products/{id}` | Details, variants with price (BDT) and on-hand stock; add a variant, deactivate one, archive the product | `catalog:read`, `stock:read`; changes `catalog:write` |
+| `/office/skus/{sku}` | Current stock, receive stock, adjust with a reason, movement history with who made each change (times in Asia/Dhaka) | `stock:read`; changes `stock:receive` / `stock:adjust` |
+
+How it works:
+
+- Sign-in and sign-out call Better Auth's own `/api/auth` endpoints from the browser, so its origin check and sign-in rate limit apply. The session is the HttpOnly cookie; page scripts never see a token, and a Bearer token does not open the Office. Signing in needs JavaScript.
+- Every page and every Server Action checks the session and permission on the server itself (`src/app/office/_lib/session.ts`). Server Actions call the same idempotent operations as the API directly, never `/api/v1`. The actor is always the signed-in user; form fields cannot name one. Next.js checks the origin of Server Action requests.
+- Each form carries a server-generated idempotency key, so a double-click or resubmission records one change; the submit button is disabled while saving. Prices are typed in Taka (up to two decimals) and stored exactly as integer paisa (`src/modules/money.ts`).
+- Errors shown are the services' safe messages or a generic one; raw errors and SQL never reach the page.
+
+Not built: search, editing product text or prices after creation, reactivation, images, publication, orders, dashboards or reports. There is no account yet in `babysunray_dev`; create the first Owner with `npm run auth:bootstrap-owner`. Tested with fictional accounts against `babysunray_test` (integration tests and a live HTTP check of the production build); no automated browser test of the screens exists.
 
 ## Documentation
 

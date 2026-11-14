@@ -43,7 +43,7 @@ ADR-0001 left authentication open (item 4): an established solution, sessions, C
 - Account recovery (password reset or another lost-device path), email delivery and email verification: the endpoints are disabled. OF-5's recovery requirement is **not met**. Losing the Owner password currently means a manual database procedure that does not exist yet.
 - TOTP or other 2FA, backup codes, break-glass access.
 - Native-client apps and their token storage (API-10, API-12). The Bearer transport itself is in [ADR-0004](0004-api-v1-and-bearer-transport.md).
-- Business API endpoints (`/api/v1`), OpenAPI, login or Owner Office screens, staff or admin roles and their management.
+- Business API endpoints (`/api/v1`), OpenAPI, login or Owner Office screens, staff or admin roles and their management. Since built, except roles: the API in [ADR-0004](0004-api-v1-and-bearer-transport.md); the sign-in page and a functional Owner Office in batch H.4–H.6 (README.md, Owner Office). The Office signs in and out through Better Auth's HTTP endpoints from the browser (not `auth.api` from server code), so the origin check and sign-in rate limit above apply; its pages and Server Actions use `getPrincipal` (cookie only) and check permissions themselves.
 - Session lifetime policy beyond the library default, production cookie domain, secret rotation, separate migration and runtime database roles, and the production proxy and IP strategy. All wait for hosting or a founder decision.
 - Creating the founder's real Owner account. That is an operator action (README.md, Authentication).
 
