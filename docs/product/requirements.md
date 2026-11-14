@@ -1,6 +1,6 @@
 # BabySunray: Product Requirements
 
-**Status:** Draft — Founder Review (revision A.1)
+**Status:** Draft — Founder Review (revision A.2)
 **Purpose:** The single source of truth for what BabySunray's website and Owner Office must do. Technology choices live in [ADR-0001](../adr/0001-application-stack.md). Visual design is not specified here.
 **Last updated:** 2026-11-14
 
@@ -16,6 +16,7 @@ Each requirement carries a basis:
 | **Q** | Open question. Do not implement. |
 
 Labels were audited in revision A.1: items that came only from advisor text, or that are implementation details of a founder outcome, are marked **P** or **F + P**. Nothing here is approved merely because it is written down.
+Revision A.2 records the founder's long-term outcomes (B-8 to B-13), adds API and reuse requirements (sections 2.3 and 2.4) and engineering expectations (section 9.1), and adds IDs I-9 to I-12, O-15, O-16, OF-9, OF-10 and G-11 to G-14. No existing ID, basis label or gate was changed.
 Choices the founder has not made are collected in [section 12](#12-open-decisions) rather than guessed. Earlier AI recommendations (the discarded prototype, the earlier Cloudflare proposal) have **not** been promoted to F.
 
 ## 1. Business context
@@ -29,6 +30,34 @@ Choices the founder has not made are collected in [section 12](#12-open-decision
 | B-5 | Business launch and website launch are separate. A website outage must not stop customer service or lose an order record. | F |
 | B-6 | No fixed launch date. Readiness gates outrank dates. A December 2026 soft launch was a planning target for the business, not a commitment for the custom platform. | F |
 | B-7 | The platform should be maintainable and portfolio-grade. Generic code is kept apart from BabySunray's assets and data, but multi-tenant SaaS is **not** in scope. | F |
+| B-8 | BabySunray is a complete, production-minded e-commerce and business-operations system, delivered in phases (section 10). It is **not yet feature-complete**: no capability in B-13 is described as implemented until its code and tests exist. | F |
+| B-9 | It is a real, working platform for the founder's own baby and kidswear business, not only a demonstration. | F |
+| B-10 | It is also a portfolio-quality full-stack and backend engineering project (extends B-7). Quality is shown by working functionality, test coverage, recorded architecture decisions, security and reproducibility, not by the volume of documentation or by claims. | F |
+| B-11 | **API-driven:** future web, Windows and Android clients can use the same backend capabilities as the website. Requirements: section 2.3. | F |
+| B-12 | **Reusable and rebrandable:** a customised copy can be reused for, or sold to, a separate client business without leaking BabySunray's private data. Requirements: section 2.4. This is not multi-tenant SaaS (section 11). | F |
+
+### 1.1 Intended scope of the finished system
+
+| ID | Requirement | Basis |
+|---|---|---|
+| B-13 | Through phased delivery (section 10) the finished system includes the capabilities below. This states long-term completeness, **not launch scope** and not an implementation order. Each capability is defined by the requirements cited; where it cites an open item, that item stays open. | F |
+
+| Capability | Defined in | Notes |
+|---|---|---|
+| Bilingual, responsive, product-first storefront | S-1, S-2 | Final visual design undecided (BR-6). |
+| Product and SKU/variant management | I-1, I-9 to I-11 | |
+| Secure guest cash-on-delivery checkout | S-3, S-4, S-17 | Public checkout waits for approved policies (G-7). |
+| Website orders and manual Messenger/WhatsApp orders | B-4, S-5, O-2 | |
+| Owner Office, with future Admin and Staff permissions | OF-1, OF-7, OF-10 | Staff roles are not built now (OF-7). |
+| Inventory receipts, adjustments, stock history and reconciliation | I-2, I-3, I-8 | Reservation meaning follows O-9 to O-12. |
+| Order, fulfilment, payment and return/refund lifecycles | O-1, section 4 | Values and transitions are not yet defined (O-9 to O-14). |
+| Courier tracking, COD collection and settlement | S-9, OF-3, OF-8 | Courier-tracking scope and the settlement process are not yet defined. |
+| Expenses, financial records and reporting | OF-1, OF-2, D-8 | No figures or KPIs are assumed. |
+| Search, filters and pagination where appropriate | I-12, API-7 | Customer-facing search, accounts, wishlist and reviews remain undecided (S-14). |
+| XLSX, CSV, JSON and printable reports | D-1 to D-10 | |
+| Audit trails, backups and verified restore | OF-6, K-1 to K-10 | |
+| Versioned APIs and maintainable technical documentation | section 2.3, EN-5 | |
+| Automated tests for normal, failure and concurrent operations | section 9, EN-6 | |
 
 ## 2. Constraints
 
@@ -49,6 +78,38 @@ Choices the founder has not made are collected in [section 12](#12-open-decision
 | R-1 | Source is kept GitHub-ready. Visibility (private first, or public) is an open decision, see section 12. | F + Q |
 | R-2 | Never commit: financial or source ZIPs, the Founder Fieldbook, customer personal data, database exports or backups, secrets, supplier or business contacts, internal review files. | F |
 | R-3 | Documentation is short and human-readable. No generated filler. Dependencies are kept minimal. | F |
+
+### 2.3 API-driven architecture
+
+The founder requires the outcome in B-11. The approach below is **proposed** unless labelled otherwise; the technology side is recorded in [ADR-0001](../adr/0001-application-stack.md).
+
+| ID | Requirement | Basis |
+|---|---|---|
+| API-1 | Pricing, stock, order and authorisation rules exist once, in shared server-side domain and application services. The website and every external API client use them; no client re-implements them. | F + P |
+| API-2 | External clients use a versioned HTTP API served by the existing Next.js application. No separate backend server is added. The style (proposed: REST under a `/api/v1` prefix, implemented with Next.js Route Handlers) awaits approval. | P |
+| API-3 | The website's own server-rendered pages and server actions call the shared services directly, not the application's own HTTP endpoints. | P |
+| API-4 | The API contract is described in an OpenAPI document, public and authorised endpoints both, and checked against behaviour (G-12). | P |
+| API-5 | Every endpoint validates and normalises input on the server, handles unexpected fields by an explicit and tested rule, and authenticates and authorises on the server. This extends OF-4 from Owner Office pages to every client. | P |
+| API-6 | Errors use one structure with stable error codes. Responses never contain stack traces, SQL, secrets or customer personal data (S-10). | P |
+| API-7 | List endpoints support pagination, filtering and a stable, deterministic sort. | P |
+| API-8 | Retry-sensitive operations (order submission, O-3, and other operations that move stock or money) are idempotent over the API as well. | P |
+| API-9 | A written versioning and compatibility policy exists before the first external client: what counts as a breaking change, and how versions are introduced and retired. | P |
+| API-10 | Browser and native clients may use different credential and session strategies. The choice follows the authentication decision (OF-5) and a security review. | P + Q |
+| API-11 | Request-size limits, rate limiting and a deliberate CORS policy are defined and tested. Structured technical logs are separate from the business audit log (OF-6) and contain no personal data. | P |
+| API-12 | Exact endpoint paths, the authentication protocol for native clients, OpenAPI tooling and version numbering are design decisions for later gates. | Q |
+
+### 2.4 Reuse and rebranding
+
+The founder requires the outcome in B-12. The approach below is **proposed** unless labelled otherwise. It does not authorise multi-tenant SaaS (section 11).
+
+| ID | Requirement | Basis |
+|---|---|---|
+| RU-1 | One reusable commerce codebase. Business identity (name, assets, contacts, policies, text) is configuration, kept apart from generic commerce logic and from BabySunray-specific branding (extends B-7). | F + P |
+| RU-2 | Each client installation has its own database, secrets, file storage and deployment. | P |
+| RU-3 | No BabySunray customer, supplier, financial or other private business data is copied into a client installation, its seed data, tests, documentation or repository history (see R-2). | F |
+| RU-4 | Installation, configuration, migration, testing, backup and handover procedures are documented and can be reproduced from a clean checkout using fictional data. | P |
+| RU-5 | Third-party licences (libraries, fonts, images, tools) are reviewed before redistribution or commercial handoff. | P |
+| RU-6 | Reusing or selling a copy does not by itself authorise subscriptions, billing infrastructure, white-label dashboards or onboarding platforms. Commercial terms of any handoff are a founder decision. | F |
 
 ## 3. Customer experience
 
@@ -101,6 +162,8 @@ Order data uses **separate** lifecycle dimensions. A change to one must not over
 | O-12 | **Reservation release and expiry:** whether holds expire automatically or are released by hand, the time limits, and any notice to the customer. | Q |
 | O-13 | **Returns and exchanges:** eligibility, time window, condition requirements, refund method, and effect on stock. | Q |
 | O-14 | **RTO (undelivered or refused parcels returned to the shop):** handling, cost recording, inspection and restock. | Q |
+| O-15 | Each order item stores the unit price, SKU and product and variant names as they were when the order was placed. Later price or catalogue changes never alter past orders. | P |
+| O-16 | If cancellation affects stock, the stock reversal happens exactly once, even under repeated or concurrent requests, and the whole operation rolls back on partial failure. Whether, when and how stock is reversed is defined by O-9 to O-12 and is not decided here. Cancellation is not modelled as one combined status that restocks automatically (O-1). | P + Q |
 
 O-9 to O-14 are **business rules the founder must define**. No order state transitions, reservation logic or database schema that depends on them are implemented until the founder has approved them in writing (gate G-10). This document does not propose specific policies or amounts.
 
@@ -116,6 +179,10 @@ O-9 to O-14 are **business rules the founder must define**. No order state trans
 | I-6 | A product cannot be published until bilingual text, cm measurements and an approved fabric statement exist. | P |
 | I-7 | **Returned and RTO goods are inspected before they are sellable.** Goods awaiting inspection are held apart from sellable stock (quarantine) and enter sellable stock only through a recorded decision. The inspection criteria and outcomes are business rules (O-13, O-14). | P |
 | I-8 | **Inventory reconciliation:** the owner can compare counted physical stock with system stock. Differences are recorded as reasoned ledger adjustments, never as silent edits. The counting routine and its frequency are to be defined. | P |
+| I-9 | A product has one or more variants. Each variant is a sellable SKU with its own price and its own stock (extends I-1). Founder-endorsed default; **implementation approval pending**. | P |
+| I-10 | SKUs are entered by the founder, normalised (case and surrounding whitespace) and unique across the catalogue. The format is to be agreed. Founder-endorsed default; **implementation approval pending**. | P |
+| I-11 | Products and variants that are referenced by stock history, orders or audit records are deactivated or archived, never silently deleted. Audit-relevant records are never removed without a recorded, authorised action. | P |
+| I-12 | Owner Office product, stock and order listings are searchable, filterable and paginated with a stable sort. Customer-facing search is undecided (S-14). | P |
 
 ## 6. Owner Office
 
@@ -131,6 +198,8 @@ A private area for the founder, with security boundaries that anticipate later s
 | OF-6 | Privileged and sensitive actions (exports, stock adjustments, status changes) are written to an audit log with actor and time. | P |
 | OF-7 | Staff roles are not built now. Permission checks are written so roles can be added without rewriting them. | F |
 | OF-8 | **COD courier settlement:** for each cash-on-delivery consignment the owner can record the amount expected, the amount the courier remitted, courier fees or deductions, the date received, and any unresolved difference. All amounts and fees are entered by the owner. None are assumed here. How courier statements are reconciled is to be defined. | P |
+| OF-9 | Audit and ledger entries record the real acting identity (extends I-3 and OF-6). Before an authentication solution exists, entries carry an explicit non-user source label; the system never invents or reuses a person's identity. Founder-endorsed default (truthful actor auditing); **implementation approval pending**. | P |
+| OF-10 | The approved authentication solution (OF-5) handles passwords: no hand-written password hashing or session protocol. Admin and Staff permissions are enforced on the server for every privileged operation, and session or token lifetime suits the client type (API-10). Roles themselves are not built now (OF-7). | P |
 
 ## 7. Data portability, reports and recovery
 
@@ -202,6 +271,23 @@ These must be demonstrated before the matching feature is called ready. Evidence
 | G-8 | The chosen production hosting is confirmed to permit commercial use, its limits and failure behaviour are tested, and its backup and restore capability is verified. |
 | G-9 | Usability: at least five informal testers including one first-time online buyer, on a mid-range Android phone. |
 | G-10 | The business rules O-9 to O-14 are approved in writing before the schema and logic that depend on them are implemented. |
+| G-11 | For every API endpoint: unauthenticated and unauthorised requests are rejected (G-3); invalid and unexpected input is handled as documented; errors follow API-6 and leak no internals or personal data; size limits, rate limits and CORS behave as specified (API-11). |
+| G-12 | The OpenAPI description matches actual endpoint behaviour, and the versioning policy (API-9) is followed whenever a contract changes. |
+| G-13 | Under the approved rules (O-11), repeated and concurrent cancellation requests reverse stock exactly once and leave no partial state. Blocked until O-9 to O-12 are approved. |
+| G-14 | A fresh installation, following the documented procedure with a different brand configuration and fictional data, runs without any BabySunray data, and licences have been reviewed (RU-1 to RU-5). |
+
+### 9.1 Engineering expectations
+
+The founder wants a production-minded inventory and order API. The outcome is founder-stated; the specific methods are proposed. Detailed working rules are in `.claude/rules/engineering.md`.
+
+| ID | Expectation | Basis |
+|---|---|---|
+| EN-1 | TypeScript in strict mode. Routes, domain services and database access are separate layers, and transaction boundaries are visible in the code that opens them. | F + P |
+| EN-2 | PostgreSQL enforces integrity with NOT NULL, UNIQUE, FOREIGN KEY and CHECK constraints wherever possible, in addition to application checks. Schema changes are repeatable migrations, reviewed and kept in Git, so migration history exists. | F + P |
+| EN-3 | Database access uses parameterised queries or a safe ORM. SQL is never built by concatenating input. | F + P |
+| EN-4 | Development fixtures and seed data are fictional, development-only, and cannot run against a production database. | F + P |
+| EN-5 | The README records setup, test and API-usage instructions that have been run and verified. Features that do not exist yet are not described as available. | F + P |
+| EN-6 | Tests cover unit logic, PostgreSQL integration, API security (negative authorisation, validation, error and data leakage), concurrency (parallel requests for the last unit) and failure paths (rollback, retry, timeout). | F + P |
 
 ## 10. Phasing (proposed)
 
@@ -212,18 +298,22 @@ These must be demonstrated before the matching feature is called ready. Evidence
 | 2 | Guest COD checkout, confirmation, tracking, assisted orders | P |
 | 3 | Reports, print, restore drill, outage procedure, then launch review against section 9 | P |
 
+The API (section 2.3) and reuse (section 2.4) requirements apply from Phase 1 and are met capability by capability, not as a separate phase. *Proposed.*
+
 Local development does not require approved hosting. **Production deployment** requires validated hosting, backups and commercial-use terms (G-8). Order and scope can change after founder review.
 
 ## 11. Out of scope for now
 
 Multi-tenant or SaaS features, partner or profit-sharing logic, online card payment, staff roles, and SMS or one-time codes as a required dependency, unless the founder adds them. Search, accounts, wishlists and reviews are **undecided**, not excluded (S-14).
 
+Also out of scope: a separate backend server, Express, microservices, a monorepo or an API gateway (ADR-0001 keeps one modular monolith); and multi-tenant SaaS, subscriptions, billing infrastructure, white-label dashboards and customer onboarding platforms, even though a customised copy may be reused or sold (B-12, RU-6).
+
 ## 12. Open decisions
 
 | # | Decision | Notes |
 |---|---|---|
 | 1 | Production hosting and database host | Must satisfy BDT 0 (C-1), commercial use and restore (G-8). A sub-BDT-1,500/year Bangladesh plan may be evaluated (C-3). |
-| 2 | ORM: Drizzle or Prisma | Evaluation pending. |
+| 2 | ORM: Drizzle or Prisma | Drizzle is proposed (Gate G.2 review) and the founder has positively endorsed it. **Explicit implementation approval is pending.** Prisma remains the alternative. |
 | 3 | Authentication solution | Must satisfy OF-5. |
 | 4 | Final UI design | Colours, typography, layout. Needs design research and approval (BR-6). |
 | 5 | Business rules O-9 to O-14 | Reservation timing, pending verification, cancellation, release and expiry, returns, RTO. Needed before schema work (G-10). |
@@ -238,6 +328,9 @@ Multi-tenant or SaaS features, partner or profit-sharing logic, online card paym
 | 14 | Product photo workflow | Depends on hosting (I-5). |
 | 15 | Off-device backup location | Founder chooses (K-4). |
 | 16 | Approval to start local PostgreSQL development | Separate gate (section 10). |
+| 17 | API contract: endpoint structure, versioning policy, OpenAPI tooling, native-client credentials | Proposed REST under `/api/v1` with Route Handlers is not approved (API-2, API-9, API-10, API-12). |
+| 18 | Approval of the proposed technical defaults: Drizzle; Product → Variant with variant-level price (I-9); founder-entered unique SKU and its format (I-10); `on_hand` balance plus append-only ledger (I-2); integer paisa and UTC (O-5, O-6); truthful actor auditing (OF-9) | Founder-endorsed. **Explicit implementation approval pending.** O-9 to O-14 stay open independently (item 5). |
+| 19 | Reuse: configuration mechanism, licence review scope, terms of any handoff | RU-1 to RU-6. Commercial terms are a founder decision. |
 
 ## 13. Source materials
 
@@ -248,4 +341,5 @@ Multi-tenant or SaaS features, partner or profit-sharing logic, online card paym
 | Founder instruction, Gate A and A.1 (14 Nov 2026) | Lifecycle dimensions, budget wording, stack direction, brand status, corrections | Highest precedence. |
 | Second technical advisor review (Gate A.1) | Label audit, business-rule gaps, recovery objectives, tracking security | Advisor input, applied as corrections by the founder's instruction. |
 | Architecture decision review (14 Nov 2026) | Acceptance gates, export and recovery details | Advisor proposal. Cloudflare-specific parts are not carried over. |
+| Founder instruction, Gate G.2b (14 Nov 2026) | Long-term outcomes (B-8 to B-13), API and reuse direction, engineering expectations | Outcomes are founder-stated. API, reuse and engineering methods are advisor proposals. |
 | Original BabySunray brand and business documents on the G: drive | Not read for this draft | Should be checked against sections 1 and 8 during review. |

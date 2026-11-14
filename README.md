@@ -2,6 +2,8 @@
 
 The website and private Owner Office for BabySunray, a Bangladesh-focused baby and kidswear business. The site will be bilingual (Bangla and English), mobile-first, with guest cash-on-delivery checkout and assisted orders from Messenger and WhatsApp. The Owner Office covers products, stock, orders, reports, exports and backup and recovery.
 
+Long-term goals (founder-confirmed; see requirements B-8 to B-13): a complete, production-minded system that runs the founder's real business; a portfolio-quality full-stack and backend project; an API-driven backend that future web, Windows and Android clients can share with the website; and a codebase that can be rebranded for a separate client business without carrying any BabySunray data. These describe the intended finished product, delivered in phases. Most of it does not exist yet.
+
 ## Status
 
 **Foundation and decisions phase.** The Next.js application is scaffolded as an engineering base only. `src/app/page.tsx` is a development-status page that proves the framework renders; it is not the approved homepage. There are no storefront or Owner Office features, application database schema, authentication or deployment. Local PostgreSQL tooling for development and integration tests is in place (see below). The two local databases are created by the founder with `db/local-setup.sql`; no business tables exist. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`).
@@ -59,7 +61,7 @@ The PostgreSQL service on this machine requires a password for `postgres`, so th
 ## Stack
 
 Confirmed: Next.js (App Router), React, TypeScript, Node.js, PostgreSQL, Tailwind CSS, one modular monolith.
-Not yet decided: ORM, authentication, production and database hosting, final visual design.
+Not yet decided: ORM (Drizzle is proposed and founder-endorsed; explicit approval pending), authentication, production and database hosting, final visual design. The API style (a versioned REST API inside the same application, proposed) is not approved either. See the ADR.
 
 ## Data handling
 

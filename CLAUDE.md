@@ -2,9 +2,13 @@
 
 Bilingual (Bangla/English) e-commerce website and private Owner Office for BabySunray, a single-founder baby and kidswear business in Bangladesh.
 
-**Phase:** foundation and decisions. A local Git repository exists (branch `main`, no remote). The Next.js app is scaffolded as an engineering base only; `src/app/page.tsx` is a status page, not the approved homepage. There is no application database schema, authentication or deployment yet. Local PostgreSQL test tooling exists (the local databases are created by the founder from `db/local-setup.sql`); there are no business tables. Do not create the rest unless the current gate authorises it.
+**Phase:** foundation and decisions. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`, branch `main`). The Next.js app is scaffolded as an engineering base only; `src/app/page.tsx` is a status page, not the approved homepage. There is no application database schema, authentication or deployment yet. Local PostgreSQL test tooling exists (the local databases are created by the founder from `db/local-setup.sql`); there are no business tables. Do not create the rest unless the current gate authorises it.
 
 Commands (see README.md): `npm install`, `npm run dev`, `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` (unit), `npm run test:db` (PostgreSQL integration; needs `TEST_DATABASE_URL`, local `_test` database only). Never point tests at a development, shared or hosted database.
+
+## Project goals (founder-confirmed; requirements B-8 to B-13)
+
+A complete production-minded system for the founder's real business, delivered in phases and not yet feature-complete; a portfolio-quality full-stack project; an API-driven backend that future web, Windows and Android clients can share; a codebase reusable for a separate client business without BabySunray data. Never describe a capability as implemented until its code and tests exist.
 
 ## Authoritative documents
 
@@ -27,7 +31,7 @@ The founder owns every product, business, budget and architecture decision. Work
 
 Confirmed: Next.js (App Router), React, TypeScript, Node.js, PostgreSQL, Tailwind CSS with a custom design system, one modular monolith with no separate backend server.
 
-Unresolved, do not choose: ORM (Drizzle or Prisma), authentication, production hosting, database hosting, final UI design (colours, typography, layout), business rules O-9 to O-14, RPO/RTO.
+Unresolved, do not choose: ORM (Drizzle is proposed and founder-endorsed; do not install or configure it until explicitly approved), authentication, the API contract style (versioned REST inside the monolith is proposed, not approved), production hosting, database hosting, final UI design (colours, typography, layout), business rules O-9 to O-14, RPO/RTO.
 
 The logo and its three colours are a brand reference only. They are not the website palette.
 
@@ -37,6 +41,7 @@ The logo and its three colours are a brand reference only. They are not the webs
 - Business rules live in domain modules (catalogue, inventory, orders, customers, reports, auth), not in components.
 - Database access stays inside the modules and the database layer.
 - Server-only code never ships to the browser.
+- One set of domain and application services serves the website and any future API client. Do not duplicate pricing, stock, order or authorisation rules per client, and do not have the website call its own HTTP endpoints when it can call the services directly. No separate backend server, microservices, monorepo or API gateway.
 
 ## Security and privacy (summary; see `.claude/rules/security.md`)
 

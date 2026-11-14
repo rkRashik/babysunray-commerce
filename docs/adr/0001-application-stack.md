@@ -1,11 +1,11 @@
 # ADR-0001: Application stack
 
-**Status:** Draft — Founder Review (revision A.1)
+**Status:** Draft — Founder Review (revision A.2)
 **Date:** 2026-11-14
 **Deciders:** Founder
 **Related:** [Product requirements](../product/requirements.md)
 
-**In short:** The stack choices in "Decision" are **confirmed by the founder**. Hosting, database host, ORM, authentication and the final UI design are **unresolved**.
+**In short:** The stack choices in "Decision" are **confirmed by the founder**. Hosting, database host, ORM, authentication, the API contract style and the final UI design are **unresolved**. Revision A.2 clarifies that future Windows and Android clients use the same backend capabilities inside the same monolith; it adds no new technology.
 
 ## Context
 
@@ -34,6 +34,7 @@ These follow from the decision. They are expectations, not additional approvals.
 
 - Storefront, Owner Office and server logic live in one Next.js application, split into domain modules with explicit boundaries rather than into services.
 - PostgreSQL is the system of record. Consistency rules (stock holds, idempotent orders) are enforced by database transactions, not by client code. The rules themselves are business decisions (requirements O-9 to O-14).
+- The website and any future API clients (web, Windows, Android; requirements B-11, API-1) use the same server-side domain services. The API is part of the monolith: no separate backend server, Express, microservices, monorepo or API gateway is introduced.
 - Standard PostgreSQL logical dumps keep data portable between hosts.
 - Next.js with PostgreSQL narrows the realistic **free hosting** options. This is the main risk.
 
@@ -45,10 +46,11 @@ None of these is decided. None may be treated as chosen until the founder approv
 |---|---|---|---|---|
 | 1 | **Production hosting** | Open | A zero-cost option that permits commercial use and runs Next.js. A Bangladesh-hosted plan under BDT 1,500 per year may be evaluated as an alternative. Purchase needs separate founder approval. | ADR |
 | 2 | **Database host** | Open | PostgreSQL hosting with backups and a restore procedure that fit the budget and the approved RPO and RTO (requirement K-9). | ADR (with item 1 if they share a decision) |
-| 3 | **ORM** | Pending evaluation: Drizzle or Prisma | Compare migrations, type safety, transaction control and runtime footprint. | ADR |
-| 4 | **Authentication** | Open | An established solution, not a custom protocol. Sessions, CSRF protection, lost-device recovery. | ADR |
+| 3 | **ORM** | Drizzle proposed (Gate G.2 review) and founder-endorsed; Prisma is the alternative. **Explicit implementation approval pending.** | Founder approval to implement. Nothing is installed or configured until then. | ADR |
+| 4 | **Authentication** | Open | An established solution, not a custom protocol. Sessions, CSRF protection, lost-device recovery, and a credential strategy for future native clients (requirement API-10). | ADR |
 | 5 | **Final UI design** | Open | Colours, typography, layout and components need design research and founder approval. The logo is a brand reference only. | Design documents |
 | 6 | Internationalisation, test tooling, CI, image handling, XLSX library | Open | Chosen when the work reaches them. | `docs/development.md` or the pull request. An ADR only if the choice turns out to be material. |
+| 7 | **API contract** | Proposed, not approved | A versioned REST API (for example under `/api/v1`) implemented with Next.js Route Handlers and described in OpenAPI, over the same domain services the website calls directly. Endpoint paths, versioning policy and native-client authentication are decided in later gates (requirements API-1 to API-12). | ADR |
 
 ## Known risks
 
