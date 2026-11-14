@@ -13,4 +13,4 @@ export const GET = apiGet<{ sku: string }>("stock:read", async ({ params, db }) 
   return { data: { sku, variantId: level.variantId, onHand: level.onHand } };
 });
 
-export const { POST, PUT, PATCH, DELETE } = methodNotAllowed("GET");
+export const { POST, PUT, PATCH, DELETE, OPTIONS } = methodNotAllowed("GET");

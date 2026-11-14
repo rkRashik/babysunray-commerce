@@ -1,5 +1,6 @@
-import { apiGet, methodNotAllowed, parseQuery, RequestValidationError } from "@/api/v1/http";
-import { DEFAULT_LIMIT, productCursorCodec, productListQuery, toProductSummaryDto } from "@/api/v1/schemas";
+import { apiGet, apiPost, methodNotAllowed, parseQuery, RequestValidationError } from "@/api/v1/http";
+import { createProductRequest, DEFAULT_LIMIT, productCursorCodec, productListQuery, toProductDto, toProductSummaryDto } from "@/api/v1/schemas";
+import { createProductOnce } from "@/modules/catalogue/operations";
 import { listProducts } from "@/modules/catalogue/service";
 
 export const runtime = "nodejs";
@@ -19,4 +20,16 @@ export const GET = apiGet("catalog:read", async ({ url, db }) => {
   };
 });
 
-export const { POST, PUT, PATCH, DELETE } = methodNotAllowed("GET");
+// POST /api/v1/products: creates a draft product (never published).
+export const POST = apiPost("catalog:write", { body: createProductRequest, status: 201 }, async ({ body, idempotencyKey, db, principal }) => {
+  const { value, replayed } = await createProductOnce(db, principal, idempotencyKey, {
+    slug: body.slug,
+    nameEn: body.name.en,
+    nameBn: body.name.bn,
+    descriptionEn: body.description?.en,
+    descriptionBn: body.description?.bn,
+  });
+  return { value: toProductDto(value), replayed };
+});
+
+export const { PUT, PATCH, DELETE, OPTIONS } = methodNotAllowed("GET, POST");

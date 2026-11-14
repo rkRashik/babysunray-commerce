@@ -33,7 +33,7 @@ let auth: ReturnType<typeof createTestAuth>;
 let ownerId: string;
 let token: string;
 type Documented = { content: Record<string, { schema: { $ref: string } }> };
-type OpenApiDoc = { paths: Record<string, { get: { responses: Record<string, Documented> } }> };
+type OpenApiDoc = { paths: Record<string, Record<string, { responses: Record<string, Documented> }>> };
 let doc: OpenApiDoc;
 const ajv = new Ajv2020({ strict: false, allErrors: true });
 addFormats.default(ajv);
@@ -305,10 +305,13 @@ describe("failures and safety", () => {
     const unknown = await fallbackRoute.GET();
     expect(unknown.status).toBe(404);
     expect((await unknown.json()).code).toBe("ROUTE_NOT_FOUND");
-    const post = await productsRoute.POST();
+    const put = await productsRoute.PUT();
+    expect(put.status).toBe(405);
+    expect(put.headers.get("allow")).toBe("GET, POST");
+    expect((await put.json()).code).toBe("METHOD_NOT_ALLOWED");
+    const post = await stockRoute.POST();
     expect(post.status).toBe(405);
     expect(post.headers.get("allow")).toBe("GET");
-    expect((await post.json()).code).toBe("METHOD_NOT_ALLOWED");
   });
 
   it("exposes no personal or credential data in any response", async () => {
@@ -319,13 +322,11 @@ describe("failures and safety", () => {
 });
 
 describe("OpenAPI document", () => {
-  it("is served publicly and matches the routes that exist", async () => {
+  it("is served publicly and documents every read route (writes: api-write.integration.test.ts)", async () => {
     const response = openApiRoute.GET();
     expect(response.status).toBe(200);
-    expect(Object.keys(doc.paths).sort()).toEqual(Object.keys(ROUTES).sort());
     for (const template of Object.keys(ROUTES)) {
-      expect(Object.keys(doc.paths[template]), template).toEqual(["get"]);
-      expect(doc.paths[template].get.responses["401"]).toBeDefined();
+      expect(doc.paths[template].get.responses["401"], template).toBeDefined();
     }
   });
 });

@@ -20,4 +20,4 @@ export const GET = apiGet<{ sku: string }>("stock:read", async ({ params, url, d
   };
 });
 
-export const { POST, PUT, PATCH, DELETE } = methodNotAllowed("GET");
+export const { POST, PUT, PATCH, DELETE, OPTIONS } = methodNotAllowed("GET");

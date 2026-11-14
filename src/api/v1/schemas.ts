@@ -1,5 +1,6 @@
 import * as z from "zod";
 import type { Product, ProductKey, Variant } from "@/modules/catalogue/service";
+import type { StockOperationResult } from "@/modules/inventory/operations";
 import type { StockMovement } from "@/modules/inventory/service";
 
 // Wire formats of /api/v1. These schemas are the single source for the response DTOs, the input
@@ -18,6 +19,18 @@ export const PROBLEM_CODES = [
   "ROUTE_NOT_FOUND",
   "METHOD_NOT_ALLOWED",
   "INTERNAL_ERROR",
+  // Added in 1.1.0 with the write endpoints, request limits and the origin policy.
+  "ORIGIN_NOT_ALLOWED",
+  "MALFORMED_JSON",
+  "IDEMPOTENCY_KEY_REQUIRED",
+  "IDEMPOTENCY_KEY_REUSED",
+  "PAYLOAD_TOO_LARGE",
+  "UNSUPPORTED_MEDIA_TYPE",
+  "RATE_LIMITED",
+  "SLUG_TAKEN",
+  "SKU_TAKEN",
+  "INSUFFICIENT_STOCK",
+  "STOCK_LIMIT_EXCEEDED",
 ] as const;
 export type ProblemCode = (typeof PROBLEM_CODES)[number];
 
@@ -32,7 +45,7 @@ export const problemSchema = z
     errors: z
       .array(
         z.object({
-          location: z.enum(["query", "path"]),
+          location: z.enum(["query", "path", "body"]),
           name: z.string(),
           message: z.string(),
         }),
@@ -97,8 +110,19 @@ const pageSchema = z
   })
   .register(apiRegistry, { id: "Page" });
 
+export const stockChangeSchema = z
+  .object({
+    sku: z.string(),
+    variantId: z.uuid(),
+    onHand: z.int().min(0).meta({ description: "On-hand stock right after this change." }),
+    movement: stockMovementSchema,
+  })
+  .register(apiRegistry, { id: "StockChange" });
+
 export const productListSchema = z.object({ data: z.array(productSummarySchema), page: pageSchema }).register(apiRegistry, { id: "ProductList" });
 export const productResponseSchema = z.object({ data: productSchema }).register(apiRegistry, { id: "ProductResponse" });
+export const variantResponseSchema = z.object({ data: variantSchema }).register(apiRegistry, { id: "VariantResponse" });
+export const stockChangeResponseSchema = z.object({ data: stockChangeSchema }).register(apiRegistry, { id: "StockChangeResponse" });
 export const stockLevelResponseSchema = z.object({ data: stockLevelSchema }).register(apiRegistry, { id: "StockLevelResponse" });
 export const stockMovementListSchema = z
   .object({ data: z.array(stockMovementSchema), page: pageSchema })
@@ -119,6 +143,55 @@ export const productListQuery = z.strictObject({ limit, cursor, status: z.enum([
 export const movementListQuery = z.strictObject({ limit, cursor });
 export const productPath = z.strictObject({ productId: z.uuid() });
 export const skuPath = z.strictObject({ sku: z.string().min(1).max(64).meta({ description: "Case-insensitive." }) });
+
+export const variantPath = z.strictObject({ variantId: z.uuid() });
+
+// Request bodies. Strict: an unknown field is an error. Bounds are the technical limits the services and
+// CHECK constraints enforce; the services still validate formats (SKU, slug) and business rules.
+const optionalText = (max: number) => z.string().max(max).nullable().optional();
+const MAX_QUANTITY = 2_147_483_647;
+
+export const stockReceiptRequest = z
+  .strictObject({
+    sku: z.string().min(1).max(64).meta({ description: "Case-insensitive." }),
+    quantity: z.int().min(1).max(MAX_QUANTITY).meta({ description: "Units received." }),
+    reason: optionalText(500).meta({ description: "Optional note, at most 500 characters." }),
+  })
+  .register(apiRegistry, { id: "StockReceiptRequest" });
+
+export const stockAdjustmentRequest = z
+  .strictObject({
+    sku: z.string().min(1).max(64).meta({ description: "Case-insensitive." }),
+    quantityDelta: z
+      .int()
+      .min(-MAX_QUANTITY)
+      .max(MAX_QUANTITY)
+      .refine((n) => n !== 0)
+      .meta({ description: "Non-zero; negative removes stock. Stock never goes below zero.", not: { const: 0 } }),
+    reason: z.string().min(1).max(500).meta({ description: "Required (who and why is audited)." }),
+  })
+  .register(apiRegistry, { id: "StockAdjustmentRequest" });
+
+const localisedInput = (max: number) => z.strictObject({ en: optionalText(max), bn: optionalText(max) });
+export const createProductRequest = z
+  .strictObject({
+    slug: z.string().min(1).max(100).meta({ description: "Lowercase ASCII letters, digits and single hyphens." }),
+    name: localisedInput(200).meta({ description: "At least one of en or bn." }),
+    description: localisedInput(5000).optional(),
+  })
+  .register(apiRegistry, { id: "CreateProductRequest" });
+
+export const createVariantRequest = z
+  .strictObject({
+    sku: z.string().min(1).max(64).meta({ description: "1-64 of A-Z, 0-9, hyphen, underscore; stored uppercase." }),
+    size: optionalText(64),
+    colour: optionalText(64),
+    pricePaisa: z.int().min(1).max(Number.MAX_SAFE_INTEGER).meta({ description: "Integer paisa (1 BDT = 100 paisa)." }),
+  })
+  .register(apiRegistry, { id: "CreateVariantRequest" });
+
+/** Archive and deactivate take no input: no body, or an empty JSON object. */
+export const emptyRequest = z.strictObject({}).optional().register(apiRegistry, { id: "EmptyRequest" });
 
 // Opaque cursors: base64url JSON, validated on the way back in.
 const productCursor = z.strictObject({ c: z.iso.datetime({ precision: 6 }), i: z.uuid() });
@@ -179,4 +252,11 @@ export const toStockMovementDto = (m: StockMovement): z.infer<typeof stockMoveme
   reason: m.reason,
   actor: { type: m.actorType, ref: m.actorRef },
   createdAt: m.createdAt.toISOString(),
+});
+
+export const toStockChangeDto = (r: StockOperationResult): z.infer<typeof stockChangeSchema> => ({
+  sku: r.sku,
+  variantId: r.variantId,
+  onHand: r.onHand,
+  movement: toStockMovementDto(r.movement),
 });

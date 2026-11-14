@@ -6,7 +6,7 @@ Long-term goals (founder-confirmed; see requirements B-8 to B-13): a complete, p
 
 ## Status
 
-**Foundation and decisions phase.** The Next.js application is scaffolded as an engineering base only. `src/app/page.tsx` is a development-status page that proves the framework renders; it is not the approved homepage. There are no storefront or Owner Office features, screens, orders, write API endpoints or deployment. The backend foundation exists: a catalogue and stock schema with internal services, an authentication and authorisation foundation, and a read-only Owner API under `/api/v1` (see Catalogue and inventory, Authentication, and API), with PostgreSQL integration tests. The two local databases are created by the founder with `db/local-setup.sql`. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`).
+**Foundation and decisions phase.** The Next.js application is scaffolded as an engineering base only. `src/app/page.tsx` is a development-status page that proves the framework renders; it is not the approved homepage. There are no storefront or Owner Office screens, orders or deployment. The backend foundation exists: a catalogue and stock schema with services and idempotent operations, an authentication and authorisation foundation, and an Owner API under `/api/v1` for the draft catalogue and physical stock (see Catalogue and inventory, Authentication, and API), with PostgreSQL integration tests. The two local databases are created by the founder with `db/local-setup.sql`. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`).
 
 Requirements and the stack decision are drafts under founder review.
 
@@ -80,7 +80,7 @@ What the checks cover: `db:check` checks only that the migration files and snaps
 
 ## Catalogue and inventory
 
-Implemented as internal server-only services (no API endpoints or screens yet), in `src/modules/catalogue` and `src/modules/inventory`. Each service takes a Drizzle handle from its caller and throws a `DomainError` with a stable code for expected failures.
+Implemented as server-only services in `src/modules/catalogue` and `src/modules/inventory`, with idempotent, permission-checked operations (`operations.ts`) that the API (see API) calls. Each service takes a Drizzle handle from its caller and throws a `DomainError` with a stable code for expected failures.
 
 | Capability | Notes |
 |---|---|
@@ -94,7 +94,7 @@ Known limits:
 - No reservations, holds, orders, cancellations, returns or RTO. Checkout overselling (G-1) is not tested because checkout does not exist.
 - The services themselves are not idempotent: called twice, `receiveStock` records two receipts. Clients use the idempotent operations in `src/modules/inventory/operations.ts` and `src/modules/catalogue/operations.ts`, which run once per client-generated key and user ([ADR-0005](docs/adr/0005-operation-idempotency.md)). Idempotency records are kept indefinitely until a retention policy is approved.
 - An inactive SKU can still receive physical stock; its status does not make it sellable, and nothing sells yet.
-- Ledger rows record a `system` actor or an authenticated `user` actor (the user's id, from a verified session; ADR-0003). No endpoint or screen changes stock yet.
+- Ledger rows record a `system` actor or an authenticated `user` actor (the user's id, from a verified session; ADR-0003). Changes made through the API record the signed-in user.
 - The append-only ledger trigger can be removed by the table owner or a superuser (ADR-0002).
 - Drizzle error messages include query parameters; never log or display them as is.
 
@@ -130,14 +130,16 @@ Known limits:
 
 ## API
 
-Read-only, Owner-only endpoints under `/api/v1`, authenticated with a Bearer token only (browser cookies are refused). The contract is served at `/api/v1/openapi.json`; usage, errors, pagination and the compatibility rules are in [docs/api/README.md](docs/api/README.md), decisions in [ADR-0004](docs/adr/0004-api-v1-and-bearer-transport.md).
+Owner-only endpoints under `/api/v1`, authenticated with a Bearer token only (browser cookies are refused). The contract is served at `/api/v1/openapi.json`; usage, errors, idempotency, limits, pagination and the compatibility rules are in [docs/api/README.md](docs/api/README.md), decisions in [ADR-0004](docs/adr/0004-api-v1-and-bearer-transport.md) and [ADR-0005](docs/adr/0005-operation-idempotency.md).
 
 | Endpoint | Permission |
 |---|---|
 | `GET /api/v1/products`, `GET /api/v1/products/{productId}` | `catalog:read` |
+| `POST /api/v1/products`, `POST .../products/{productId}/variants`, `.../archive`, `POST .../variants/{variantId}/deactivate` | `catalog:write` |
+| `POST /api/v1/stock-receipts` / `POST /api/v1/stock-adjustments` | `stock:receive` / `stock:adjust` |
 | `GET /api/v1/skus/{sku}/stock`, `GET /api/v1/skus/{sku}/movements` | `stock:read` |
 
-Not built: write endpoints (stock receipts and adjustments wait for operation-level idempotency), public catalogue, orders, CORS and API rate limits. Unsupported methods answer 405 and unknown paths 404, both as problem responses.
+Every write needs an `Idempotency-Key` and a JSON body of at most 64 KiB. Requests are rate limited per signed-in user (defaults 300 reads and 60 writes per minute; `API_RATE_LIMIT_READS_PER_MINUTE`, `API_RATE_LIMIT_WRITES_PER_MINUTE`). No CORS access is granted. Not built: public catalogue, orders, reservations, selling, and a limit for unauthenticated traffic (needs the hosting decision). Unsupported methods answer 405 and unknown paths 404, both as problem responses.
 
 ## Documentation
 
@@ -147,7 +149,7 @@ Not built: write endpoints (stock receipts and adjustments wait for operation-le
 | [ADR-0001: Application stack](docs/adr/0001-application-stack.md) | Confirmed technology and unresolved choices | Draft — Founder Review |
 | [ADR-0002: Drizzle and inventory foundation](docs/adr/0002-drizzle-and-inventory-foundation.md) | ORM, catalogue, stock ledger and money decisions | Draft — Founder Review (decisions founder-approved) |
 | [ADR-0003: Authentication foundation](docs/adr/0003-authentication-foundation.md) | Better Auth, sessions, Owner bootstrap, permissions, user actors | Draft — Founder Review (decisions founder-approved) |
-| [ADR-0004: API v1 and Bearer transport](docs/adr/0004-api-v1-and-bearer-transport.md) | Versioned read-only API, Bearer-only transport, OpenAPI | Draft — Founder Review |
+| [ADR-0004: API v1 and Bearer transport](docs/adr/0004-api-v1-and-bearer-transport.md) | Versioned API, Bearer-only transport, OpenAPI, body limits, CORS policy, rate limits | Draft — Founder Review |
 | [ADR-0005: Operation idempotency](docs/adr/0005-operation-idempotency.md) | One key per user and operation, committed with the operation | Draft — Founder Review |
 | [API guide](docs/api/README.md) | Calling `/api/v1`, errors, pagination, compatibility rules | Draft — Founder Review |
 | [CLAUDE.md](CLAUDE.md) | Working rules for Claude Code in this repository | Active |
@@ -155,7 +157,7 @@ Not built: write endpoints (stock receipts and adjustments wait for operation-le
 ## Stack
 
 Confirmed: Next.js (App Router), React, TypeScript, Node.js, PostgreSQL, Tailwind CSS, one modular monolith, Drizzle ORM (ADR-0002), Better Auth (ADR-0003).
-Built: a read-only versioned REST API under `/api/v1` with OpenAPI 3.1 (ADR-0004). Not yet decided: production and database hosting, final visual design, write endpoints, CORS and API rate limits, native apps. See ADR-0001.
+Built: a versioned REST API under `/api/v1` with OpenAPI 3.1 (ADR-0004), with idempotent writes (ADR-0005). Not yet decided: production and database hosting, final visual design, native apps, idempotency-record retention. See ADR-0001.
 
 ## Data handling
 

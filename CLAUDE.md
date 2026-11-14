@@ -2,7 +2,7 @@
 
 Bilingual (Bangla/English) e-commerce website and private Owner Office for BabySunray, a single-founder baby and kidswear business in Bangladesh.
 
-**Phase:** foundation and decisions. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`, branch `main`). The Next.js app is scaffolded as an engineering base only; `src/app/page.tsx` is a status page, not the approved homepage. The catalogue and stock schema (`src/db/schema.ts`, migrations in `drizzle/`), their internal services (`src/modules/`), the authentication and authorisation foundation (`src/modules/auth`, Better Auth routes under `/api/auth`) and a read-only, Owner-only, Bearer-authenticated `/api/v1` (`src/api/v1`, `src/app/api/v1`, `docs/api/README.md`) exist; orders, reservations, write API endpoints, login and Owner Office UI, account recovery, 2FA and deployment do not. The local databases are created by the founder from `db/local-setup.sql`. Do not create the rest unless the current gate authorises it.
+**Phase:** foundation and decisions. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`, branch `main`). The Next.js app is scaffolded as an engineering base only; `src/app/page.tsx` is a status page, not the approved homepage. The catalogue and stock schema (`src/db/schema.ts`, migrations in `drizzle/`), their internal services (`src/modules/`), the authentication and authorisation foundation (`src/modules/auth`, Better Auth routes under `/api/auth`), operation-level idempotency (`src/modules/idempotency`, ADR-0005) and an Owner-only, Bearer-authenticated `/api/v1` with draft-catalogue and stock writes, body limits, no CORS and per-user rate limits (`src/api/v1`, `src/app/api/v1`, `docs/api/README.md`) exist; orders, reservations, selling, login and Owner Office UI, account recovery, 2FA and deployment do not. The local databases are created by the founder from `db/local-setup.sql`. Do not create the rest unless the current gate authorises it.
 
 Commands (see README.md): `npm install`, `npm run dev`, `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` (unit), `npm run test:db` (PostgreSQL integration; needs `TEST_DATABASE_URL`, local `babysunray_test` database and role only), `npm run db:generate`, `npm run db:check`, `npm run db:migrate` (only the local `babysunray_dev` database; it verifies the target and refuses anything else), `npm run test:contract` (OpenAPI validity and every `/api/v1` endpoint against it), `npm run auth:bootstrap-owner` (creates the first Owner; interactive, for the founder to run; never run it or choose credentials on the founder's behalf). Never point tests at a development, shared or hosted database. Run migrations only through `npm run db:migrate`, never `drizzle-kit push`, `drizzle-kit migrate` or `auth migrate` (the project config refuses the drizzle-kit ones).
 
@@ -18,7 +18,8 @@ Read the relevant one before working on a subject. They override anything here.
 - `docs/adr/0001-application-stack.md`: confirmed stack and unresolved choices.
 - `docs/adr/0002-drizzle-and-inventory-foundation.md`: Drizzle, catalogue, stock ledger and money decisions, and what they do not cover.
 - `docs/adr/0003-authentication-foundation.md`: Better Auth, sessions, Owner bootstrap, permissions and user actors, and what they do not cover.
-- `docs/adr/0004-api-v1-and-bearer-transport.md` and `docs/api/README.md`: the `/api/v1` foundation, Bearer transport, errors, pagination and compatibility rules.
+- `docs/adr/0004-api-v1-and-bearer-transport.md` and `docs/api/README.md`: the `/api/v1` foundation, Bearer transport, errors, pagination, body limits, CORS, rate limits and compatibility rules.
+- `docs/adr/0005-operation-idempotency.md`: operation-level idempotency for writes.
 
 When a document and the code disagree, stop and report it. Do not silently reconcile.
 
@@ -34,7 +35,7 @@ The founder owns every product, business, budget and architecture decision. Work
 
 Confirmed: Next.js (App Router), React, TypeScript, Node.js, PostgreSQL, Tailwind CSS with a custom design system, one modular monolith with no separate backend server, Drizzle ORM with reviewed SQL migrations (`docs/adr/0002-drizzle-and-inventory-foundation.md`), Better Auth with email and password and database browser sessions (`docs/adr/0003-authentication-foundation.md`).
 
-Built: read-only `/api/v1` with Bearer only (never cookies) and OpenAPI 3.1 (ADR-0004). Do not add write endpoints, stock writes (need idempotency first), CORS or public endpoints without a gate. Unresolved, do not choose: account recovery, 2FA, native apps and token storage, the versioning policy's approval, production hosting, database hosting, final UI design (colours, typography, layout), business rules O-9 to O-14, RPO/RTO.
+Built: `/api/v1` with Bearer only (never cookies) and OpenAPI 3.1 (ADR-0004), Owner-only writes through the idempotent operations in `src/modules/*/operations.ts` (ADR-0005). Every new write must use those operations (or `runOnce`) and `apiPost`. Do not add CORS origins, public endpoints, selling or order endpoints without a gate. Unresolved, do not choose: account recovery, 2FA, native apps and token storage, the versioning policy's approval, production hosting, database hosting, final UI design (colours, typography, layout), business rules O-9 to O-14, RPO/RTO.
 
 The logo and its three colours are a brand reference only. They are not the website palette.
 

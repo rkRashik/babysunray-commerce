@@ -9,7 +9,8 @@ import { movementCursorCodec, PROBLEM_CODES, productCursorCodec } from "../../sr
 describe("OpenAPI document", () => {
   it("validates against the official OpenAPI 3.1 schema, with every reference resolvable", async () => {
     const validator = new Validator();
-    const result = await validator.validate(buildOpenApiDocument("https://shop.example.test"));
+    // The validator resolves references in place; give it a copy so shared parameter objects stay intact.
+    const result = await validator.validate(structuredClone(buildOpenApiDocument("https://shop.example.test")));
     expect(result.errors ?? []).toEqual([]);
     expect(result.valid).toBe(true);
     expect(validator.version).toBe("3.1");
@@ -22,14 +23,46 @@ describe("OpenAPI document", () => {
     expect((await new Validator().validate(broken)).valid).toBe(false);
   });
 
-  it("requires Bearer authentication everywhere and documents only GET operations", () => {
+  it("requires Bearer authentication everywhere and documents exactly the implemented operations", () => {
     const doc = buildOpenApiDocument();
     expect(doc.security).toEqual([{ bearerAuth: [] }]);
     expect(doc.components.securitySchemes.bearerAuth).toMatchObject({ type: "http", scheme: "bearer" });
-    for (const [path, item] of Object.entries(doc.paths)) {
-      expect(Object.keys(item), path).toEqual(["get"]);
-      expect(Object.keys(item.get.responses), path).toEqual(expect.arrayContaining(["200", "400", "401", "403", "405", "500"]));
+    const operations = Object.entries(doc.paths).flatMap(([path, item]) => Object.keys(item).map((method) => `${method.toUpperCase()} ${path}`));
+    expect(operations.sort()).toEqual(
+      [
+        "GET /products",
+        "POST /products",
+        "GET /products/{productId}",
+        "POST /products/{productId}/variants",
+        "POST /products/{productId}/archive",
+        "POST /variants/{variantId}/deactivate",
+        "POST /stock-receipts",
+        "POST /stock-adjustments",
+        "GET /skus/{sku}/stock",
+        "GET /skus/{sku}/movements",
+      ].sort(),
+    );
+    for (const [path, item] of Object.entries(doc.paths) as [string, Record<string, { responses: object; parameters?: unknown[] }>][]) {
+      for (const [method, operation] of Object.entries(item)) {
+        const statuses = Object.keys(operation.responses);
+        expect(statuses, `${method} ${path}`).toEqual(expect.arrayContaining(["400", "401", "403", "405", "429", "500"]));
+        if (method === "post") {
+          expect(statuses, path).toEqual(expect.arrayContaining(["413", "415", "422"]));
+          expect(operation.parameters, path).toContainEqual({ $ref: "#/components/parameters/IdempotencyKey" });
+        }
+      }
     }
+    expect(doc.components.parameters.IdempotencyKey).toMatchObject({ in: "header", required: true });
+  });
+
+  it("documents money as integer paisa and request bodies as closed objects", () => {
+    const schemas = buildOpenApiDocument().components.schemas as Record<string, { additionalProperties?: boolean; properties: Record<string, { type?: string; description?: string }> }>;
+    expect(schemas.Variant.properties.pricePaisa).toMatchObject({ type: "integer", description: expect.stringContaining("paisa") });
+    expect(schemas.CreateVariantRequest.properties.pricePaisa).toMatchObject({ type: "integer", description: expect.stringContaining("paisa") });
+    for (const id of ["StockReceiptRequest", "StockAdjustmentRequest", "CreateProductRequest", "CreateVariantRequest", "EmptyRequest"]) {
+      expect(schemas[id].additionalProperties, id).toBe(false);
+    }
+    expect(JSON.stringify(schemas.StockReceiptRequest)).not.toMatch(/actor|userId|role/);
   });
 
   it("publishes every problem code and contains no brand or installation data", () => {

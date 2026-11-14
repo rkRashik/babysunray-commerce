@@ -17,7 +17,7 @@
     "db:check": "drizzle-kit check",
     "db:migrate": "node scripts/migrate-dev.mts",
     "auth:bootstrap-owner": "node scripts/bootstrap-owner.mts",
-    "test:contract": "vitest run tests/api && vitest run --config vitest.integration.config.mts tests/db/api.integration.test.ts"
+    "test:contract": "vitest run tests/api && vitest run --config vitest.integration.config.mts tests/db/api.integration.test.ts tests/db/api-write.integration.test.ts"
   },
   "dependencies": {
     "better-auth": "1.7.25",

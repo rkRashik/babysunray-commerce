@@ -5,7 +5,7 @@
 **Deciders:** Founder
 **Related:** [ADR-0001](0001-application-stack.md) (item 7), [ADR-0003](0003-authentication-foundation.md), [API guide](../api/README.md), [Product requirements](../product/requirements.md) (API-1 to API-12, open decision 17)
 
-**In short:** The founder approved the versioned REST direction (`/api/v1`, OpenAPI) in Gate H.2 and authorised, in batch H.2a + H.3 (2026-11-15), Better Auth's Bearer plugin for Owner-only read endpoints if it could be shown safe. This ADR records what was built: four read-only endpoints, a Bearer-only API transport kept strictly apart from the browser cookie, and the contract tooling. Write endpoints, idempotency, CORS, API rate limiting and native apps are **not** built.
+**In short:** The founder approved the versioned REST direction (`/api/v1`, OpenAPI) in Gate H.2 and authorised, in batch H.2a + H.3 (2026-11-15), Better Auth's Bearer plugin for Owner-only read endpoints if it could be shown safe. This ADR records what was built: four read-only endpoints, a Bearer-only API transport kept strictly apart from the browser cookie, and the contract tooling. Batch H.4–H.6 (2026-11-15) added Owner-only write endpoints for stock and the draft catalogue, request-body limits, a no-CORS origin policy and per-user rate limits (section "Writes and limits"); idempotency is in [ADR-0005](0005-operation-idempotency.md). Native apps are **not** built.
 
 ## Context
 
@@ -28,20 +28,33 @@ API-2 to API-12 ask for a versioned API over the same domain services, with serv
 | OpenAPI | 3.1, served at `/api/v1/openapi.json` (public; no data). Component schemas are generated from the same zod schemas the handlers use (`z.toJSONSchema`, a dedicated registry); paths are written out. Tests validate the document against the official OAS 3.1 schema (`@seriousme/openapi-schema-validator` 2.11.0, dev only) and every real response in the integration tests against it (`ajv` 8.20.0 and `ajv-formats` 3.0.1, dev only). |
 | Versioning | `/api/v1` changes only compatibly; see the [API guide](../api/README.md). |
 
+## Writes and limits (batch H.4–H.6)
+
+The Bearer integration was reviewed again before writes were exposed (browser token leakage, cookie and Bearer separation, revoked and disabled sessions, origin and CSRF, forged principals and actors, role spoofing, cross-user replay). No critical or high issue was found; the existing tests for each were kept and write-path tests added.
+
+| Area | Decision |
+|---|---|
+| Endpoints | `POST /products`, `/products/{productId}/variants`, `/products/{productId}/archive`, `/variants/{variantId}/deactivate` (`catalog:write`); `POST /stock-receipts` (`stock:receive`), `/stock-adjustments` (`stock:adjust`). Each calls a shared operation in `src/modules/*/operations.ts`, the same one the Owner Office uses; no SQL in routes. |
+| Wrapper | `apiPost` next to `apiGet` in `src/api/v1/http.ts`, one pipeline: origin policy → Bearer principal → rate limit → permission → `Idempotency-Key` → body. |
+| Bodies | At most 64 KiB, checked against `Content-Length` before reading and counted while streaming (a missing or false length does not help). `application/json` with UTF-8 only (415 otherwise); malformed JSON or invalid UTF-8 is 400 `MALFORMED_JSON`; strict zod schemas (unknown fields, also nested, are 400). |
+| Actor | Always `actorFor(principal)` of the Bearer token's user; the body cannot carry an actor, user id or role. |
+| CORS | No CORS: no `Access-Control-*` header on any response, `OPTIONS` answered 405, and a request with an `Origin` other than `BETTER_AUTH_URL` refused (403 `ORIGIN_NOT_ALLOWED`) on reads and writes. No wildcard, no allow-list. |
+| Rate limits | PostgreSQL table `api_rate_limits` (migration `0006`): one fixed one-minute window per user and category (`read`, `write`), counted by one atomic upsert after authentication. Defaults 300 reads and 60 writes per minute, configurable by environment (`src/modules/rate-limit/service.ts`). 429 with `Retry-After`. No client IP or forwarded header is used. |
+| Contract | OpenAPI `info.version` 1.1.0. Writes document the `Idempotency-Key` parameter, request schemas, `Idempotent-Replayed` header and 400, 401, 403, 404, 405, 409, 413, 415, 422, 429 and 500 as implemented; reads gained 403 `ORIGIN_NOT_ALLOWED` and 429. A test checks that the documented operations are exactly the implemented ones. |
+
 ## Consequences
 
+- Unauthenticated requests are not rate limited by `/api/v1` (they cost one session lookup each and are refused). Limiting them needs a trusted client address, which waits for the hosting and proxy decision.
+- Each API request writes its user's counter row, one small write per request.
 - A native client holds a session credential that lasts as long as a browser session (7 days, extended while in use) and must store it in the platform's secure storage. Nothing here stores it; no app exists.
 - The Bearer plugin also lets that client call Better Auth's own endpoints with the token (sign-out, revoke-session). That is intended. CSRF does not apply: a browser never attaches an Authorization header on its own, and no CORS policy allows cross-origin calls.
-- `/api/v1` has no request rate limit. Better Auth's limiter covers sign-in, where credentials are guessed. A Bearer token cannot be guessed (random token plus HMAC), but a valid client can make many requests. A limit belongs with the hosting decision (API-11).
-- No endpoint accepts a request body. Unsupported methods answer 405 with a problem body and never read the body. Body-size limits are therefore not yet needed.
-- No CORS headers are sent, so browsers on other origins cannot call the API. A CORS policy is a later decision (API-11).
+- Better Auth's limiter covers sign-in, where credentials are guessed; `/api/v1` has its own per-user limit (above). Unsupported methods answer 405 with a problem body and never read the body.
 
 ## Not decided or not built
 
-- Write endpoints: catalogue changes, stock receipts and adjustments. Stock writes need operation-level idempotency first (O-3, API-8, ADR-0002).
-- Orders, reservations, checkout, public catalogue.
+- Orders, reservations, selling, checkout, public catalogue.
 - Native apps, token storage guidance per platform, a separate token lifetime for native clients, refresh-token rotation.
-- API rate limiting and CORS (API-11), and client SDK generation.
+- A per-client limit for unauthenticated traffic (hosting), and client SDK generation.
 
 ## Alternatives considered
 

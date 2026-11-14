@@ -11,4 +11,4 @@ export const GET = apiGet<{ productId: string }>("catalog:read", async ({ params
   return { data: toProductDto(await getProductWithVariants(db, productId)) };
 });
 
-export const { POST, PUT, PATCH, DELETE } = methodNotAllowed("GET");
+export const { POST, PUT, PATCH, DELETE, OPTIONS } = methodNotAllowed("GET");
