@@ -5,8 +5,12 @@ import { expectedObjects, unexpectedObjects } from "../support/schema-inventory"
 import { connectTestClient } from "../support/test-database";
 
 // The destructive test reset must stop, changing nothing, when the test database holds anything the
-// migrations do not create. Each case plants one foreign object in babysunray_test (never anywhere else),
-// plants a row to prove data survives, runs the reset, and removes what it planted.
+// migrations do not create. Each case plants one foreign object or one piece of metadata in
+// babysunray_test (never anywhere else), plants a row to prove data survives, runs the reset, removes
+// what it planted, and checks the database is back to exactly what the migrations create.
+//
+// Not planted here: an event trigger, which needs a superuser (covered with a stubbed catalog result in
+// schema-inventory.test.ts).
 
 let client: Client;
 
@@ -112,6 +116,135 @@ const CASES: { name: string; plant: string; remove: string; listed: string; stil
     stillThere: "select 1 from pg_rewrite where rulename = 'probe_rule'",
   },
   {
+    name: "extended statistics object",
+    plant: "create statistics probe_stat on slug, name_en from products",
+    remove: "drop statistics if exists probe_stat",
+    listed: "statistics:public.probe_stat",
+    stillThere: "select 1 from pg_statistic_ext where stxname = 'probe_stat'",
+  },
+  {
+    name: "publication that includes a managed table",
+    plant: "create publication probe_pub for table products",
+    remove: "drop publication if exists probe_pub",
+    listed: "publication_table:public.products:probe_pub",
+    stillThere: "select 1 from pg_publication where pubname = 'probe_pub'",
+  },
+  {
+    name: "table privilege",
+    plant: "grant select on products to public",
+    remove: "revoke select on products from public",
+    listed: "acl:public.products",
+    stillThere:
+      "select 1 from pg_class where oid = 'public.products'::regclass and relacl is not null and relacl::text <> acldefault('r'::\"char\", relowner)::text",
+  },
+  {
+    name: "sequence privilege",
+    plant: "grant usage on sequence stock_movements_id_seq to public",
+    remove: "revoke usage on sequence stock_movements_id_seq from public",
+    listed: "acl:public.stock_movements_id_seq",
+    stillThere:
+      "select 1 from pg_class where oid = 'public.stock_movements_id_seq'::regclass and relacl is not null and relacl::text <> acldefault('s'::\"char\", relowner)::text",
+  },
+  {
+    name: "column privilege",
+    plant: "grant select (slug) on products to public",
+    remove: "revoke select (slug) on products from public",
+    listed: "column_acl:public.products.slug",
+    stillThere:
+      "select 1 from pg_attribute where attrelid = 'public.products'::regclass and attname = 'slug' and attacl is not null",
+  },
+  {
+    name: "function privilege",
+    plant: "revoke execute on function stock_movements_reject_change() from public",
+    remove: "grant execute on function stock_movements_reject_change() to public",
+    listed: "function_acl:public.stock_movements_reject_change",
+    stillThere:
+      "select 1 from pg_proc where oid = 'public.stock_movements_reject_change()'::regprocedure and proacl is not null and proacl::text <> acldefault('f'::\"char\", proowner)::text",
+  },
+  {
+    name: "privilege on the migration history schema",
+    plant: "grant usage on schema drizzle to public",
+    remove: "revoke usage on schema drizzle from public",
+    listed: "schema_acl:drizzle",
+    stillThere: "select 1 from pg_namespace where nspname = 'drizzle' and nspacl is not null",
+  },
+  {
+    name: "default privilege setting",
+    plant: "alter default privileges in schema public grant select on tables to public",
+    remove: "alter default privileges in schema public revoke select on tables from public",
+    listed: "default_acl:babysunray_test:r",
+    stillThere: "select 1 from pg_default_acl",
+  },
+  {
+    name: "comment on a table",
+    plant: "comment on table products is 'probe'",
+    remove: "comment on table products is null",
+    listed: "comment:relation:public.products",
+    stillThere: "select 1 from pg_description where objoid = 'public.products'::regclass and objsubid = 0",
+  },
+  {
+    name: "comment on a column",
+    plant: "comment on column products.slug is 'probe'",
+    remove: "comment on column products.slug is null",
+    listed: "comment:column:public.products.slug",
+    stillThere: "select 1 from pg_description where objoid = 'public.products'::regclass and objsubid > 0",
+  },
+  {
+    name: "comment on a constraint",
+    plant: "comment on constraint products_slug_key on products is 'probe'",
+    remove: "comment on constraint products_slug_key on products is null",
+    listed: "comment:constraint:public.products.products_slug_key",
+    stillThere:
+      "select 1 from pg_description where objoid = (select oid from pg_constraint where conname = 'products_slug_key')",
+  },
+  {
+    name: "comment on the append-only trigger",
+    plant: "comment on trigger stock_movements_append_only on stock_movements is 'probe'",
+    remove: "comment on trigger stock_movements_append_only on stock_movements is null",
+    listed: "comment:trigger:public.stock_movements.stock_movements_append_only",
+    stillThere:
+      "select 1 from pg_description where objoid = (select oid from pg_trigger where tgname = 'stock_movements_append_only')",
+  },
+  {
+    name: "comment on the ledger function",
+    plant: "comment on function stock_movements_reject_change() is 'probe'",
+    remove: "comment on function stock_movements_reject_change() is null",
+    listed: "comment:function:public.stock_movements_reject_change",
+    stillThere:
+      "select 1 from pg_description where objoid = 'public.stock_movements_reject_change()'::regprocedure",
+  },
+  {
+    name: "comment on the migration history schema",
+    plant: "comment on schema drizzle is 'probe'",
+    remove: "comment on schema drizzle is null",
+    listed: "comment:schema:drizzle",
+    stillThere: "select 1 from pg_description where objoid = 'drizzle'::regnamespace",
+  },
+  {
+    name: "changed column default",
+    plant: "alter table products alter column status set default 'archived'",
+    remove: "alter table products alter column status set default 'draft'",
+    listed: "default:public.products.status",
+    stillThere:
+      "select 1 from pg_attrdef where adrelid = 'public.products'::regclass and pg_get_expr(adbin, adrelid) like '%archived%'",
+  },
+  {
+    name: "dropped column default",
+    plant: "alter table products alter column created_at drop default",
+    remove: "alter table products alter column created_at set default now()",
+    listed: "default:public.products.created_at",
+    stillThere:
+      "select 1 from pg_attribute a where a.attrelid = 'public.products'::regclass and a.attname = 'created_at' and not exists (select 1 from pg_attrdef d where d.adrelid = a.attrelid and d.adnum = a.attnum)",
+  },
+  {
+    name: "added column default",
+    plant: "alter table products alter column slug set default 'probe'",
+    remove: "alter table products alter column slug drop default",
+    listed: "default:public.products.slug",
+    stillThere:
+      "select 1 from pg_attrdef where adrelid = 'public.products'::regclass and pg_get_expr(adbin, adrelid) = '''probe''::text'",
+  },
+  {
     name: "extra schema",
     plant: "create schema probe_schema",
     remove: "drop schema if exists probe_schema",
@@ -168,6 +301,26 @@ describe("destructive test reset preflight", () => {
       await client.query(c.remove);
       await client.query("delete from products where slug = 'reset-keep'");
     }
+    // The cleanup restored exactly what the migrations create (for example, a revoked privilege that
+    // leaves an owner-only ACL behind is not reported).
+    expect(await unexpectedObjects(client)).toEqual([]);
+  });
+
+  it("names unexpected metadata without printing its values", async () => {
+    await client.query("alter table products alter column slug set default 'probe-private-default'");
+    await client.query("comment on table variants is 'probe-private-comment'");
+    try {
+      const error = await resetAndMigrate(process.env.TEST_DATABASE_URL).then(
+        () => "",
+        (e: Error) => e.message,
+      );
+      expect(error).toContain("default:public.products.slug");
+      expect(error).toContain("comment:relation:public.variants");
+      expect(error).not.toContain("probe-private");
+    } finally {
+      await client.query("alter table products alter column slug drop default");
+      await client.query("comment on table variants is null");
+    }
   });
 
   it("reports the unexpected objects without printing connection details", async () => {
@@ -183,5 +336,13 @@ describe("destructive test reset preflight", () => {
     } finally {
       await client.query("drop table if exists probe_message");
     }
+  });
+
+  it("replays normally once every planted object and piece of metadata is gone", async () => {
+    expect(await unexpectedObjects(client)).toEqual([]);
+    await client.query("insert into products (slug, name_en) values ('reset-final', 'Probe')");
+    await resetAndMigrate(process.env.TEST_DATABASE_URL);
+    expect(await exists("select 1 from products where slug = 'reset-final'")).toBe(false);
+    expect(await unexpectedObjects(client)).toEqual([]);
   });
 });

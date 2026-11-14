@@ -3,6 +3,8 @@ import { Client, Pool } from "pg";
 import {
   assertConnectedIdentity,
   parseSafeDatabaseUrl,
+  pinSearchPath,
+  sessionConfig,
   TEST_TARGET,
 } from "../../src/db/connection-guard.mts";
 import type { Db } from "../../src/db/database";
@@ -36,15 +38,15 @@ export function assertConnectedToTestDatabase(conn: Pick<Client, "query">): Prom
   return assertConnectedIdentity(conn, TEST_TARGET);
 }
 
-/** Connects one verified client to the test database. Caller must call `end()`. */
+/** Connects one verified client (identity checked, search_path pinned to public) to the test database. Caller must call `end()`. */
 export async function connectTestClient(url = process.env.TEST_DATABASE_URL): Promise<Client> {
-  const client = new Client({
-    ...parseSafeDatabaseUrl(assertSafeTestDatabaseUrl(url, process.env.DATABASE_URL), TEST_TARGET),
-    connectionTimeoutMillis: 5000,
-  });
+  const client = new Client(
+    sessionConfig(parseSafeDatabaseUrl(assertSafeTestDatabaseUrl(url, process.env.DATABASE_URL), TEST_TARGET)),
+  );
   await client.connect();
   try {
     await assertConnectedToTestDatabase(client);
+    await pinSearchPath(client);
   } catch (error) {
     await client.end();
     throw error;
@@ -55,11 +57,9 @@ export async function connectTestClient(url = process.env.TEST_DATABASE_URL): Pr
 /** A verified Drizzle handle over its own pool of independent connections. Caller must `pool.end()`. */
 export async function createTestDb(maxConnections = 4): Promise<{ db: Db; pool: Pool }> {
   const pool = new Pool({
-    ...parseSafeDatabaseUrl(
-      assertSafeTestDatabaseUrl(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL),
-      TEST_TARGET,
+    ...sessionConfig(
+      parseSafeDatabaseUrl(assertSafeTestDatabaseUrl(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL), TEST_TARGET),
     ),
-    connectionTimeoutMillis: 5000,
     max: maxConnections,
   });
   try {

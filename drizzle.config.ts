@@ -4,7 +4,7 @@ import { DEV_TARGET, parseSafeDatabaseUrl, resolveDatabaseUrl } from "./src/db/c
 // `generate` and `check` only read and write local files, so they need no database. Any other
 // drizzle-kit command is refused except `migrate`, which gets credentials only if DATABASE_URL names
 // the local development database and role. Use `npm run db:migrate`, which also asks PostgreSQL to
-// confirm the connection. This config cannot stop a direct `drizzle-kit ... --config <other file>`
+// confirm the connection and pins the session search_path (this path does neither). This config cannot stop a direct `drizzle-kit ... --config <other file>`
 // or a command-line URL; those bypass it (README.md, Database migrations).
 const command = process.argv[2];
 const READ_ONLY = ["generate", "check"];

@@ -34,10 +34,26 @@ export type ConnectionParams = {
   password?: string;
 };
 
+// The only schema the migrations and the test reset may resolve unqualified names in. Drizzle's own
+// bookkeeping table is always schema-qualified (`drizzle.__drizzle_migrations`), so it does not depend on this.
+export const SAFE_SEARCH_PATH = "public";
+
 /**
- * Validates a connection URL before any connection is made and returns explicit connection fields,
- * so no PG* environment variable or URL query parameter can redirect the connection.
- * Error messages never contain the URL or the password.
+ * Connection settings for the verified clients: the explicit fields from `parseSafeDatabaseUrl`, plus a
+ * startup `options` value. node-postgres reads the PGOPTIONS environment variable only when no `options`
+ * value is given, so passing one means PGOPTIONS cannot change the session. Role-level and database-level
+ * `search_path` settings are lower priority than a startup option in PostgreSQL, but this project does not
+ * rely on that: `pinSearchPath` sets the value again and reads it back.
+ */
+export function sessionConfig(params: ConnectionParams): ConnectionParams & { options: string; connectionTimeoutMillis: number } {
+  return { ...params, options: `-c search_path=${SAFE_SEARCH_PATH}`, connectionTimeoutMillis: 5000 };
+}
+
+/**
+ * Validates a connection URL before any connection is made and returns explicit connection fields
+ * (host, port, database, role), so a URL query parameter or a PGHOST, PGPORT, PGDATABASE or PGUSER
+ * variable cannot redirect the connection. Other PG* variables are handled by `sessionConfig`
+ * (PGOPTIONS) or are not security-relevant here. Error messages never contain the URL or the password.
  */
 export function parseSafeDatabaseUrl(url: string | undefined, target: DatabaseTarget): ConnectionParams {
   const { envName } = target;
@@ -107,6 +123,23 @@ export async function assertConnectedIdentity(conn: Pick<Client, "query">, targe
   if (s.is_super !== "off") throw new Error("Refusing to continue as a PostgreSQL superuser.");
   if (s.port !== EXPECTED_PORT) throw new Error(`Connected server is not on port ${EXPECTED_PORT}.`);
   if (s.is_loopback !== true) throw new Error("Connected server is not on a loopback address.");
+}
+
+/**
+ * Sets the session `search_path` to `public` on this connection and reads the effective value back, so
+ * unqualified names in migrations resolve in one known schema whatever PGOPTIONS, a role-level or a
+ * database-level setting said. Only this session changes; no role, database or server setting does.
+ * It does not stop a migration file that sets `search_path` itself (migrations are reviewed).
+ */
+export async function pinSearchPath(conn: Pick<Client, "query">): Promise<void> {
+  await conn.query(`set search_path to ${SAFE_SEARCH_PATH}`);
+  const { rows } = await conn.query<{ setting: string; schemas: string[] }>(
+    "select current_setting('search_path') as setting, current_schemas(false)::text[] as schemas",
+  );
+  const { setting, schemas } = rows[0];
+  if (setting !== SAFE_SEARCH_PATH || schemas.length !== 1 || schemas[0] !== SAFE_SEARCH_PATH) {
+    throw new Error(`The session search_path is not ${SAFE_SEARCH_PATH}.`);
+  }
 }
 
 /**

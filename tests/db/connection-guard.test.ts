@@ -6,8 +6,10 @@ import {
   assertConnectedIdentity,
   DEV_TARGET,
   parseSafeDatabaseUrl,
+  pinSearchPath,
   resolveDatabaseUrl,
   resolveEnvValue,
+  sessionConfig,
   TEST_TARGET,
 } from "../../src/db/connection-guard.mts";
 
@@ -113,6 +115,44 @@ describe("assertConnectedIdentity (what PostgreSQL itself reports)", () => {
     ["an unknown server address", { is_loopback: null }, "loopback"],
   ] as const)("rejects %s", async (_name, row, expected) => {
     expect(await check(row as Partial<typeof ok>)).toContain(expected);
+  });
+});
+
+describe("sessionConfig and pinSearchPath (schema resolution)", () => {
+  const params = { host: "localhost", port: 5432, database: "babysunray_dev", user: "babysunray_dev", password: "pw" };
+
+  it("passes an explicit startup search_path option, which node-postgres prefers over PGOPTIONS", () => {
+    expect(sessionConfig(params)).toEqual({
+      ...params,
+      options: "-c search_path=public",
+      connectionTimeoutMillis: 5000,
+    });
+  });
+
+  const reporting = (setting: string, schemas: string[], log: string[] = []) =>
+    ({
+      query: async (sql: string) => {
+        log.push(sql);
+        return { rows: [{ setting, schemas }] };
+      },
+    }) as never;
+
+  it("sets search_path on the session first, then reads the effective value back", async () => {
+    const log: string[] = [];
+    await pinSearchPath(reporting("public", ["public"], log));
+    expect(log).toHaveLength(2);
+    expect(log[0]).toBe("set search_path to public");
+    expect(log[1]).toContain("current_setting('search_path')");
+  });
+
+  it.each([
+    ["another schema", "probe_schema", ["probe_schema"]],
+    ["public followed by another schema", "public, probe_schema", ["public", "probe_schema"]],
+    ["another schema first", "probe_schema, public", ["probe_schema", "public"]],
+    ["a path that resolves to nothing", "public", []],
+    ["an unexpected setting text", "$user, public", ["public"]],
+  ])("rejects %s", async (_name, setting, schemas) => {
+    await expect(pinSearchPath(reporting(setting, schemas))).rejects.toThrow("search_path is not public");
   });
 });
 
