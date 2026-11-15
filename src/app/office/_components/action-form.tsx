@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useActionState, useContext } from "react";
+import { unstable_rethrow } from "next/navigation";
+import { createContext, useActionState, useContext, useId } from "react";
 import { useFormStatus } from "react-dom";
 import type { FormState } from "../actions";
 
@@ -8,6 +9,16 @@ import type { FormState } from "../actions";
 // while the action runs, and the same key is sent again on any resubmission, so an entry is made once.
 
 const Values = createContext<Record<string, string>>({});
+
+/** What was typed, so the form can show it again (React resets the fields after every submission). */
+function typedValues(form: FormData): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const [name, value] of form) if (typeof value === "string" && /^[a-zA-Z]+$/.test(name) && name !== "idempotencyKey") values[name] = value;
+  return values;
+}
+
+const LOST =
+  "The server could not be reached, so there was no answer. Press the button again: if the first attempt was saved, it is not saved twice.";
 
 type Props = {
   action: (state: FormState, form: FormData) => Promise<FormState>;
@@ -19,7 +30,17 @@ type Props = {
 };
 
 export function ActionForm({ action, idempotencyKey, hidden = {}, submitLabel, children, variant = "primary" }: Props) {
-  const [state, formAction] = useActionState(action, {});
+  const [state, formAction] = useActionState(async (previous: FormState, form: FormData): Promise<FormState> => {
+    try {
+      return await action(previous, form);
+    } catch (error) {
+      // A redirect (success, or an expired session) and other Next.js signals pass through.
+      unstable_rethrow(error);
+      // fetch() failing: the connection dropped. The same key is resent with the next press.
+      if (error instanceof TypeError) return { error: LOST, values: typedValues(form) };
+      throw error;
+    }
+  }, {});
   return (
     <form action={formAction} className="space-y-3">
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
@@ -68,7 +89,8 @@ type FieldProps = {
 /** A labelled text input that keeps what was typed when the action answers with an error. */
 export function Field({ name, label, hint, required, multiline, inputMode, maxLength, lang }: FieldProps) {
   const values = useContext(Values);
-  const id = `field-${name}`;
+  // Unique per page: two forms on one page can both have a "reason" field.
+  const id = useId();
   const common = {
     id,
     name,

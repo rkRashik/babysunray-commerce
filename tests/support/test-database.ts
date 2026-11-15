@@ -54,6 +54,26 @@ export async function connectTestClient(url = process.env.TEST_DATABASE_URL): Pr
   return client;
 }
 
+// Session-level advisory lock held for a whole `npm run test:db` or `npm run test:e2e` run, so one run can
+// never reset babysunray_test while the other is using it. The key is an arbitrary project constant.
+const TEST_RUN_LOCK = "select pg_try_advisory_lock(1651725938, 1) as locked";
+
+/**
+ * Takes the test-run lock on its own verified connection and keeps it until that client is ended. Refuses,
+ * without waiting, if another test run holds it.
+ */
+export async function lockTestDatabase(url: string | undefined): Promise<Client> {
+  const client = await connectTestClient(url);
+  try {
+    const { rows } = await client.query<{ locked: boolean }>(TEST_RUN_LOCK);
+    if (!rows[0].locked) throw new Error("Another test run (npm run test:db or test:e2e) is using babysunray_test. Wait for it to finish.");
+  } catch (error) {
+    await client.end();
+    throw error;
+  }
+  return client;
+}
+
 /** A verified Drizzle handle over its own pool of independent connections. Caller must `pool.end()`. */
 export async function createTestDb(maxConnections = 4): Promise<{ db: Db; pool: Pool }> {
   const pool = new Pool({

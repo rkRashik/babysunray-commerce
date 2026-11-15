@@ -38,6 +38,29 @@ function wholeNumber(raw: string, field: string, signed = false): number {
   return Number(raw.trim());
 }
 
+// Validation messages start with the service's field name ("pricePaisa must be ..."); the form shows the
+// label the Owner sees instead.
+const LABELS: Record<string, string> = {
+  slug: "Slug",
+  nameEn: "Name (English)",
+  nameBn: "Name (Bangla)",
+  descriptionEn: "Description (English)",
+  descriptionBn: "Description (Bangla)",
+  sku: "SKU",
+  size: "Size",
+  colour: "Colour",
+  price: "Price (BDT)",
+  pricePaisa: "Price (BDT)",
+  quantity: "Units received",
+  quantityDelta: "Change",
+  reason: "Reason",
+};
+
+function readable(message: string): string {
+  const [field] = message.split(" ", 1);
+  return Object.hasOwn(LABELS, field) ? `${LABELS[field]}${message.slice(field.length)}` : message;
+}
+
 /** Safe text for the form: a DomainError message is written to be shown; anything else is generic. */
 function formError(error: unknown, form: FormData): FormState {
   const values: Record<string, string> = {};
@@ -46,7 +69,7 @@ function formError(error: unknown, form: FormData): FormState {
     if (error.code === "IDEMPOTENCY_KEY_REUSED") {
       return { error: "This form was already submitted with different values. Reload the page to make a new entry.", values };
     }
-    return { error: error.message, values };
+    return { error: readable(error.message), values };
   }
   console.error(
     JSON.stringify({
@@ -123,7 +146,7 @@ export async function receiveStockAction(_: FormState, form: FormData): Promise<
   try {
     const { value } = await receiveStockOnce(getDb(), principal, text(form, "idempotencyKey"), {
       sku: text(form, "sku"),
-      quantity: wholeNumber(text(form, "quantity"), "Quantity"),
+      quantity: wholeNumber(text(form, "quantity"), "Units received"),
       reason: optional(form, "reason"),
     });
     sku = value.sku;

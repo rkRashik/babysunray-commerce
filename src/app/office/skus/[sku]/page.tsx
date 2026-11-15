@@ -35,7 +35,9 @@ export default async function SkuPage({ params, searchParams }: Props) {
   return (
     <OfficeShell title={`Stock · ${variant.sku}`} notice={noticeFor(done)}>
       <Section title="Current stock">
-        <p className="text-3xl font-semibold tabular-nums">{level.onHand}</p>
+        <p className="text-3xl font-semibold tabular-nums" data-testid="on-hand">
+          {level.onHand}
+        </p>
         <p className="text-sm text-gray-700">
           Units on hand. Variant status: {variant.status}.{" "}
           <Link href={`/office/products/${variant.productId}`} className="underline">

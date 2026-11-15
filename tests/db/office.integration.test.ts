@@ -152,12 +152,12 @@ describe("stock forms", () => {
   it("shows safe validation messages, keeps the typed values, and records nothing", async () => {
     const { variant } = await createTestVariant(db, "offstk");
     const cases: [Action, Record<string, string>, RegExp][] = [
-      [actions.receiveStockAction, { sku: variant.sku, quantity: "abc" }, /Quantity must be a whole number/],
-      [actions.receiveStockAction, { sku: variant.sku, quantity: "0" }, /quantity must be a positive whole number/],
+      [actions.receiveStockAction, { sku: variant.sku, quantity: "abc" }, /Units received must be a whole number/],
+      [actions.receiveStockAction, { sku: variant.sku, quantity: "0" }, /Units received must be a positive whole number/],
       [actions.receiveStockAction, { sku: variant.sku, quantity: "1.5" }, /whole number/],
-      [actions.receiveStockAction, { sku: "bad sku!", quantity: "1" }, /sku must be/],
+      [actions.receiveStockAction, { sku: "bad sku!", quantity: "1" }, /SKU must be/],
       [actions.receiveStockAction, { sku: "OFFSTK-NOPE", quantity: "1" }, /No variant has this SKU/],
-      [actions.adjustStockAction, { sku: variant.sku, quantityDelta: "-1", reason: "" }, /reason is required/],
+      [actions.adjustStockAction, { sku: variant.sku, quantityDelta: "-1", reason: "" }, /Reason is required/],
       [actions.adjustStockAction, { sku: variant.sku, quantityDelta: "-1", reason: "Recount" }, /Not enough stock/],
       [actions.adjustStockAction, { sku: variant.sku, quantityDelta: "0", reason: "Recount" }, /non-zero/],
       [actions.receiveStockAction, { sku: variant.sku, quantity: "1", idempotencyKey: "short" }, /Idempotency-Key/],
@@ -208,7 +208,7 @@ describe("catalogue forms", () => {
     expect(saved).toEqual([{ sku: "OFFICE-RMP-01", price_paisa: "45050", colour: null }]);
     expect((await submit(actions.createVariantAction, { ...variant, idempotencyKey: randomUUID() })).state?.error).toBe("A variant with this SKU already exists.");
     for (const priceTaka of ["", "0", "-1", "1.234", "abc"]) {
-      expect((await submit(actions.createVariantAction, { ...variant, idempotencyKey: randomUUID(), sku: "OFFICE-RMP-02", priceTaka })).state?.error).toMatch(/price|paisa/);
+      expect((await submit(actions.createVariantAction, { ...variant, idempotencyKey: randomUUID(), sku: "OFFICE-RMP-02", priceTaka })).state?.error).toMatch(/^Price \(BDT\) (must|is) /);
     }
     expect((await submit(actions.createProductAction, { ...fields, idempotencyKey: randomUUID() })).state?.error).toBe("A product with this slug already exists.");
     expect((await submit(actions.createProductAction, { idempotencyKey: randomUUID(), slug: "office-noname" })).state?.error).toMatch(/needs a name/);

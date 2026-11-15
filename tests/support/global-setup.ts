@@ -4,7 +4,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { loadEnv } from "vite";
 import type { TestProject } from "vitest/node";
 import { DROP_MANAGED_STATEMENTS, unexpectedObjects } from "./schema-inventory";
-import { assertSafeTestDatabaseUrl, connectTestClient } from "./test-database";
+import { assertSafeTestDatabaseUrl, connectTestClient, lockTestDatabase } from "./test-database";
 
 // Every integration run replays all migrations from an empty schema in babysunray_test, so the
 // committed migrations are proven to build the schema from scratch.
@@ -17,11 +17,19 @@ import { assertSafeTestDatabaseUrl, connectTestClient } from "./test-database";
 // nobody listed would make PostgreSQL refuse and roll back instead of being dropped. Preflight and drops
 // share one transaction. The development database is never touched.
 
-export default async function setup(project: TestProject): Promise<void> {
+export default async function setup(project: TestProject): Promise<() => Promise<void>> {
   // DATABASE_URL may live only in .env.local. It is compared here and never passed to the tests.
   const appDatabaseUrl = process.env.DATABASE_URL ?? loadEnv("test", process.cwd(), "").DATABASE_URL;
   assertSafeTestDatabaseUrl(project.config.env.TEST_DATABASE_URL, appDatabaseUrl);
-  await resetAndMigrate(project.config.env.TEST_DATABASE_URL);
+  // Held until the run ends, so a browser test run cannot reset the database under these tests (or the reverse).
+  const lock = await lockTestDatabase(project.config.env.TEST_DATABASE_URL);
+  try {
+    await resetAndMigrate(project.config.env.TEST_DATABASE_URL);
+  } catch (error) {
+    await lock.end();
+    throw error;
+  }
+  return () => lock.end();
 }
 
 export async function resetAndMigrate(url: string | undefined): Promise<void> {
@@ -44,7 +52,7 @@ export async function resetAndMigrate(url: string | undefined): Promise<void> {
       throw error;
     }
 
-    await migrate(drizzle({ client }), { migrationsFolder: path.resolve(import.meta.dirname, "../../drizzle") });
+    await migrate(drizzle({ client }), { migrationsFolder: path.resolve("drizzle") });
   } finally {
     await client.end();
   }

@@ -1,6 +1,6 @@
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { connectTestClient } from "../support/test-database";
+import { connectTestClient, lockTestDatabase } from "../support/test-database";
 
 let client: Client;
 
@@ -63,5 +63,16 @@ describe("transactions", () => {
 
     const after = await client.query("select count(*)::int as c from tx_probe where n = 3");
     expect(after.rows[0].c).toBe(0);
+  });
+});
+
+describe("test-run lock", () => {
+  it("is held for the whole run, so a second run (for example the browser tests) is refused at once", async () => {
+    // tests/support/global-setup.ts took the lock before resetting the database and keeps it until the end.
+    await expect(lockTestDatabase(process.env.TEST_DATABASE_URL)).rejects.toThrow(/Another test run/);
+    const { rows } = await client.query<{ n: number }>(
+      "select count(*)::int as n from pg_locks where locktype = 'advisory' and classid = 1651725938 and objid = 1 and granted",
+    );
+    expect(rows[0].n).toBe(1);
   });
 });
