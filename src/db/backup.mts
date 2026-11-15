@@ -22,6 +22,7 @@ import { spawn } from "node:child_process";
 import { createCipheriv, createDecipheriv, randomBytes, scrypt as scryptCallback } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { open, rename, rm, stat } from "node:fs/promises";
+import { PassThrough } from "node:stream";
 import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCallback) as (password: string, salt: Buffer, keylen: number, options: { N: number; r: number; p: number; maxmem: number }) => Promise<Buffer>;
@@ -253,7 +254,10 @@ const connectionArgs = (conn: Connection) => ["--host", conn.host, "--port", Str
 function run(name: "pg_dump" | "pg_restore", args: string[], conn: Connection, stdin?: AsyncIterable<Uint8Array>) {
   const child = spawn(tool(name), args, { env: childEnv(conn), stdio: [stdin ? "pipe" : "ignore", "pipe", "pipe"], windowsHide: true });
   if (!child.stdout || !child.stderr) throw new Error(`${name} could not be started.`);
-  const stdout = child.stdout;
+  // Read the output from the start into a buffer with back-pressure: on Windows, output left unread for a few
+  // hundred milliseconds (as while the key is derived) was sometimes lost entirely, with the tool still exiting 0.
+  const stdout = child.stdout.pipe(new PassThrough());
+  child.stdout.on("error", (error) => stdout.destroy(error));
   let stderr = "";
   child.stderr.on("data", (d: Buffer) => (stderr = (stderr + d.toString()).slice(-2000)));
   const exited = new Promise<void>((resolve, reject) => {

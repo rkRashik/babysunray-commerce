@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { assertToolsMatch, backupDirectory, createBackupFile, verifyBackupFile } from "../../src/db/backup.mts";
+import { assertToolsMatch, backupDirectory, createBackupFile, dumpDatabase, verifyBackupFile } from "../../src/db/backup.mts";
 import { parseSafeDatabaseUrl, TEST_TARGET } from "../../src/db/connection-guard.mts";
 import { connectTestClient } from "../support/test-database";
 
@@ -46,6 +46,22 @@ describe("encrypted backup", () => {
     await writeFile(changed, raw);
     await expect(verifyBackupFile(changed, passphrase)).rejects.toThrow(/damaged/);
     expect(await readdir(dir)).toEqual(["changed.bsbackup", "test.bsbackup"]);
+  });
+
+  it("keeps all of pg_dump's output when it is read late (as after the key derivation)", { timeout: 60_000 }, async () => {
+    // On Windows, output not read within a few hundred milliseconds could be lost entirely, with pg_dump still
+    // exiting 0; a backup then held an empty archive.
+    const sizes = await Promise.all(
+      Array.from({ length: 8 }, async () => {
+        const { archive, done } = dumpDatabase(conn());
+        await new Promise((r) => setTimeout(r, 1500));
+        let n = 0;
+        for await (const piece of archive) n += piece.length;
+        await done;
+        return n;
+      }),
+    );
+    expect(Math.min(...sizes)).toBeGreaterThan(1000);
   });
 
   it("never overwrites a file and leaves no partial file when pg_dump fails", async () => {
