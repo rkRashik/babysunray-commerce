@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, date, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 // Database schema. Changes go through reviewed migrations in drizzle/ (README: Database migrations).
 // Checks mirror the validation in src/modules so the database rejects bad data even if a caller skips it.
@@ -81,9 +81,15 @@ export const inventoryBalances = pgTable(
       .primaryKey()
       .references(() => variants.id, { onDelete: "restrict" }),
     onHand: integer("on_hand").notNull().default(0),
+    // Units held for orders that are not dispatched yet (migration 0008). Available = on_hand - reserved.
+    // Changed only together with stock_reservations rows; never a physical movement.
+    reserved: integer("reserved").notNull().default(0),
     updatedAt: updatedAt(),
   },
-  (t) => [check("inventory_balances_on_hand_nonnegative", sql`${t.onHand} >= 0`)],
+  (t) => [
+    check("inventory_balances_on_hand_nonnegative", sql`${t.onHand} >= 0`),
+    check("inventory_balances_reserved_valid", sql`${t.reserved} >= 0 and ${t.reserved} <= ${t.onHand}`),
+  ],
 );
 
 // Append-only ledger: UPDATE, DELETE and TRUNCATE are rejected by a trigger (migration 0001).
@@ -94,9 +100,12 @@ export const stockMovements = pgTable(
     variantId: uuid("variant_id")
       .notNull()
       .references(() => variants.id, { onDelete: "restrict" }),
-    movementType: text("movement_type", { enum: ["receipt", "adjustment"] }).notNull(),
+    // dispatch: an order left the shop (negative, from its reservation). return_restock: an inspected
+    // return or RTO unit passed and became sellable again (positive). Both name their order (migration 0008).
+    movementType: text("movement_type", { enum: ["receipt", "adjustment", "dispatch", "return_restock"] }).notNull(),
     quantityDelta: integer("quantity_delta").notNull(),
     reason: text("reason"),
+    orderId: uuid("order_id").references(() => orders.id, { onDelete: "restrict" }),
     // A named system source, or an authenticated user (requirement OF-9, ADR-0003). For a user, actor_ref
     // is the user's immutable id as text and actor_user_id the same id, so the row always names a user that
     // exists. Users referenced here cannot be deleted.
@@ -107,11 +116,12 @@ export const stockMovements = pgTable(
   },
   (t) => [
     index("stock_movements_variant_id_id_idx").on(t.variantId, t.id),
-    check("stock_movements_type_valid", sql`${t.movementType} in ('receipt', 'adjustment')`),
+    check("stock_movements_type_valid", sql`${t.movementType} in ('receipt', 'adjustment', 'dispatch', 'return_restock')`),
     check(
       "stock_movements_delta_valid",
-      sql`${t.quantityDelta} <> 0 and (${t.movementType} <> 'receipt' or ${t.quantityDelta} > 0)`,
+      sql`${t.quantityDelta} <> 0 and (${t.movementType} not in ('receipt', 'return_restock') or ${t.quantityDelta} > 0) and (${t.movementType} <> 'dispatch' or ${t.quantityDelta} < 0)`,
     ),
+    check("stock_movements_order_link", sql`(${t.movementType} in ('dispatch', 'return_restock')) = (${t.orderId} is not null)`),
     check(
       "stock_movements_reason_valid",
       sql`(${t.movementType} <> 'adjustment' or ${t.reason} is not null) and btrim(${t.reason}) <> '' and length(${t.reason}) <= 500`,
@@ -272,5 +282,394 @@ export const apiRateLimits = pgTable(
     primaryKey({ name: "api_rate_limits_pkey", columns: [t.userId, t.bucket] }),
     check("api_rate_limits_bucket_valid", sql`${t.bucket} in ('read', 'write')`),
     check("api_rate_limits_count_positive", sql`${t.count} >= 1`),
+  ],
+);
+
+// ---------------------------------------------------------------------------------------------------------
+// Orders (migration 0008). Business rules: docs/product/order-policy-decisions.md. Four lifecycle dimensions
+// are separate columns (O-1); order source is an attribute (O-2). Money is integer paisa, times UTC.
+// Orders and their audit rows are never deleted; every foreign key into them is ON DELETE RESTRICT.
+
+const userRef = (name: string) => uuid(name).references(() => authUsers.id, { onDelete: "restrict" });
+
+// One row per configured zone. A zone without a row, or inactive, cannot take orders (founder rule I). The
+// amounts are the Owner's; none is hardcoded. updated_by names the Owner who last changed it.
+export const deliveryZones = pgTable(
+  "delivery_zones",
+  {
+    code: text("code", { enum: ["dhaka_city", "outside_dhaka"] }).primaryKey(),
+    chargePaisa: bigint("charge_paisa", { mode: "number" }).notNull(),
+    active: boolean("active").notNull(),
+    version: version(),
+    updatedAt: updatedAt(),
+    updatedByUserId: userRef("updated_by_user_id").notNull(),
+  },
+  (t) => [
+    check("delivery_zones_code_valid", sql`${t.code} in ('dhaka_city', 'outside_dhaka')`),
+    check("delivery_zones_charge_range", sql`${t.chargePaisa} >= 0 and ${t.chargePaisa} <= 1000000`),
+    check("delivery_zones_version_positive", sql`${t.version} >= 1`),
+  ],
+);
+
+export const orders = pgTable(
+  "orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Short reference for people (shown as text, e.g. ORD-000042). Never a credential: tracking uses tokens.
+    number: bigint("number", { mode: "number" }).notNull().unique("orders_number_key").generatedAlwaysAsIdentity(),
+    source: text("source", { enum: ["website", "messenger", "whatsapp", "other"] }).notNull(),
+    customerName: text("customer_name").notNull(),
+    // Normalised Bangladesh mobile number, 01XXXXXXXXX, kept as text (O-7).
+    customerPhone: text("customer_phone").notNull(),
+    deliveryAddress: text("delivery_address").notNull(),
+    deliveryZone: text("delivery_zone", { enum: ["dhaka_city", "outside_dhaka"] })
+      .notNull()
+      .references(() => deliveryZones.code, { onDelete: "restrict" }),
+    note: text("note"),
+    // Price snapshot at submission; later catalogue or rate changes never alter it (O-15, rule I).
+    subtotalPaisa: bigint("subtotal_paisa", { mode: "number" }).notNull(),
+    deliveryChargePaisa: bigint("delivery_charge_paisa", { mode: "number" }).notNull(),
+    totalPaisa: bigint("total_paisa", { mode: "number" }).notNull(),
+    orderStatus: text("order_status", { enum: ["pending_verification", "verification_expired", "confirmed", "cancelled", "closed"] }).notNull(),
+    fulfilmentStatus: text("fulfilment_status", { enum: ["unfulfilled", "packed", "dispatched", "delivered", "rto", "rto_received"] }).notNull(),
+    paymentStatus: text("payment_status", { enum: ["unpaid", "partially_collected", "collected", "settled"] }).notNull(),
+    returnStatus: text("return_status", { enum: ["none", "requested", "in_progress", "resolved"] }).notNull(),
+    // Running totals of payment_entries, updated in the same transaction as each entry.
+    codCollectedPaisa: bigint("cod_collected_paisa", { mode: "number" }).notNull().default(0),
+    codSettledPaisa: bigint("cod_settled_paisa", { mode: "number" }).notNull().default(0),
+    refundedPaisa: bigint("refunded_paisa", { mode: "number" }).notNull().default(0),
+    rtoChargePaisa: bigint("rto_charge_paisa", { mode: "number" }),
+    verificationExpiresAt: timestamp("verification_expires_at", { withTimezone: true }).notNull(),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    version: version(),
+    createdByUserId: userRef("created_by_user_id"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("orders_status_expiry_idx").on(t.orderStatus, t.verificationExpiresAt),
+    index("orders_created_at_idx").on(t.createdAt, t.id),
+    check("orders_source_valid", sql`${t.source} in ('website', 'messenger', 'whatsapp', 'other')`),
+    check("orders_customer_name_valid", sql`btrim(${t.customerName}) <> '' and length(${t.customerName}) <= 100`),
+    check("orders_customer_phone_format", sql`${t.customerPhone} ~ '^01[3-9][0-9]{8}$'`),
+    check("orders_address_valid", sql`btrim(${t.deliveryAddress}) <> '' and length(${t.deliveryAddress}) <= 500`),
+    check("orders_note_valid", sql`btrim(${t.note}) <> '' and length(${t.note}) <= 1000`),
+    check(
+      "orders_amounts_valid",
+      sql`${t.subtotalPaisa} > 0 and ${t.deliveryChargePaisa} >= 0 and ${t.totalPaisa} = ${t.subtotalPaisa} + ${t.deliveryChargePaisa} and ${t.totalPaisa} <= 9007199254740991`,
+    ),
+    check(
+      "orders_status_valid",
+      sql`${t.orderStatus} in ('pending_verification', 'verification_expired', 'confirmed', 'cancelled', 'closed')`,
+    ),
+    check(
+      "orders_fulfilment_status_valid",
+      sql`${t.fulfilmentStatus} in ('unfulfilled', 'packed', 'dispatched', 'delivered', 'rto', 'rto_received')`,
+    ),
+    check("orders_return_status_valid", sql`${t.returnStatus} in ('none', 'requested', 'in_progress', 'resolved')`),
+    // Money actually handled: never more settled than collected, never more collected than expected, never
+    // more refunded than collected (founder rules J and M).
+    check(
+      "orders_cod_amounts_valid",
+      sql`${t.codSettledPaisa} >= 0 and ${t.codSettledPaisa} <= ${t.codCollectedPaisa} and ${t.codCollectedPaisa} <= ${t.totalPaisa} and ${t.refundedPaisa} >= 0 and ${t.refundedPaisa} <= ${t.codCollectedPaisa}`,
+    ),
+    // Payment status is a function of the amounts, so it can never disagree with them.
+    check(
+      "orders_payment_status_derived",
+      sql`${t.paymentStatus} = case when ${t.codCollectedPaisa} = 0 then 'unpaid' when ${t.codCollectedPaisa} < ${t.totalPaisa} then 'partially_collected' when ${t.codSettledPaisa} < ${t.codCollectedPaisa} then 'collected' else 'settled' end`,
+    ),
+    check("orders_rto_charge_valid", sql`${t.rtoChargePaisa} >= 0 and ${t.rtoChargePaisa} <= 1000000`),
+    // Cross-dimension consistency: only confirmed orders move physically; cancellation happens before dispatch.
+    check(
+      "orders_fulfilment_consistent",
+      sql`(${t.orderStatus} in ('pending_verification', 'verification_expired') and ${t.fulfilmentStatus} = 'unfulfilled')
+        or (${t.orderStatus} = 'cancelled' and ${t.fulfilmentStatus} in ('unfulfilled', 'packed'))
+        or (${t.orderStatus} = 'confirmed')
+        or (${t.orderStatus} = 'closed' and ${t.fulfilmentStatus} in ('delivered', 'rto_received'))`,
+    ),
+    check("orders_closed_at_consistent", sql`(${t.closedAt} is not null) = (${t.orderStatus} in ('cancelled', 'closed'))`),
+    check("orders_delivered_at_consistent", sql`${t.deliveredAt} is null or ${t.fulfilmentStatus} = 'delivered' or ${t.orderStatus} = 'closed'`),
+    check("orders_version_positive", sql`${t.version} >= 1`),
+  ],
+);
+
+// One line per SKU (lines for the same SKU are merged at submission), with the catalogue snapshot.
+export const orderItems = pgTable(
+  "order_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    variantId: uuid("variant_id")
+      .notNull()
+      .references(() => variants.id, { onDelete: "restrict" }),
+    sku: text("sku").notNull(),
+    productNameEn: text("product_name_en"),
+    productNameBn: text("product_name_bn"),
+    size: text("size"),
+    colour: text("colour"),
+    unitPricePaisa: bigint("unit_price_paisa", { mode: "number" }).notNull(),
+    quantity: integer("quantity").notNull(),
+    lineTotalPaisa: bigint("line_total_paisa", { mode: "number" }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("order_items_order_variant_key").on(t.orderId, t.variantId),
+    check("order_items_name_present", sql`${t.productNameEn} is not null or ${t.productNameBn} is not null`),
+    check("order_items_quantity_range", sql`${t.quantity} between 1 and 1000`),
+    check(
+      "order_items_amounts_valid",
+      sql`${t.unitPricePaisa} > 0 and ${t.lineTotalPaisa} = ${t.unitPricePaisa} * ${t.quantity} and ${t.lineTotalPaisa} <= 9007199254740991`,
+    ),
+  ],
+);
+
+// Per-order, per-SKU stock holds. While active, the quantity is counted in inventory_balances.reserved;
+// a hold ends exactly once: released (cancellation or verification expiry) or consumed (dispatch).
+export const stockReservations = pgTable(
+  "stock_reservations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    variantId: uuid("variant_id")
+      .notNull()
+      .references(() => variants.id, { onDelete: "restrict" }),
+    quantity: integer("quantity").notNull(),
+    status: text("status", { enum: ["active", "released", "consumed"] }).notNull(),
+    releaseReason: text("release_reason", { enum: ["cancelled", "expired"] }),
+    createdAt: createdAt(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("stock_reservations_active_key").on(t.orderId, t.variantId).where(sql`${t.status} = 'active'`),
+    index("stock_reservations_order_id_idx").on(t.orderId),
+    check("stock_reservations_quantity_positive", sql`${t.quantity} > 0`),
+    check("stock_reservations_status_valid", sql`${t.status} in ('active', 'released', 'consumed')`),
+    check(
+      "stock_reservations_end_consistent",
+      sql`(${t.status} = 'active' and ${t.endedAt} is null and ${t.releaseReason} is null)
+        or (${t.status} = 'released' and ${t.endedAt} is not null and ${t.releaseReason} in ('cancelled', 'expired'))
+        or (${t.status} = 'consumed' and ${t.endedAt} is not null and ${t.releaseReason} is null)`,
+    ),
+  ],
+);
+
+// Append-only order history (trigger, migration 0008): what happened, when and by whom. Customers act only
+// through a tracking link (actor_type 'customer', no identity). detail holds amounts and ids, never contact data.
+export const orderEvents = pgTable(
+  "order_events",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    event: text("event").notNull(),
+    actorType: text("actor_type", { enum: ["system", "user", "customer"] }).notNull(),
+    actorRef: text("actor_ref").notNull(),
+    actorUserId: userRef("actor_user_id"),
+    detail: jsonb("detail"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("order_events_order_id_id_idx").on(t.orderId, t.id),
+    check("order_events_event_format", sql`${t.event} ~ '^[a-z][a-z_]{1,49}$'`),
+    check("order_events_actor_type_valid", sql`${t.actorType} in ('system', 'user', 'customer')`),
+    check("order_events_actor_ref_format", sql`${t.actorRef} ~ '^[a-z0-9][a-z0-9._:-]{0,99}$'`),
+    check(
+      "order_events_actor_user_consistent",
+      sql`(${t.actorType} in ('system', 'customer') and ${t.actorUserId} is null) or (${t.actorType} = 'user' and ${t.actorUserId} is not null and ${t.actorRef} = ${t.actorUserId}::text)`,
+    ),
+    check("order_events_detail_object", sql`jsonb_typeof(${t.detail}) = 'object'`),
+  ],
+);
+
+// A customer's request to cancel a confirmed, undispatched order (founder rule C). At most one open per order.
+export const cancellationRequests = pgTable(
+  "cancellation_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    status: text("status", { enum: ["open", "approved", "rejected"] }).notNull(),
+    reason: text("reason"),
+    createdAt: createdAt(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewedByUserId: userRef("reviewed_by_user_id"),
+  },
+  (t) => [
+    uniqueIndex("cancellation_requests_open_key").on(t.orderId).where(sql`${t.status} = 'open'`),
+    check("cancellation_requests_status_valid", sql`${t.status} in ('open', 'approved', 'rejected')`),
+    check("cancellation_requests_reason_valid", sql`btrim(${t.reason}) <> '' and length(${t.reason}) <= 500`),
+    check(
+      "cancellation_requests_review_consistent",
+      sql`(${t.status} = 'open') = (${t.reviewedAt} is null) and (${t.reviewedAt} is null) = (${t.reviewedByUserId} is null)`,
+    ),
+  ],
+);
+
+// A return or exchange request (founder rules E, F, M). At most one open per order.
+export const returns = pgTable(
+  "returns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    kind: text("kind", { enum: ["return", "exchange"] }).notNull(),
+    reason: text("reason", { enum: ["size_or_preference", "wrong_or_defective"] }).notNull(),
+    // Who bears return shipping follows from the reason (rule F); the actual cost is recorded separately.
+    shippingPaidBy: text("shipping_paid_by", { enum: ["customer", "business"] }).notNull(),
+    returnShippingCostPaisa: bigint("return_shipping_cost_paisa", { mode: "number" }),
+    status: text("status", { enum: ["requested", "received", "approved", "rejected", "completed"] }).notNull(),
+    note: text("note"),
+    createdAt: createdAt(),
+    receivedAt: timestamp("received_at", { withTimezone: true }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdByUserId: userRef("created_by_user_id").notNull(),
+  },
+  (t) => [
+    uniqueIndex("returns_open_key").on(t.orderId).where(sql`${t.status} in ('requested', 'received', 'approved')`),
+    check("returns_kind_valid", sql`${t.kind} in ('return', 'exchange')`),
+    check("returns_reason_valid", sql`${t.reason} in ('size_or_preference', 'wrong_or_defective')`),
+    check(
+      "returns_shipping_responsibility",
+      sql`${t.shippingPaidBy} = case when ${t.reason} = 'wrong_or_defective' then 'business' else 'customer' end`,
+    ),
+    check("returns_shipping_cost_valid", sql`${t.returnShippingCostPaisa} >= 0 and ${t.returnShippingCostPaisa} <= 1000000`),
+    check("returns_status_valid", sql`${t.status} in ('requested', 'received', 'approved', 'rejected', 'completed')`),
+    check("returns_note_valid", sql`btrim(${t.note}) <> '' and length(${t.note}) <= 500`),
+    check(
+      "returns_dates_consistent",
+      sql`(${t.status} = 'requested') = (${t.receivedAt} is null) and (${t.status} in ('requested', 'received')) = (${t.decidedAt} is null) and (${t.status} = 'completed') = (${t.completedAt} is not null)`,
+    ),
+  ],
+);
+
+export const returnItems = pgTable(
+  "return_items",
+  {
+    returnId: uuid("return_id")
+      .notNull()
+      .references(() => returns.id, { onDelete: "restrict" }),
+    orderItemId: uuid("order_item_id")
+      .notNull()
+      .references(() => orderItems.id, { onDelete: "restrict" }),
+    quantity: integer("quantity").notNull(),
+  },
+  (t) => [
+    primaryKey({ name: "return_items_pkey", columns: [t.returnId, t.orderItemId] }),
+    check("return_items_quantity_positive", sql`${t.quantity} > 0`),
+  ],
+);
+
+// Returned or RTO units awaiting inspection: never part of on_hand until a passed inspection restocks them
+// through exactly one return_restock ledger row (founder rule G). A failed inspection stays out of stock.
+export const quarantineItems = pgTable(
+  "quarantine_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    orderItemId: uuid("order_item_id")
+      .notNull()
+      .references(() => orderItems.id, { onDelete: "restrict" }),
+    variantId: uuid("variant_id")
+      .notNull()
+      .references(() => variants.id, { onDelete: "restrict" }),
+    source: text("source", { enum: ["rto", "return"] }).notNull(),
+    returnId: uuid("return_id").references(() => returns.id, { onDelete: "restrict" }),
+    quantity: integer("quantity").notNull(),
+    status: text("status", { enum: ["awaiting_inspection", "restocked", "rejected"] }).notNull(),
+    note: text("note"),
+    restockMovementId: bigint("restock_movement_id", { mode: "number" })
+      .unique("quarantine_items_restock_movement_key")
+      .references(() => stockMovements.id, { onDelete: "restrict" }),
+    receivedAt: createdAt(),
+    inspectedAt: timestamp("inspected_at", { withTimezone: true }),
+    inspectedByUserId: userRef("inspected_by_user_id"),
+  },
+  (t) => [
+    index("quarantine_items_order_id_idx").on(t.orderId),
+    check("quarantine_items_source_valid", sql`${t.source} in ('rto', 'return')`),
+    check("quarantine_items_return_link", sql`(${t.source} = 'return') = (${t.returnId} is not null)`),
+    check("quarantine_items_quantity_positive", sql`${t.quantity} > 0`),
+    check("quarantine_items_status_valid", sql`${t.status} in ('awaiting_inspection', 'restocked', 'rejected')`),
+    check("quarantine_items_note_valid", sql`btrim(${t.note}) <> '' and length(${t.note}) <= 500`),
+    check(
+      "quarantine_items_inspection_consistent",
+      sql`(${t.status} = 'awaiting_inspection') = (${t.inspectedAt} is null) and (${t.inspectedAt} is null) = (${t.inspectedByUserId} is null) and (${t.status} = 'restocked') = (${t.restockMovementId} is not null)`,
+    ),
+  ],
+);
+
+// Append-only COD money record (trigger, migration 0008): courier collection, settlement to the Owner, and
+// manual refunds (founder rules J and M). orders keeps the running totals, updated in the same transaction.
+export const paymentEntries = pgTable(
+  "payment_entries",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    kind: text("kind", { enum: ["collected", "settled", "refunded"] }).notNull(),
+    amountPaisa: bigint("amount_paisa", { mode: "number" }).notNull(),
+    occurredOn: date("occurred_on", { mode: "string" }).notNull(),
+    method: text("method", { enum: ["bkash", "nagad", "bank_transfer"] }),
+    reference: text("reference"),
+    returnId: uuid("return_id").references(() => returns.id, { onDelete: "restrict" }),
+    actorUserId: userRef("actor_user_id").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("payment_entries_order_id_idx").on(t.orderId),
+    check("payment_entries_kind_valid", sql`${t.kind} in ('collected', 'settled', 'refunded')`),
+    check("payment_entries_amount_valid", sql`${t.amountPaisa} > 0 and ${t.amountPaisa} <= 9007199254740991`),
+    check(
+      "payment_entries_refund_consistent",
+      sql`(${t.kind} = 'refunded') = (${t.method} is not null) and (${t.kind} = 'refunded') = (${t.returnId} is not null)`,
+    ),
+    check("payment_entries_method_valid", sql`${t.method} in ('bkash', 'nagad', 'bank_transfer')`),
+    check("payment_entries_reference_valid", sql`btrim(${t.reference}) <> '' and length(${t.reference}) <= 100`),
+  ],
+);
+
+// Guest tracking credentials (founder rule K, S-15). Only the SHA-256 digest of the random token is stored.
+// One active link per order; a revoked link never works again. Lifetime: until 30 days after closed_at.
+export const orderTrackingTokens = pgTable(
+  "order_tracking_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    tokenHash: text("token_hash").notNull().unique("order_tracking_tokens_token_hash_key"),
+    createdAt: createdAt(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("order_tracking_tokens_active_key").on(t.orderId).where(sql`${t.revokedAt} is null`),
+    check("order_tracking_tokens_hash_format", sql`${t.tokenHash} ~ '^[0-9a-f]{64}$'`),
+  ],
+);
+
+// Public tracking request counters. No client address is trusted, so the keys are global buckets
+// ('lookup', 'failure'); a per-client limit waits for the hosting and proxy decision.
+export const trackingRateLimits = pgTable(
+  "tracking_rate_limits",
+  {
+    bucket: text("bucket").primaryKey(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    count: integer("count").notNull(),
+  },
+  (t) => [
+    check("tracking_rate_limits_bucket_valid", sql`${t.bucket} in ('lookup', 'failure')`),
+    check("tracking_rate_limits_count_positive", sql`${t.count} >= 1`),
   ],
 );

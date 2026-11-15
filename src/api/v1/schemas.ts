@@ -99,7 +99,7 @@ export const stockLevelSchema = z
 export const stockMovementSchema = z
   .object({
     id: z.int().min(1),
-    type: z.enum(["receipt", "adjustment"]),
+    type: z.enum(["receipt", "adjustment", "dispatch", "return_restock"]).meta({ description: "dispatch and return_restock were added in 1.3.0; the list may grow." }),
     quantityDelta: z.int(),
     reason: z.string().nullable(),
     actor: z.object({

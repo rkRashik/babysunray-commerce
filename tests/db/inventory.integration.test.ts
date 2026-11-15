@@ -184,7 +184,11 @@ describe("transaction integrity", () => {
       ["truncate stock_movements", []],
     ] as const;
     for (const [statement, params] of attempts) {
-      expect(await errorCodeOf(pool.query(statement, [...params]))).toBe("23001");
+      const code = await errorCodeOf(pool.query(statement, [...params]));
+      // Since migration 0008 quarantine_items references the ledger, so PostgreSQL refuses TRUNCATE for that
+      // foreign key (0A000) before the trigger (23001) runs. Either way nothing is removed.
+      if (statement.startsWith("truncate")) expect(["23001", "0A000"]).toContain(code);
+      else expect(code).toBe("23001");
     }
     expect((await listStockMovements(db, sku)).map((m) => m.quantityDelta)).toEqual([1]);
   });

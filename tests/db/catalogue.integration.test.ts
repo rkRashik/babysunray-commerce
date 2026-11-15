@@ -96,7 +96,7 @@ describe("variants", () => {
       pricePaisa: 120_000,
     });
     expect(variant).toMatchObject({ sku: "CAT-NORM-01", pricePaisa: 120_000, status: "active", size: "6-12M" });
-    expect(await getStockLevel(db, "cat-norm-01")).toEqual({ variantId: variant.id, onHand: 0 });
+    expect(await getStockLevel(db, "cat-norm-01")).toEqual({ variantId: variant.id, onHand: 0, reserved: 0, available: 0 });
   });
 
   it("rejects duplicate SKUs that differ only in case or surrounding whitespace", async () => {

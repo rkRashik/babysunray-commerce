@@ -6,6 +6,10 @@ export const PERMISSIONS = [
   "stock:read",
   "stock:receive",
   "stock:adjust",
+  "orders:read",
+  "orders:write",
+  "payments:record",
+  "settings:write",
   "users:manage",
 ] as const;
 

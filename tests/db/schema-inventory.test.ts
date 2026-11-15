@@ -83,15 +83,27 @@ describe("destructive reset statements", () => {
       '"public"."auth_sessions"',
       '"public"."auth_users"',
       '"public"."auth_verifications"',
+      '"public"."cancellation_requests"',
+      '"public"."delivery_zones"',
       '"public"."idempotency_records"',
       '"public"."inventory_balances"',
+      '"public"."order_events"',
+      '"public"."order_items"',
+      '"public"."order_tracking_tokens"',
+      '"public"."orders"',
+      '"public"."payment_entries"',
       '"public"."products"',
+      '"public"."quarantine_items"',
+      '"public"."return_items"',
+      '"public"."returns"',
       '"public"."stock_movements"',
+      '"public"."stock_reservations"',
+      '"public"."tracking_rate_limits"',
       '"public"."user_access"',
       '"public"."variants"',
     ]);
     expect(fn).toBe(
-      'drop function if exists "public"."stock_movements_reject_change"(), "public"."user_access_revoke_sessions"() restrict;',
+      'drop function if exists "public"."stock_movements_reject_change"(), "public"."user_access_revoke_sessions"(), "public"."append_only_reject_change"() restrict;',
     );
     expect(history).toBe('drop table if exists "drizzle"."__drizzle_migrations" restrict;');
   });

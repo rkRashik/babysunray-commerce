@@ -76,7 +76,14 @@ export async function createTestUser(
 export async function clearAuthState(pool: Pool): Promise<void> {
   await pool.query("delete from auth_rate_limits");
   await pool.query(
-    "delete from auth_users where id not in (select actor_user_id from stock_movements where actor_user_id is not null)",
+    `delete from auth_users u where not exists (select 1 from stock_movements where actor_user_id = u.id)
+       and not exists (select 1 from order_events where actor_user_id = u.id)
+       and not exists (select 1 from orders where created_by_user_id = u.id)
+       and not exists (select 1 from delivery_zones where updated_by_user_id = u.id)
+       and not exists (select 1 from payment_entries where actor_user_id = u.id)
+       and not exists (select 1 from returns where created_by_user_id = u.id)
+       and not exists (select 1 from cancellation_requests where reviewed_by_user_id = u.id)
+       and not exists (select 1 from quarantine_items where inspected_by_user_id = u.id)`,
   );
 }
 

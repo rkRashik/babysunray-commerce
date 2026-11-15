@@ -3,6 +3,7 @@ import type { Db } from "@/db/database";
 import { actorFor, assertPermission, type Principal } from "../auth/principal";
 import { normalizeSku } from "../catalogue/rules";
 import { type Once, runOnce } from "../idempotency/service";
+import { releaseOverdue } from "../orders/operations";
 import { adjustStock, getStockMovement, receiveStock, type StockMovement } from "./service";
 
 // Stock operations for every client (the /api/v1 routes and the Owner Office). Each checks the permission
@@ -43,6 +44,8 @@ export async function adjustStockOnce(
   input: { sku: string; quantityDelta: number; reason: string },
 ): Promise<Once<StockOperationResult>> {
   const user = assertPermission(principal, "stock:adjust");
+  // Holds of orders past their verification deadline are released first, so they never block a correction.
+  await releaseOverdue(db);
   const request = { sku: normalizeSku(input.sku), quantityDelta: input.quantityDelta, reason: input.reason };
   return runOnce(
     db,

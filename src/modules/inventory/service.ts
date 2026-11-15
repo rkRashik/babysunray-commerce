@@ -24,7 +24,7 @@ export async function receiveStock(db: Db, input: StockReceipt): Promise<StockCh
   });
 }
 
-/** Corrects a SKU's on-hand stock up or down with a required reason. Never takes stock below zero. */
+/** Corrects a SKU's on-hand stock up or down with a required reason. Never below the units reserved for orders. */
 export async function adjustStock(db: Db, input: StockAdjustment): Promise<StockChange> {
   return recordMovement(db, {
     sku: normalizeSku(input.sku),
@@ -57,13 +57,14 @@ async function recordMovement(db: Db, m: Movement): Promise<StockChange> {
         .where(
           and(
             eq(inventoryBalances.variantId, variantId),
-            sql`${inventoryBalances.onHand} + ${m.quantityDelta} >= 0`,
+            // Reserved units belong to orders: a decrease may not take on-hand below them (and never below zero).
+            sql`${inventoryBalances.onHand} + ${m.quantityDelta} >= ${inventoryBalances.reserved}`,
           ),
         )
         .returning({ onHand: inventoryBalances.onHand });
       // Every variant gets a balance row at creation, so a failed increase means that invariant broke.
       if (!balance && m.quantityDelta > 0) throw new Error("Inventory balance row is missing for this variant.");
-      if (!balance) throw new DomainError("INSUFFICIENT_STOCK", "Not enough stock on hand for this change.");
+      if (!balance) throw new DomainError("INSUFFICIENT_STOCK", "Not enough stock on hand for this change (units reserved for orders cannot be removed).");
 
       const [movement] = await tx
         .insert(stockMovements)
@@ -87,10 +88,17 @@ async function recordMovement(db: Db, m: Movement): Promise<StockChange> {
   }
 }
 
-/** Current on-hand stock for a SKU. */
-export async function getStockLevel(db: Db, rawSku: string): Promise<{ variantId: string; onHand: number }> {
+export type StockLevel = { variantId: string; onHand: number; reserved: number; available: number };
+
+/** Current stock for a SKU: physical on-hand, units reserved for orders, and what is still available. */
+export async function getStockLevel(db: Db, rawSku: string): Promise<StockLevel> {
   const [row] = await db
-    .select({ variantId: inventoryBalances.variantId, onHand: inventoryBalances.onHand })
+    .select({
+      variantId: inventoryBalances.variantId,
+      onHand: inventoryBalances.onHand,
+      reserved: inventoryBalances.reserved,
+      available: sql<number>`${inventoryBalances.onHand} - ${inventoryBalances.reserved}`.mapWith(Number),
+    })
     .from(variants)
     .innerJoin(inventoryBalances, eq(inventoryBalances.variantId, variants.id))
     .where(eq(variants.sku, normalizeSku(rawSku)));

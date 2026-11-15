@@ -29,6 +29,7 @@ npm run db:generate  # generate a SQL migration from src/db/schema.ts (review it
 npm run db:check     # check the migration files and snapshots are consistent
 npm run db:migrate   # apply pending migrations to the local babysunray_dev database only
 npm run auth:bootstrap-owner  # create the first Owner in babysunray_dev, interactively (see Authentication)
+npm run orders:expire-verification  # release holds of orders past their 24-hour verification deadline (babysunray_dev only; see Orders)
 ```
 
 `npm run test:db` fails, rather than skipping, when `TEST_DATABASE_URL` is missing or PostgreSQL is unreachable. Before it changes anything it checks that:
@@ -109,6 +110,21 @@ Known limits:
 - Ledger rows record a `system` actor or an authenticated `user` actor (the user's id, from a verified session; ADR-0003). Changes made through the API or the Office record the signed-in user.
 - The append-only ledger trigger can be removed by the table owner or a superuser (ADR-0002).
 - Drizzle error messages include query parameters; never log or display them as is.
+
+## Orders
+
+Internal orders under the founder-approved rules in [order-policy-decisions.md](docs/product/order-policy-decisions.md) (states, transitions and defaults there). Server-only services in `src/modules/orders` (`service.ts` submission and lifecycle, `aftercare.ts` COD, returns and inspection, `delivery.ts`, `tracking.ts`, `queries.ts`), with idempotent, permission-checked operations in `operations.ts`; stock holds live in `src/modules/inventory/reservations.ts`. Migration `0008`. **No public checkout:** orders are entered by the Owner (Messenger, WhatsApp, other); the website source exists for later.
+
+| Capability | How |
+|---|---|
+| Submit | Validates contact (Bangladesh mobile normalised to `01XXXXXXXXX`), merges lines per SKU, snapshots names, variant and unit price, adds the active zone's delivery charge, computes the total, and reserves every line in the same transaction, or creates nothing. No backorders. |
+| Stock | `inventory_balances.reserved` with `0 <= reserved <= on_hand`; available = on-hand − reserved. Holds are `stock_reservations` rows ending exactly once (released or consumed). Adjustments cannot take on-hand below reserved. Dispatch lowers on-hand and reserved together and writes one `dispatch` ledger row per line; a passed inspection writes one `return_restock` row. Locks: order row first, then balances in variant order. |
+| Lifecycle | Four separate columns: order, fulfilment, payment (derived from the amounts; a database check enforces it), return. Every change names the order version the client saw (`VERSION_CONFLICT` for a stale screen) and appends to `order_events` (append-only, actor recorded). |
+| Verification expiry | Deadline 24 hours after submission. Submissions and stock adjustments release overdue holds first, and a late confirmation reserves again only if stock is available, so correctness never depends on a scheduler. `npm run orders:expire-verification` (local `babysunray_dev` only) is the repeatable clean-up batch. **No scheduler runs it**: with production hosting, the host's scheduler should run the same operation every few minutes. |
+| COD, returns, RTO | Manual collection and settlement (`payment_entries`, append-only), partial amounts, never above expected or collected; returns and exchanges within 7 days of delivery, quarantine and inspection before any restock, refunds only for approved returns and never above money collected; RTO into quarantine with its charge recorded apart. |
+| Guest tracking | A 256-bit random token per order, only its SHA-256 digest stored, revocable and regenerable, valid until 30 days after closing; minimal masked view; customer cancellation by stage. |
+
+Known limits: exchange execution is a separate assisted order (who pays the replacement's delivery is not decided); the 7-working-day refund deadline is shown, not computed; tracking lookups are rate-limited globally because no client address is trusted yet.
 
 ## Authentication
 

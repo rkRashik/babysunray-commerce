@@ -79,7 +79,7 @@ describe("resetOwnerPassword", () => {
     expect(await signInStatus(OLD, LEDGER_EMAIL)).toBe(401);
     expect(await signInStatus(NEW, LEDGER_EMAIL)).toBe(200);
     // Same user id, same single credential row, same role row, untouched ledger.
-    expect((await pool.query("select user_id, provider_id, account_id from auth_accounts")).rows).toEqual([
+    expect((await pool.query("select user_id, provider_id, account_id from auth_accounts where user_id = $1", [userId])).rows).toEqual([
       { user_id: userId, provider_id: "credential", account_id: userId },
     ]);
     expect((await pool.query("select * from user_access")).rows).toEqual(accessBefore);

@@ -57,6 +57,13 @@
       "when": 1794713353567,
       "tag": "0007_draft_catalogue_versions",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794718500240,
+      "tag": "0008_orders_reservations_cod",
+      "breakpoints": true
     }
   ]
 }
