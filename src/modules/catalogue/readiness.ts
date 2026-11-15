@@ -10,6 +10,21 @@ import { languages } from "./content";
 export type ReadinessBasis = "approved" | "pending" | "recommended";
 export type ReadinessItem = { id: string; basis: ReadinessBasis; met: boolean; source: string; label: string; detail: string };
 
+/** Every checklist item with its basis, source and label, in display order (the product-level ones, without the store-wide policies). */
+export const READINESS_ITEMS = [
+  { id: "name", basis: "approved", source: "S-1", label: "Product name in English and Bangla" },
+  { id: "description", basis: "approved", source: "S-1", label: "Description in English and Bangla" },
+  { id: "variant", basis: "approved", source: "I-9, I-10", label: "At least one active SKU with a price" },
+  { id: "measurements", basis: "pending", source: "I-6, S-6", label: "Measurements in cm for every size on sale" },
+  { id: "fabric", basis: "pending", source: "I-6, S-6, S-11", label: "Fabric statement in English and Bangla, confirmed by you" },
+  { id: "care", basis: "pending", source: "S-6", label: "Care instructions in English and Bangla" },
+  { id: "sizes", basis: "recommended", source: "engineering", label: "Every active SKU has a size" },
+  { id: "category", basis: "recommended", source: "engineering", label: "Category chosen" },
+  { id: "photo", basis: "recommended", source: "engineering (I-5 open)", label: "At least one photo" },
+  { id: "alt", basis: "recommended", source: "engineering (S-13)", label: "Every photo described in English and Bangla (alt text)" },
+] as const satisfies readonly { id: string; basis: ReadinessBasis; source: string; label: string }[];
+export type PreparationItem = (typeof READINESS_ITEMS)[number]["id"];
+
 export type ReadinessInput = {
   nameEn: string | null;
   nameBn: string | null;

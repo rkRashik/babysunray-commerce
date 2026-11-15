@@ -110,6 +110,8 @@ Implemented as server-only services in `src/modules/catalogue` and `src/modules/
 | Product content (migration `0011`) | Fabric, care and optional size guidance in English and Bangla, an Owner-defined category (`product_categories`), a featured flag, and a size chart per size and measuring point stored as whole millimetres and shown as centimetres with one decimal (`src/modules/catalogue/content.ts`). The fabric statement counts as confirmed only after the Owner ticks a confirmation, which records who and when; changing the fabric text clears it. Nothing is translated or generated. Same versions, locks and idempotent operations as other edits. |
 | Publishing readiness | `evaluateReadiness` (`src/modules/catalogue/readiness.ts`): an advisory, read-only checklist that separates items required by approved requirements (S-1 bilingual name and description, an active priced SKU), proposed rules still waiting for the founder (I-6, S-6: measurements, a confirmed fabric statement, care, the delivery and return explanation) and engineering recommendations (sizes, category, a photo, alt text). **There is no publish action**: nothing makes a product public. |
 | Product photos | See Product photos below. |
+| Bulk import of new drafts (Office → Import) | CSV UTF-8 or XLSX, create-only and all or nothing, previewed with every problem by row and column before anything is saved, once per idempotency key, through the normal catalogue services; never publishes, confirms fabric or receives stock. Format and limits: [catalogue-import.md](docs/operations/catalogue-import.md). Audited in `catalogue_imports` (migration `0012`). |
+| Catalogue preparation | `src/modules/catalogue/preparation.ts`: the readiness checklist as SQL (tested to agree with `evaluateReadiness`), for counts per item and the product list's "still missing" filter. Advisory only. |
 | Search products | `listProducts` with `q`: slug, English or Bangla name, or any SKU, case-insensitive, NFC-normalised, `%` `_` `\` escaped, bound parameter, at most 100 characters. No index: it reads every product row, fine for a small catalogue. |
 | Receive stock; adjust stock with a reason | One transaction per change: conditional balance update plus ledger row. Stock never goes below zero. |
 | Read a SKU's balance and movement history | For internal use and tests. |
@@ -230,7 +232,9 @@ A minimal, functional internal area at `/office` (`src/app/office`), built with 
 | Screen | Does | Permission |
 |---|---|---|
 | `/office/login` | Email and password sign-in | none |
-| `/office` | Products (draft, archived), oldest first, 25 per page; search by English or Bangla name, slug or SKU, status filter, next and first page, all kept in the URL | `catalog:read` |
+| `/office` | Products (draft, archived), oldest first, 25 per page; search by English or Bangla name, slug or SKU; filters for status, category, stock and what is still missing; each draft shows how much of the advisory readiness checklist it meets with links to what is missing; next and first page; all kept in the URL | `catalog:read` |
+| `/office/import` | Bulk import of new draft products: templates, check (preview, nothing saved), problem list, import, recent imports | `catalog:read`, `catalog:write` |
+| `/office/catalogue-preparation` | How many drafts still need each item, grouped as approved requirements, unapproved publication proposals and optional suggestions; each count links to the matching list | `catalog:read` |
 | `/office/products/new` | Create a draft product (English and Bangla fields) | `catalog:write` |
 | `/office/products/{id}` | Details, variants with price (BDT) and on-hand stock; edit links, add a variant, deactivate one, archive the product (both ask for confirmation first) | `catalog:read`, `stock:read`; changes `catalog:write` |
 | `/office/products/{id}` (since H.18) | Also: every content field with which languages are missing, the advisory readiness checklist, the size chart, photo thumbnails and a link to the storefront preview | as above |
@@ -276,6 +280,7 @@ Local tooling only (`src/db/backup.mts`, `scripts/backup-*.mts`); how to use it 
 | [ADR-0003: Authentication foundation](docs/adr/0003-authentication-foundation.md) | Better Auth, sessions, Owner bootstrap, permissions, user actors | Draft — Founder Review (decisions founder-approved) |
 | [ADR-0004: API v1 and Bearer transport](docs/adr/0004-api-v1-and-bearer-transport.md) | Versioned API, Bearer-only transport, OpenAPI, body limits, CORS policy, rate limits | Draft — Founder Review |
 | [ADR-0005: Operation idempotency](docs/adr/0005-operation-idempotency.md) | One key per user and operation, committed with the operation | Draft — Founder Review |
+| [Bulk catalogue import](docs/operations/catalogue-import.md) | The import file format, rules, limits and safety | Draft — Founder Review |
 | [Installing a separate copy](docs/operations/installation.md) | Setting up another business's local installation with fictional data; what to change; licences to review | Draft — Founder Review |
 | [ADR-0006: Product photo storage](docs/adr/0006-product-media-storage.md) | A storage interface with a local development folder outside the repository, a manifest, fail-closed in production | Draft — Founder Review |
 | [API guide](docs/api/README.md) | Calling `/api/v1`, errors, pagination, compatibility rules | Draft — Founder Review |

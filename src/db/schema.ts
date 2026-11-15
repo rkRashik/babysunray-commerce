@@ -80,6 +80,10 @@ export const products = pgTable(
         and btrim(${t.careEn}) <> '' and length(${t.careEn}) <= 1000 and btrim(${t.careBn}) <> '' and length(${t.careBn}) <= 1000
         and btrim(${t.sizeGuidanceEn}) <> '' and length(${t.sizeGuidanceEn}) <= 1000 and btrim(${t.sizeGuidanceBn}) <> '' and length(${t.sizeGuidanceBn}) <= 1000`,
     ),
+    // Migration 0012: the Office list pages by (created_at, id) and filters by category; measured on 5,000
+    // fictional products (first page 2.5 ms → 0.05 ms, category filter 0.96 ms → 0.26 ms).
+    index("products_created_at_id_idx").on(t.createdAt, t.id),
+    index("products_category_id_idx").on(t.categoryId),
     check(
       "products_fabric_confirmation_consistent",
       sql`(${t.fabricConfirmedAt} is null) = (${t.fabricConfirmedByUserId} is null) and (${t.fabricConfirmedAt} is null or ${t.fabricEn} is not null or ${t.fabricBn} is not null)`,
@@ -813,6 +817,30 @@ export const exportRequests = pgTable(
     check("export_requests_format_valid", sql`${t.format} in ('xlsx', 'csv', 'json')`),
     check("export_requests_scope_valid", sql`${t.scope} in ('complete', 'filtered')`),
     check("export_requests_filters_object", sql`jsonb_typeof(${t.filters}) = 'object'`),
+  ],
+);
+
+// Append-only record of every bulk catalogue import (migration 0012; trigger as for export_requests): who,
+// when, which file (its SHA-256, never its content) and what it created. Imports only create draft products
+// and SKUs with zero stock; the products themselves are ordinary catalogue rows afterwards.
+export const catalogueImports = pgTable(
+  "catalogue_imports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorUserId: userRef("actor_user_id").notNull(),
+    format: text("format", { enum: ["csv", "xlsx"] }).notNull(),
+    fileSha256: text("file_sha256").notNull(),
+    productsCreated: integer("products_created").notNull(),
+    variantsCreated: integer("variants_created").notNull(),
+    productIds: jsonb("product_ids").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("catalogue_imports_created_at_idx").on(t.createdAt),
+    check("catalogue_imports_format_valid", sql`${t.format} in ('csv', 'xlsx')`),
+    check("catalogue_imports_sha256_format", sql`${t.fileSha256} ~ '^[0-9a-f]{64}$'`),
+    check("catalogue_imports_counts_valid", sql`${t.productsCreated} >= 1 and ${t.variantsCreated} >= ${t.productsCreated}`),
+    check("catalogue_imports_product_ids_array", sql`jsonb_typeof(${t.productIds}) = 'array' and jsonb_array_length(${t.productIds}) = ${t.productsCreated}`),
   ],
 );
 

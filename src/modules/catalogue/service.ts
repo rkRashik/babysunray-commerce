@@ -11,6 +11,8 @@ import { inventoryBalances, productCategories, productMeasurements, productMedia
 import type { Actor } from "../actor";
 import { DomainError } from "../domain-error";
 import { contentText, type Measurement, MEASUREMENT_POINTS, validateMeasurements } from "./content";
+import { MET } from "./preparation";
+import type { PreparationItem } from "./readiness";
 import { normalizeSearch, normalizeSku, optionalText, validateId, validatePricePaisa, validateSlug, validateVersion } from "./rules";
 
 export type Product = typeof products.$inferSelect;
@@ -335,9 +337,22 @@ function matches(term: string) {
  */
 export async function listProducts(
   db: Db,
-  options: { limit: number; status?: Product["status"]; after?: ProductKey; q?: string },
+  options: {
+    limit: number;
+    status?: Product["status"];
+    after?: ProductKey;
+    q?: string;
+    /** Only products in this category. */
+    categoryId?: string;
+    /** Only products that do not yet meet this readiness item (preparation.ts). */
+    missing?: PreparationItem;
+    /** "in": some active SKU has units available; "out": none has. */
+    stock?: "in" | "out";
+  },
 ): Promise<ProductPage> {
-  const { limit, status, after } = options;
+  const { limit, status, after, missing, stock } = options;
+  const categoryId = options.categoryId === undefined ? undefined : validateId(options.categoryId, "categoryId");
+  const anyAvailable = sql`exists (select 1 from ${variants} sv join ${inventoryBalances} sb on sb.variant_id = sv.id where sv.product_id = ${products.id} and sv.status = 'active' and sb.on_hand - sb.reserved > 0)`;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new DomainError("INVALID_INPUT", "limit must be 1 to 100.");
   const term = options.q === undefined ? null : normalizeSearch(options.q);
   const rows = await db
@@ -347,6 +362,9 @@ export async function listProducts(
       and(
         status ? eq(products.status, status) : undefined,
         term ? matches(term) : undefined,
+        categoryId ? eq(products.categoryId, categoryId) : undefined,
+        missing ? sql`not ${MET[missing]}` : undefined,
+        stock === "in" ? anyAvailable : stock === "out" ? sql`not ${anyAvailable}` : undefined,
         after
           ? sql`(${products.createdAt}, ${products.id}) > (${after.createdAt}::timestamptz, ${validateId(after.id, "cursor")}::uuid)`
           : undefined,

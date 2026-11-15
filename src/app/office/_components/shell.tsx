@@ -21,7 +21,7 @@ export function OfficeShell({
   notice?: string;
   /** Where this page sits, from Products down; the page itself is the title. */
   breadcrumbs?: Crumb[];
-  current?: "dashboard" | "products" | "new" | "categories" | "orders" | "delivery" | "reports" | "counts" | "exports" | "preview";
+  current?: "dashboard" | "products" | "new" | "import" | "preparation" | "categories" | "orders" | "delivery" | "reports" | "counts" | "exports" | "media" | "preview";
 }) {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
@@ -43,6 +43,12 @@ export function OfficeShell({
             </Link>
             <Link href="/office/products/new" aria-current={current === "new" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
               New product
+            </Link>
+            <Link href="/office/import" aria-current={current === "import" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
+              Import
+            </Link>
+            <Link href="/office/catalogue-preparation" aria-current={current === "preparation" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
+              Preparation
             </Link>
             <Link href="/office/categories" aria-current={current === "categories" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
               Categories
