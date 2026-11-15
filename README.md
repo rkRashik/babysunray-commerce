@@ -120,6 +120,7 @@ Implemented with Better Auth 1.7.25 ([ADR-0003](docs/adr/0003-authentication-fou
 | Losing access | Disabling a user (`user_access.disabled_at`) or removing the access row deletes all of that user's sessions at once (migration `0005`). |
 | Bearer tokens for non-browser clients | Only on `/api/v1` and Better Auth's own endpoints; never accepted by browser-side code, never sent to a browser (ADR-0004). |
 | First Owner | `npm run auth:bootstrap-owner` (below). |
+| Lost Owner password, local installation | `npm run auth:reset-owner-password` (below). Not a production recovery path. |
 
 Setup: add `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` to `.env.local` (see `.env.example`; generate the secret with `openssl rand -base64 32`), then run `npm run db:migrate`. The application refuses to start authentication with a missing, short or placeholder secret, a URL that is not a bare origin, plain http outside localhost or in production, or any of `BETTER_AUTH_TRUSTED_ORIGINS`, `BETTER_AUTH_SECRETS` and `BETTER_AUTH_TELEMETRY`.
 
@@ -131,9 +132,17 @@ npm run auth:bootstrap-owner
 
 It works only in an interactive terminal, only against the local `babysunray_dev` database (the same checks as `db:migrate`), and only while no account exists. It asks for the email and display name, then the password twice without showing it (15 to 128 characters). Nothing is passed on the command line or written to a log. To start again on a development installation you would need to remove the accounts by hand; there is no command for that.
 
+**Resetting a lost Owner password on a local installation** (you run this yourself):
+
+```
+npm run auth:reset-owner-password
+```
+
+The same restrictions as the bootstrap apply: interactive terminal only, local `babysunray_dev` only (URL checks, then PostgreSQL confirms the database, role, non-superuser session and loopback server), no value on the command line. Before asking anything it checks that the installation has exactly one active Owner; it then asks for that Owner's email and the new password twice without showing it (15 to 128 characters, the sign-in policy). In one transaction, under locks that also serialise a concurrent reset or bootstrap, it checks again that the email belongs to the one active Owner with exactly one password credential, replaces that credential's hash (Better Auth's scrypt) and deletes every session of that Owner, so all signed-in browsers and Bearer tokens stop working at once. Any failure rolls the whole change back. It never creates an account, changes a role, or touches another user, the stock ledger or the Owner's id. It prints only how many sessions were signed out. **Limits:** whoever can run it against the database can take over the Owner account; that is already true of anyone with write access to the authentication tables, so local database and operator access is the trust boundary. It is not an approved production account-recovery mechanism (OF-5 stays open), and there is no HTTP or email reset.
+
 Known limits:
 
-- No account recovery: password reset, email verification and any email sending are disabled. If the Owner password is lost, there is no supported recovery path yet. No 2FA.
+- No production account recovery: password reset over HTTP, email verification and any email sending are disabled. A lost Owner password can be reset only by an operator on a local installation (above). No 2FA.
 - No native app exists. A non-browser client can obtain a Bearer token (ADR-0004); it lasts as long as a browser session.
 - Rate limiting is stored in PostgreSQL (3 sign-in attempts per 10 seconds per client). No client header is trusted for the client address, so locally every request counts as one client, and in production all clients would share the limit until a proxy setup is chosen with hosting.
 - Tested locally only. Production cookie, proxy, secret rotation and database-role settings wait for the hosting decision; nothing here is described as production-ready.

@@ -17,6 +17,7 @@
     "db:check": "drizzle-kit check",
     "db:migrate": "node scripts/migrate-dev.mts",
     "auth:bootstrap-owner": "node scripts/bootstrap-owner.mts",
+    "auth:reset-owner-password": "node scripts/reset-owner-password.mts",
     "test:e2e": "playwright test",
     "test:contract": "vitest run tests/api && vitest run --config vitest.integration.config.mts tests/db/api.integration.test.ts tests/db/api-write.integration.test.ts"
   },

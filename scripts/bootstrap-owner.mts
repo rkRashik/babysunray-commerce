@@ -3,7 +3,6 @@
 // without echo), so nothing lands in command-line arguments, shell history or logs. It refuses any
 // database other than babysunray_dev (same checks as `npm run db:migrate`) and any installation that
 // already has an account. Run with Node 22.18 or newer (native TypeScript type stripping).
-import { createInterface } from "node:readline/promises";
 import pg from "pg";
 import {
   assertConnectedIdentity,
@@ -13,65 +12,13 @@ import {
   sessionConfig,
 } from "../src/db/connection-guard.mts";
 import { bootstrapFirstOwner, countAuthUsers } from "../src/modules/auth/owner-bootstrap.mts";
-
-async function askVisible(question: string): Promise<string> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-  try {
-    return await rl.question(question);
-  } finally {
-    rl.close();
-  }
-}
-
-// Reads one line in raw mode without echoing it.
-function askHidden(question: string): Promise<string> {
-  const stdin = process.stdin;
-  return new Promise((resolve, reject) => {
-    let value = "";
-    const finish = () => {
-      stdin.off("data", onData);
-      stdin.off("end", onEnd);
-      stdin.setRawMode(false);
-      stdin.pause();
-      process.stdout.write("\n");
-    };
-    const onData = (chunk: string) => {
-      for (const ch of chunk) {
-        if (ch === "\r" || ch === "\n") {
-          finish();
-          resolve(value);
-          return;
-        }
-        if (ch === "\u0003" || ch === "\u0004") {
-          finish();
-          reject(new Error("Cancelled."));
-          return;
-        }
-        if (ch === "\u007f" || ch === "\b") value = value.slice(0, -1);
-        else value += ch;
-      }
-    };
-    // Input closed before Enter (for example Ctrl+Z on Windows): stop with a message, never silently.
-    const onEnd = () => {
-      finish();
-      reject(new Error("Input closed. Nothing was created."));
-    };
-    process.stdout.write(question);
-    stdin.setEncoding("utf8");
-    stdin.setRawMode(true);
-    stdin.resume();
-    stdin.on("data", onData);
-    stdin.once("end", onEnd);
-  });
-}
+import { askNewPassword, askVisible, assertInteractiveTerminal } from "./prompt.mts";
 
 async function main(): Promise<void> {
   // 1. URL-level checks, before any connection.
   const params = parseSafeDatabaseUrl(resolveDatabaseUrl(), DEV_TARGET);
   // 2. Only an interactive terminal: no piped or redirected password.
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error("Run this command in an interactive terminal; it does not read input from a pipe or file.");
-  }
+  assertInteractiveTerminal();
 
   const client = new pg.Client(sessionConfig(params));
   await client.connect();
@@ -83,8 +30,7 @@ async function main(): Promise<void> {
     }
     const email = await askVisible("Owner email: ");
     const name = await askVisible("Owner display name: ");
-    const password = await askHidden("Password (not shown): ");
-    if ((await askHidden("Repeat password: ")) !== password) throw new Error("The passwords do not match.");
+    const password = await askNewPassword();
 
     // 4. Checks again inside one locked transaction, then creates the user, credential and owner access.
     await bootstrapFirstOwner(client, DEV_TARGET, { email, name, password });
