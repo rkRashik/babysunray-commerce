@@ -19,6 +19,7 @@
     "auth:bootstrap-owner": "node scripts/bootstrap-owner.mts",
     "auth:reset-owner-password": "node scripts/reset-owner-password.mts",
     "config:check": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/config-check.mts",
+    "media:verify": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/media-verify.mts",
     "orders:expire-verification": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/expire-verification.mts",
     "backup:create": "node scripts/backup-create.mts",
     "backup:verify": "node scripts/backup-verify.mts",
@@ -36,6 +37,7 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "server-only": "0.0.1",
+    "sharp": "0.35.5",
     "zod": "4.6.7"
   },
   "devDependencies": {

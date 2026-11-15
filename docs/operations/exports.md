@@ -29,6 +29,9 @@ A filter a dataset does not support is refused, never ignored.
 | Dataset | One row per | Date filter on | Order filters | Contact details |
 |---|---|---|---|---|
 | `products_variants` | variant, with its product | none | no | no |
+| `product_content` | product: category, featured, names, descriptions, fabric (with confirmation time), care and size guidance in both languages | none | no | no |
+| `product_measurements` | size and measuring point, in whole millimetres | none | no | no |
+| `product_media` | photo record (the media manifest): product, position, storage key, type, size, SHA-256, alt text | none | no | no |
 | `stock` | variant: on hand, reserved, available, awaiting inspection | none | no | no |
 | `stock_movements` | ledger row | when recorded | no | no |
 | `orders` | order, with item totals read in the same snapshot | submission time | yes | **yes** (name, phone, address, note) |

@@ -1,5 +1,7 @@
 import * as z from "zod";
-import type { Product, ProductKey, Variant } from "@/modules/catalogue/service";
+import { MEASUREMENT_POINTS } from "@/modules/catalogue/content";
+import type { ReadinessItem } from "@/modules/catalogue/readiness";
+import type { Category, Product, ProductDetail, ProductKey, Variant } from "@/modules/catalogue/service";
 import type { StockOperationResult } from "@/modules/inventory/operations";
 import type { StockMovement } from "@/modules/inventory/service";
 
@@ -43,6 +45,8 @@ export const PROBLEM_CODES = [
   "DELIVERY_ZONE_UNAVAILABLE",
   "VARIANT_NOT_ORDERABLE",
   "PAYMENT_LIMIT_EXCEEDED",
+  // Added in 1.4.0 with product content and categories.
+  "CATEGORY_NOT_FOUND",
 ] as const;
 export type ProblemCode = (typeof PROBLEM_CODES)[number];
 
@@ -96,9 +100,65 @@ export const productSummarySchema = z
   })
   .register(apiRegistry, { id: "ProductSummary" });
 
+export const categorySchema = z
+  .object({ id: z.uuid(), slug: z.string(), name: localised, version, createdAt: timestamp, updatedAt: timestamp })
+  .register(apiRegistry, { id: "Category", description: "An Owner-defined product category (added in 1.4.0)." });
+
+export const measurementSchema = z
+  .object({
+    size: z.string().meta({ description: "The size label, as on the product's variants." }),
+    point: z.enum(MEASUREMENT_POINTS),
+    valueMm: z.int().min(1).max(3000).meta({ description: "Whole millimetres; shown to people as centimetres with at most one decimal." }),
+  })
+  .register(apiRegistry, { id: "Measurement" });
+
+export const photoSchema = z
+  .object({
+    id: z.uuid(),
+    position: z.int().min(0).meta({ description: "0 is shown first." }),
+    contentType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+    width: z.int().min(1),
+    height: z.int().min(1),
+    byteSize: z.int().min(1),
+    sha256: z.string().meta({ description: "SHA-256 of the stored file (hex)." }),
+    alt: localised.meta({ description: "Descriptions for people who cannot see the photo." }),
+  })
+  .register(apiRegistry, {
+    id: "Photo",
+    description: "A product photo's metadata (added in 1.4.0). Uploading and viewing photos happen in the Owner Office only; there is no API for the files yet.",
+  });
+
 export const productSchema = productSummarySchema
-  .extend({ description: localised, variants: z.array(variantSchema) })
+  .extend({
+    description: localised,
+    variants: z.array(variantSchema),
+    // Added in 1.4.0.
+    category: categorySchema.nullable(),
+    fabric: z.object({ en: z.string().nullable(), bn: z.string().nullable(), confirmedAt: timestamp.nullable().meta({ description: "When the Owner confirmed the statement; null if never or changed since." }) }),
+    care: localised,
+    sizeGuidance: localised,
+    featured: z.boolean(),
+    measurements: z.array(measurementSchema),
+    photos: z.array(photoSchema),
+  })
   .register(apiRegistry, { id: "Product" });
+
+export const readinessSchema = z
+  .object({
+    productId: z.uuid(),
+    advisory: z.literal(true).meta({ description: "Always true: this checklist never publishes anything and is not an approval to publish." }),
+    items: z.array(
+      z.object({
+        id: z.string(),
+        basis: z.enum(["approved", "pending", "recommended"]).meta({ description: "approved: an approved requirement; pending: a proposed rule awaiting the founder; recommended: engineering advice." }),
+        met: z.boolean(),
+        source: z.string().meta({ description: "The requirement IDs it rests on." }),
+        label: z.string(),
+        detail: z.string(),
+      }),
+    ),
+  })
+  .register(apiRegistry, { id: "Readiness" });
 
 export const stockLevelSchema = z
   .object({
@@ -142,6 +202,9 @@ export const stockChangeSchema = z
 
 export const productListSchema = z.object({ data: z.array(productSummarySchema), page: pageSchema }).register(apiRegistry, { id: "ProductList" });
 export const productResponseSchema = z.object({ data: productSchema }).register(apiRegistry, { id: "ProductResponse" });
+export const readinessResponseSchema = z.object({ data: readinessSchema }).register(apiRegistry, { id: "ReadinessResponse" });
+export const categoryResponseSchema = z.object({ data: categorySchema }).register(apiRegistry, { id: "CategoryResponse" });
+export const categoryListSchema = z.object({ data: z.array(categorySchema) }).register(apiRegistry, { id: "CategoryList" });
 export const variantResponseSchema = z.object({ data: variantSchema }).register(apiRegistry, { id: "VariantResponse" });
 export const stockChangeResponseSchema = z.object({ data: stockChangeSchema }).register(apiRegistry, { id: "StockChangeResponse" });
 export const stockLevelResponseSchema = z.object({ data: stockLevelSchema }).register(apiRegistry, { id: "StockLevelResponse" });
@@ -226,9 +289,33 @@ export const updateProductRequest = z
     version: expectedVersion,
     name: localisedEdit(200).optional(),
     description: localisedEdit(5000).optional(),
+    // Added in 1.4.0.
+    fabric: localisedEdit(1000).optional().meta({ description: "Changing either language clears an earlier confirmation unless fabricConfirmed is true." }),
+    fabricConfirmed: z.boolean().optional().meta({ description: "true: you confirm the fabric statement as it will be after this change (only with evidence); false: withdraw it." }),
+    care: localisedEdit(1000).optional(),
+    sizeGuidance: localisedEdit(1000).optional(),
+    categoryId: z.uuid().nullable().optional().meta({ description: "A category id, or null for none." }),
+    featured: z.boolean().optional(),
   })
-  .meta({ description: "Partial update of a draft product's text. Slug and status do not change here. At least one name must remain." })
+  .meta({ description: "Partial update of a draft product's content. Slug and status do not change here. At least one name must remain." })
   .register(apiRegistry, { id: "UpdateProductRequest" });
+
+export const replaceMeasurementsRequest = z
+  .strictObject({
+    version: expectedVersion,
+    measurements: z
+      .array(z.strictObject({ size: z.string().min(1).max(64), point: z.enum(MEASUREMENT_POINTS), valueMm: z.int().min(1).max(3000) }))
+      .max(240)
+      .meta({ description: "The whole size chart: one value per size and point, at most 30 sizes. An empty list removes it." }),
+  })
+  .register(apiRegistry, { id: "ReplaceMeasurementsRequest" });
+
+export const createCategoryRequest = z
+  .strictObject({
+    slug: z.string().min(1).max(100).meta({ description: "Lowercase ASCII letters, digits and single hyphens; never changes." }),
+    name: localisedInput(100).meta({ description: "At least one of en or bn." }),
+  })
+  .register(apiRegistry, { id: "CreateCategoryRequest" });
 
 export const updateVariantRequest = z
   .strictObject({
@@ -291,11 +378,29 @@ export const toProductSummaryDto = (p: Product): z.infer<typeof productSummarySc
   updatedAt: p.updatedAt.toISOString(),
 });
 
-export const toProductDto = (p: Product & { variants: Variant[] }): z.infer<typeof productSchema> => ({
+export const toCategoryDto = (c: Category): z.infer<typeof categorySchema> => ({
+  id: c.id,
+  slug: c.slug,
+  name: { en: c.nameEn, bn: c.nameBn },
+  version: c.version,
+  createdAt: c.createdAt.toISOString(),
+  updatedAt: c.updatedAt.toISOString(),
+});
+
+export const toProductDto = (p: ProductDetail): z.infer<typeof productSchema> => ({
   ...toProductSummaryDto(p),
   description: { en: p.descriptionEn, bn: p.descriptionBn },
   variants: p.variants.map(toVariantDto),
+  category: p.category ? toCategoryDto(p.category) : null,
+  fabric: { en: p.fabricEn, bn: p.fabricBn, confirmedAt: p.fabricConfirmedAt?.toISOString() ?? null },
+  care: { en: p.careEn, bn: p.careBn },
+  sizeGuidance: { en: p.sizeGuidanceEn, bn: p.sizeGuidanceBn },
+  featured: p.featured,
+  measurements: p.measurements,
+  photos: p.media.map((m) => ({ id: m.id, position: m.position, contentType: m.contentType, width: m.width, height: m.height, byteSize: m.byteSize, sha256: m.sha256, alt: { en: m.altEn, bn: m.altBn } })),
 });
+
+export const toReadinessDto = (productId: string, items: ReadinessItem[]): z.infer<typeof readinessSchema> => ({ productId, advisory: true, items });
 
 export const toStockMovementDto = (m: StockMovement): z.infer<typeof stockMovementSchema> => ({
   id: m.id,

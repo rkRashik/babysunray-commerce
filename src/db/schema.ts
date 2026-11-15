@@ -10,6 +10,29 @@ const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull(
 // based on, so a stale form or client cannot silently overwrite a newer change (migration 0007).
 const version = () => integer("version").notNull().default(1);
 
+// Owner-defined product categories (migration 0011), bilingual like products. No category is built in.
+export const productCategories = pgTable(
+  "product_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique("product_categories_slug_key"),
+    nameEn: text("name_en"),
+    nameBn: text("name_bn"),
+    version: version(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    check("product_categories_version_positive", sql`${t.version} >= 1`),
+    check("product_categories_slug_format", sql`${t.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and length(${t.slug}) <= 100`),
+    check("product_categories_name_present", sql`${t.nameEn} is not null or ${t.nameBn} is not null`),
+    check(
+      "product_categories_names_valid",
+      sql`btrim(${t.nameEn}) <> '' and length(${t.nameEn}) <= 100 and btrim(${t.nameBn}) <> '' and length(${t.nameBn}) <= 100`,
+    ),
+  ],
+);
+
 // A product is never published by this schema: publication rules (requirement I-6) are not approved yet.
 export const products = pgTable(
   "products",
@@ -24,6 +47,19 @@ export const products = pgTable(
     version: version(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    // Structured content (migration 0011). Everything here is entered by the Owner; nothing is generated, and a
+    // fabric statement counts as confirmed only after the Owner confirms it (requirement S-11). Changing the
+    // fabric text clears the confirmation.
+    categoryId: uuid("category_id").references(() => productCategories.id, { onDelete: "restrict" }),
+    fabricEn: text("fabric_en"),
+    fabricBn: text("fabric_bn"),
+    fabricConfirmedAt: timestamp("fabric_confirmed_at", { withTimezone: true }),
+    fabricConfirmedByUserId: uuid("fabric_confirmed_by_user_id").references(() => authUsers.id, { onDelete: "restrict" }),
+    careEn: text("care_en"),
+    careBn: text("care_bn"),
+    sizeGuidanceEn: text("size_guidance_en"),
+    sizeGuidanceBn: text("size_guidance_bn"),
+    featured: boolean("featured").notNull().default(false),
   },
   (t) => [
     check("products_version_positive", sql`${t.version} >= 1`),
@@ -38,6 +74,76 @@ export const products = pgTable(
       "products_descriptions_valid",
       sql`btrim(${t.descriptionEn}) <> '' and length(${t.descriptionEn}) <= 5000 and btrim(${t.descriptionBn}) <> '' and length(${t.descriptionBn}) <= 5000`,
     ),
+    check(
+      "products_content_valid",
+      sql`btrim(${t.fabricEn}) <> '' and length(${t.fabricEn}) <= 1000 and btrim(${t.fabricBn}) <> '' and length(${t.fabricBn}) <= 1000
+        and btrim(${t.careEn}) <> '' and length(${t.careEn}) <= 1000 and btrim(${t.careBn}) <> '' and length(${t.careBn}) <= 1000
+        and btrim(${t.sizeGuidanceEn}) <> '' and length(${t.sizeGuidanceEn}) <= 1000 and btrim(${t.sizeGuidanceBn}) <> '' and length(${t.sizeGuidanceBn}) <= 1000`,
+    ),
+    check(
+      "products_fabric_confirmation_consistent",
+      sql`(${t.fabricConfirmedAt} is null) = (${t.fabricConfirmedByUserId} is null) and (${t.fabricConfirmedAt} is null or ${t.fabricEn} is not null or ${t.fabricBn} is not null)`,
+    ),
+  ],
+);
+
+// Garment measurements in whole millimetres, entered and shown in centimetres with at most one decimal
+// (migration 0011). One row per product, size label (as on its variants) and measuring point. The same list of
+// points is MEASUREMENT_POINTS in src/modules/catalogue/content.ts (a unit test keeps them equal).
+const MEASUREMENT_POINTS = ["chest", "waist", "hip", "length", "shoulder", "sleeve", "inseam", "foot"] as const;
+export const productMeasurements = pgTable(
+  "product_measurements",
+  {
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "restrict" }),
+    size: text("size").notNull(),
+    point: text("point", { enum: MEASUREMENT_POINTS }).notNull(),
+    valueMm: integer("value_mm").notNull(),
+  },
+  (t) => [
+    primaryKey({ name: "product_measurements_pkey", columns: [t.productId, t.size, t.point] }),
+    check("product_measurements_size_valid", sql`btrim(${t.size}) <> '' and length(${t.size}) <= 64`),
+    check("product_measurements_point_valid", sql`${t.point} in ('chest', 'waist', 'hip', 'length', 'shoulder', 'sleeve', 'inseam', 'foot')`),
+    check("product_measurements_value_range", sql`${t.valueMm} between 1 and 3000`),
+  ],
+);
+
+// Product photos (migration 0011). The file lives in the configured media storage under a random key, never
+// in the database or the repository (src/modules/media). This row is the manifest entry for it: the product,
+// the key, the type, size and SHA-256 of the stored (re-encoded, metadata-free) file. Positions are kept
+// 0..n-1 per product under the product's row lock.
+export const productMedia = pgTable(
+  "product_media",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "restrict" }),
+    storageKey: text("storage_key").notNull().unique("product_media_storage_key_key"),
+    contentType: text("content_type", { enum: ["image/jpeg", "image/png", "image/webp"] }).notNull(),
+    byteSize: integer("byte_size").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    sha256: text("sha256").notNull(),
+    altEn: text("alt_en"),
+    altBn: text("alt_bn"),
+    position: integer("position").notNull(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "restrict" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("product_media_product_position_idx").on(t.productId, t.position),
+    check("product_media_storage_key_format", sql`${t.storageKey} ~ '^[0-9a-f]{32}[.](jpg|png|webp)$'`),
+    check("product_media_content_type_valid", sql`${t.contentType} in ('image/jpeg', 'image/png', 'image/webp')`),
+    check("product_media_byte_size_range", sql`${t.byteSize} between 1 and 20971520`),
+    check("product_media_dimensions_range", sql`${t.width} between 1 and 10000 and ${t.height} between 1 and 10000`),
+    check("product_media_sha256_format", sql`${t.sha256} ~ '^[0-9a-f]{64}$'`),
+    check("product_media_alt_valid", sql`btrim(${t.altEn}) <> '' and length(${t.altEn}) <= 300 and btrim(${t.altBn}) <> '' and length(${t.altBn}) <= 300`),
+    check("product_media_position_nonnegative", sql`${t.position} >= 0`),
   ],
 );
 

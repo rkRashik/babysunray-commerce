@@ -29,6 +29,8 @@ It lists every variable as set, missing or invalid with the rule it breaks (neve
 | `BETTER_AUTH_SECRET` | sign-in | at least 32 random characters, not the placeholder |
 | `BETTER_AUTH_URL` | sign-in, origin checks | an origin only; `http://localhost:3000` allowed outside production |
 | `RESTORE_DATABASE_URL` | `backup:restore` only | must name local `babysunray_restore` and its role |
+| `MEDIA_STORAGE_DIR` | product photos (Office) and `media:verify` | an absolute path to an existing folder outside the project folder |
+| `MEDIA_LOCAL_STORAGE_IN_PRODUCTION` | production only | must be `allow` for a local photo folder in production; leave empty locally |
 | `PG_BIN` (shell, optional) | backup commands | PostgreSQL's `bin` folder if `pg_dump` is not on the PATH, e.g. `C:\Program Files\PostgreSQL\18\bin` |
 
 ## 3. Sign-in troubleshooting
@@ -87,6 +89,16 @@ Owner Office → Stock counts.
 6. Or discard the count: nothing changes.
 
 How often to count, and what to do about missing or damaged goods (write-off rules), are business decisions not yet made (requirement I-8, open decision 9).
+
+## 7a. Product photos
+
+Photos are kept in a folder you choose, outside the project folder, never in Git or `public/`.
+
+1. Create a folder, for example `D:/BabySunray-media` (not inside `D:/My Projects/BabySunray-commerce`).
+2. Add `MEDIA_STORAGE_DIR=D:/BabySunray-media` to `.env.local` and restart `npm run dev`. `npm run config:check` shows whether it is accepted.
+3. Owner Office → a product → Manage photos. Use only your own photos of the product. The system removes location and camera details and stores a copy at most 2,400 pixels a side; keep your originals.
+
+Backups: `npm run backup:create` saves the database, which holds the photo **records** (which file belongs to which product, size and SHA-256), not the photo **files**. Copy the photo folder separately each time you take a backup, to the same place. After restoring either, run `npm run media:verify`: it lists missing or changed files and files without a record, and changes nothing. A file without a record can be left by an interrupted upload; check it, then delete it by hand. No automatic photo backup, schedule or off-device destination exists (decisions 14 and 15).
 
 ## 8. Backup and restore
 

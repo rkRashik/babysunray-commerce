@@ -75,6 +75,16 @@ export async function updateProductAction(_: FormState, form: FormData): Promise
         nameBn: optional(form, "nameBn"),
         descriptionEn: optional(form, "descriptionEn"),
         descriptionBn: optional(form, "descriptionBn"),
+        fabricEn: optional(form, "fabricEn"),
+        fabricBn: optional(form, "fabricBn"),
+        careEn: optional(form, "careEn"),
+        careBn: optional(form, "careBn"),
+        sizeGuidanceEn: optional(form, "sizeGuidanceEn"),
+        sizeGuidanceBn: optional(form, "sizeGuidanceBn"),
+        categoryId: optional(form, "categoryId"),
+        // Checkboxes are sent only when ticked; the edit form always shows both, so absent means "no".
+        featured: text(form, "featured") === "on",
+        fabricConfirmed: text(form, "fabricConfirmed") === "on",
       },
     });
   } catch (error) {

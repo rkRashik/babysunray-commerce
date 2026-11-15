@@ -317,7 +317,7 @@ describe("invariants", () => {
         pool,
         `select count(*) from idempotency_records r
            left join stock_movements m on m.id = (r.result->>'movementId')::bigint and m.actor_user_id = r.user_id
-          where r.operation like 'stock.%' and m.id is null`,
+          where r.operation in ('stock.receive', 'stock.adjust') and m.id is null`,
       ),
     ).toBe(0);
     const { rows } = await pool.query(

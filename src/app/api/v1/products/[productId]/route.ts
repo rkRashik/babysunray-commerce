@@ -12,7 +12,7 @@ export const GET = apiGet<{ productId: string }>("catalog:read", async ({ params
   return { data: toProductDto(await getProductWithVariants(db, productId)) };
 });
 
-// PATCH /api/v1/products/{productId}: edits a draft product's names and descriptions (optimistic `version`).
+// PATCH /api/v1/products/{productId}: edits a draft product's content (optimistic `version`).
 export const PATCH = apiPost<{ productId: string }, typeof updateProductRequest>(
   "catalog:write",
   { body: updateProductRequest, status: 200 },
@@ -21,7 +21,21 @@ export const PATCH = apiPost<{ productId: string }, typeof updateProductRequest>
     const { value, replayed } = await updateProductOnce(db, principal, idempotencyKey, {
       productId,
       expectedVersion: body.version,
-      changes: { nameEn: body.name?.en, nameBn: body.name?.bn, descriptionEn: body.description?.en, descriptionBn: body.description?.bn },
+      changes: {
+        nameEn: body.name?.en,
+        nameBn: body.name?.bn,
+        descriptionEn: body.description?.en,
+        descriptionBn: body.description?.bn,
+        fabricEn: body.fabric?.en,
+        fabricBn: body.fabric?.bn,
+        fabricConfirmed: body.fabricConfirmed,
+        careEn: body.care?.en,
+        careBn: body.care?.bn,
+        sizeGuidanceEn: body.sizeGuidance?.en,
+        sizeGuidanceBn: body.sizeGuidance?.bn,
+        categoryId: body.categoryId,
+        featured: body.featured,
+      },
     });
     return { value: toProductDto(value), replayed };
   },

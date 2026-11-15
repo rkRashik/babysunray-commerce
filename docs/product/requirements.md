@@ -325,6 +325,10 @@ What batch H.17–H.20 built, as of 15 Nov 2026. Basis labels are unchanged: imp
 | ID | Status | Notes |
 |---|---|---|
 | O-13 | Return window protected | A delivered order can be closed only after its 7-day return window, enforced by the rules and a database check, so closing or settlement never ends the customer's right to ask for a return. Engineering default, Draft — Founder Review ([order-policy-decisions.md](order-policy-decisions.md), section 3). |
+| S-1, S-6, S-11 | Content prepared, nothing published | Fabric, care, size guidance and a size chart in cm per product, in both languages; the fabric statement counts as confirmed only after the Owner confirms it. No text is generated or translated. Nothing is shown to customers. |
+| I-5, K-2 | Local development storage only | Owner photo upload with type, size and decoding checks, metadata removed, stored outside the repository; a manifest (`product_media`) and `npm run media:verify`. No production storage, no automatic photo backup. Decision 14 stays open ([ADR-0006](../adr/0006-product-media-storage.md)). |
+| I-6 | Advisory checklist only | A read-only readiness checklist separates approved requirements, this proposed rule and recommendations. No publish action exists. |
+| D-8 | Extended | Three more export datasets: product content, size charts and the photo manifest. |
 | S-15, G-4 | Hardened, not complete | The tracking page removes the token from the address bar and the tab's history and keeps it in memory only. Limits per live link and a global limit for unknown tokens that never blocks a live link. A per-client limit and flood protection still need a trusted proxy (decision 1). |
 
 ## 10. Phasing (proposed)

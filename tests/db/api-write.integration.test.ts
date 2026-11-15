@@ -23,6 +23,9 @@ const ROUTES: Record<string, RouteModule> = {
   "/products/{productId}": (await import("../../src/app/api/v1/products/[productId]/route")) as unknown as RouteModule,
   "/products/{productId}/variants": (await import("../../src/app/api/v1/products/[productId]/variants/route")) as unknown as RouteModule,
   "/products/{productId}/archive": (await import("../../src/app/api/v1/products/[productId]/archive/route")) as unknown as RouteModule,
+  "/products/{productId}/measurements": (await import("../../src/app/api/v1/products/[productId]/measurements/route")) as unknown as RouteModule,
+  "/products/{productId}/readiness": (await import("../../src/app/api/v1/products/[productId]/readiness/route")) as unknown as RouteModule,
+  "/categories": (await import("../../src/app/api/v1/categories/route")) as unknown as RouteModule,
   "/variants/{variantId}": (await import("../../src/app/api/v1/variants/[variantId]/route")) as unknown as RouteModule,
   "/variants/{variantId}/deactivate": (await import("../../src/app/api/v1/variants/[variantId]/deactivate/route")) as unknown as RouteModule,
   "/stock-receipts": (await import("../../src/app/api/v1/stock-receipts/route")) as unknown as RouteModule,
@@ -435,6 +438,58 @@ describe("catalogue writes", () => {
       "VARIANT_NOT_FOUND",
     );
     expect(await count(pool, "select count(*) from products where id = $1", [product.id])).toBe(1);
+  });
+});
+
+describe("product content, size chart, readiness and categories (1.4.0)", () => {
+  it("edits content, replaces the size chart, reports readiness and manages categories, all as documented", async () => {
+    const { product } = await createTestVariant(db, "wcontent");
+    const p = { productId: product.id };
+    const slug = `wcontent-cat-${Date.now().toString(36)}`;
+    const created = await call({ path: "/categories", template: "/categories", body: { slug, name: { en: "Fictional sets", bn: "কাল্পনিক সেট" } } });
+    expect([created.status, created.body.data.slug]).toEqual([201, slug]);
+    expect((await call({ path: "/categories", template: "/categories", body: { slug, name: { en: "Again" } } })).body.code).toBe("SLUG_TAKEN");
+    const list = await call({ method: "GET", path: "/categories", template: "/categories" });
+    expect(list.body.data.map((c: { slug: string }) => c.slug)).toContain(slug);
+
+    const patched = await call({
+      method: "PATCH",
+      path: `/products/${product.id}`,
+      template: "/products/{productId}",
+      params: p,
+      body: { version: 1, fabric: { en: "Fictional fabric", bn: "কাল্পনিক কাপড়" }, fabricConfirmed: true, care: { en: "Fictional care" }, categoryId: created.body.data.id, featured: true },
+    });
+    expect(patched.status).toBe(200);
+    expect(patched.body.data).toMatchObject({ featured: true, care: { en: "Fictional care", bn: null }, category: { slug }, fabric: { bn: "কাল্পনিক কাপড়" } });
+    expect(patched.body.data.fabric.confirmedAt).not.toBeNull();
+    const unknownCategory = await call({ method: "PATCH", path: `/products/${product.id}`, template: "/products/{productId}", params: p, body: { version: 2, categoryId: randomUUID() } });
+    expect([unknownCategory.status, unknownCategory.body.code]).toEqual([404, "CATEGORY_NOT_FOUND"]);
+
+    const chart = await call({ method: "PUT", path: `/products/${product.id}/measurements`, template: "/products/{productId}/measurements", params: p, body: { version: 2, measurements: [{ size: "0-3M", point: "chest", valueMm: 245 }] } });
+    expect([chart.status, chart.body.data.measurements, chart.body.data.version]).toEqual([200, [{ size: "0-3M", point: "chest", valueMm: 245 }], 3]);
+    const stale = await call({ method: "PUT", path: `/products/${product.id}/measurements`, template: "/products/{productId}/measurements", params: p, body: { version: 2, measurements: [] } });
+    expect([stale.status, stale.body.code]).toEqual([409, "VERSION_CONFLICT"]);
+    const badPoint = await call({ method: "PUT", path: `/products/${product.id}/measurements`, template: "/products/{productId}/measurements", params: p, body: { version: 3, measurements: [{ size: "0-3M", point: "neck", valueMm: 1 }] } });
+    expect(badPoint.status).toBe(400);
+
+    const readiness = await call({ method: "GET", path: `/products/${product.id}/readiness`, template: "/products/{productId}/readiness", params: p });
+    expect(readiness.body.data.advisory).toBe(true);
+    const met = Object.fromEntries(readiness.body.data.items.map((i: { id: string; met: boolean }) => [i.id, i.met]));
+    expect(met).toMatchObject({ name: true, variant: true, measurements: true, fabric: true, care: false, policies: false, photo: false });
+    const missing = await call({ method: "GET", path: `/products/${randomUUID()}/readiness`, template: "/products/{productId}/readiness", params: { productId: randomUUID() } });
+    expect(missing.status).toBe(404);
+    // Readiness never changes the product: still a draft at the same version.
+    expect((await call({ method: "GET", path: `/products/${product.id}`, template: "/products/{productId}", params: p })).body.data).toMatchObject({ status: "draft", version: 3 });
+  });
+
+  it("refuses the new endpoints without a token or without catalog:write, and answers 405 for other methods", async () => {
+    const { product } = await createTestVariant(db, "wcontent");
+    const p = { productId: product.id };
+    expect((await call({ method: "GET", path: "/categories", template: "/categories", token: null })).status).toBe(401);
+    expect((await call({ method: "GET", path: `/products/${product.id}/readiness`, template: "/products/{productId}/readiness", params: p, token: null })).status).toBe(401);
+    expect((await call({ method: "PUT", path: `/products/${product.id}/measurements`, template: "/products/{productId}/measurements", params: p, token: null, body: { version: 1, measurements: [] } })).status).toBe(401);
+    expect((await call({ method: "DELETE", path: "/categories", template: "/categories" })).status).toBe(405);
+    expect((await call({ method: "POST", path: `/products/${product.id}/readiness`, template: "/products/{productId}/readiness", params: p, body: {} })).status).toBe(405);
   });
 });
 

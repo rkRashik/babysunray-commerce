@@ -2,12 +2,16 @@ import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
+import { formatCentimetres, MEASUREMENT_POINTS } from "@/modules/catalogue/content";
+import { evaluateReadiness } from "@/modules/catalogue/readiness";
 import { getProductWithVariants } from "@/modules/catalogue/service";
 import { DomainError } from "@/modules/domain-error";
 import { getStockLevel } from "@/modules/inventory/service";
 import { formatPaisa } from "@/modules/money";
 import { archiveProductAction, createVariantAction, deactivateVariantAction } from "../../actions";
 import { ActionForm, Field } from "../../_components/action-form";
+import { Bilingual, ReadinessList } from "../../_components/content";
+import { MEASUREMENT_LABELS } from "../../_lib/labels";
 import { OfficeShell, Section, formatTime, noticeFor, productTitle } from "../../_components/shell";
 import { requireOffice } from "../../_lib/session";
 
@@ -39,24 +43,90 @@ export default async function ProductPage({ params, searchParams }: Props) {
           <dd>{draft ? "draft (not shown to customers)" : "archived (cannot be edited)"}</dd>
           <dt className="text-gray-600">Slug</dt>
           <dd className="break-all">{product.slug}</dd>
-          <dt className="text-gray-600">Name (English)</dt>
-          <dd>{product.nameEn ?? "—"}</dd>
-          <dt className="text-gray-600">Name (Bangla)</dt>
-          <dd lang="bn">{product.nameBn ?? "—"}</dd>
-          <dt className="text-gray-600">Description (English)</dt>
-          <dd className="whitespace-pre-line">{product.descriptionEn ?? "—"}</dd>
-          <dt className="text-gray-600">Description (Bangla)</dt>
-          <dd lang="bn" className="whitespace-pre-line">{product.descriptionBn ?? "—"}</dd>
+          <Bilingual label="Name" en={product.nameEn} bn={product.nameBn} />
+          <Bilingual label="Description" en={product.descriptionEn} bn={product.descriptionBn} />
+          <Bilingual label="Fabric" en={product.fabricEn} bn={product.fabricBn} />
+          <dt className="text-gray-600">Fabric statement</dt>
+          <dd data-testid="fabric-confirmation">{product.fabricConfirmedAt ? `Confirmed by you on ${formatTime(product.fabricConfirmedAt)}` : "Not confirmed"}</dd>
+          <Bilingual label="Care" en={product.careEn} bn={product.careBn} />
+          <Bilingual label="Size guidance (optional)" en={product.sizeGuidanceEn} bn={product.sizeGuidanceBn} />
+          <dt className="text-gray-600">Category</dt>
+          <dd>{product.category ? (product.category.nameEn ?? <span lang="bn">{product.category.nameBn}</span>) : "—"}</dd>
+          <dt className="text-gray-600">Featured</dt>
+          <dd>{product.featured ? "Yes (shown first in the storefront preview)" : "No"}</dd>
           <dt className="text-gray-600">Created</dt>
           <dd>{formatTime(product.createdAt)}</dd>
           <dt className="text-gray-600">Last changed</dt>
           <dd>{formatTime(product.updatedAt)}</dd>
         </dl>
+        <div className="flex flex-wrap gap-2">
+          {draft ? (
+            <Link href={`/office/products/${product.id}/edit`} className={BUTTON_LINK}>
+              Edit details
+            </Link>
+          ) : null}
+          <Link href={`/office/storefront-preview/en/products/${product.slug}`} className={BUTTON_LINK}>
+            View in storefront preview
+          </Link>
+        </div>
+      </Section>
+
+      <Section title="Publishing readiness">
+        <ReadinessList items={evaluateReadiness(product)} />
+      </Section>
+
+      <Section title="Size chart (cm)">
+        {product.measurements.length === 0 ? (
+          <p className="text-sm text-gray-700">No measurements yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="text-left text-sm">
+              <thead className="border-b border-gray-300 text-gray-600">
+                <tr>
+                  <th scope="col" className="py-2 pr-4">Size</th>
+                  {MEASUREMENT_POINTS.filter((p) => product.measurements.some((m) => m.point === p)).map((p) => (
+                    <th key={p} scope="col" className="py-2 pr-4 text-right">{MEASUREMENT_LABELS[p]}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {[...new Set(product.measurements.map((m) => m.size))].map((size) => (
+                  <tr key={size}>
+                    <th scope="row" className="py-2 pr-4 font-normal">{size}</th>
+                    {MEASUREMENT_POINTS.filter((p) => product.measurements.some((m) => m.point === p)).map((p) => {
+                      const m = product.measurements.find((x) => x.size === size && x.point === p);
+                      return <td key={p} className="py-2 pr-4 text-right tabular-nums">{m ? formatCentimetres(m.valueMm) : "—"}</td>;
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
         {draft ? (
-          <Link href={`/office/products/${product.id}/edit`} className={BUTTON_LINK}>
-            Edit details
+          <Link href={`/office/products/${product.id}/measurements`} className={BUTTON_LINK}>
+            Edit size chart
           </Link>
         ) : null}
+      </Section>
+
+      <Section title="Photos">
+        {product.media.length === 0 ? (
+          <p className="text-sm text-gray-700">No photos yet.</p>
+        ) : (
+          <ul className="flex flex-wrap gap-3" aria-label="Photos">
+            {product.media.map((m) => (
+              <li key={m.id}>
+                {/* Private photos are served by an Owner-only route; Next.js image optimisation would fetch them without the session. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/office/media/${m.id}?w=320`} alt={m.altEn ?? "Product photo (no English description yet)"} width={120} height={Math.round((120 * m.height) / m.width)} className="rounded border border-gray-300 bg-gray-100 object-cover" />
+              </li>
+            ))}
+          </ul>
+        )}
+        <Link href={`/office/products/${product.id}/photos`} className={BUTTON_LINK}>
+          {draft ? "Manage photos" : "View photos"}
+        </Link>
       </Section>
 
       <Section title="Variants and stock">

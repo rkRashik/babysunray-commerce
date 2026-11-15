@@ -31,6 +31,7 @@ npm run db:check     # check the migration files and snapshots are consistent
 npm run db:migrate   # apply pending migrations to the local babysunray_dev database only
 npm run config:check  # which settings are set and valid, whether the database is reachable and migrated; prints no values
 npm run auth:bootstrap-owner  # create the first Owner in babysunray_dev, interactively (see Authentication)
+npm run media:verify  # check the photo manifest of babysunray_dev against MEDIA_STORAGE_DIR; read-only
 npm run orders:expire-verification  # release holds of orders past their 24-hour verification deadline (babysunray_dev only; see Orders)
 npm run backup:create -- --out <dir>  # encrypted backup of babysunray_dev, interactive (see Backup and recovery)
 npm run backup:verify -- <file>       # decrypt and check a backup without touching a database
@@ -106,6 +107,9 @@ Implemented as server-only services in `src/modules/catalogue` and `src/modules/
 | Create a draft product; archive it | Products are `draft` or `archived` only. Nothing is publishable until publication rules are approved. Never deleted. |
 | Create a variant (SKU) with its zero stock balance; deactivate it | SKU stored as 1–64 ASCII uppercase letters, digits, hyphens and underscores (input is trimmed and a–z uppercased first), unique in PostgreSQL. Price in integer paisa, strictly positive. Never deleted. |
 | Edit a draft product's names and descriptions; edit an active variant's size, colour and price | `updateProduct`, `updateVariant`. Each row has a `version` (migration `0007`) that every update raises; an edit names the version it was based on and is refused with `VERSION_CONFLICT` if the row changed, under a row lock, so concurrent edits never silently overwrite each other. Slug, SKU, ids, status and stock never change here; archived products and their variants, and inactive variants, are not edited. |
+| Product content (migration `0011`) | Fabric, care and optional size guidance in English and Bangla, an Owner-defined category (`product_categories`), a featured flag, and a size chart per size and measuring point stored as whole millimetres and shown as centimetres with one decimal (`src/modules/catalogue/content.ts`). The fabric statement counts as confirmed only after the Owner ticks a confirmation, which records who and when; changing the fabric text clears it. Nothing is translated or generated. Same versions, locks and idempotent operations as other edits. |
+| Publishing readiness | `evaluateReadiness` (`src/modules/catalogue/readiness.ts`): an advisory, read-only checklist that separates items required by approved requirements (S-1 bilingual name and description, an active priced SKU), proposed rules still waiting for the founder (I-6, S-6: measurements, a confirmed fabric statement, care, the delivery and return explanation) and engineering recommendations (sizes, category, a photo, alt text). **There is no publish action**: nothing makes a product public. |
+| Product photos | See Product photos below. |
 | Search products | `listProducts` with `q`: slug, English or Bangla name, or any SKU, case-insensitive, NFC-normalised, `%` `_` `\` escaped, bound parameter, at most 100 characters. No index: it reads every product row, fine for a small catalogue. |
 | Receive stock; adjust stock with a reason | One transaction per change: conditional balance update plus ledger row. Stock never goes below zero. |
 | Read a SKU's balance and movement history | For internal use and tests. |
@@ -173,14 +177,24 @@ Known limits:
 - Rate limiting is stored in PostgreSQL (3 sign-in attempts per 10 seconds per client). No client header is trusted for the client address, so locally every request counts as one client, and in production all clients would share the limit until a proxy setup is chosen with hosting.
 - Tested locally only. Production cookie, proxy, secret rotation and database-role settings wait for the hosting decision; nothing here is described as production-ready.
 
+## Product photos
+
+Owner Office only, development storage only (`src/modules/media`, [ADR-0006](docs/adr/0006-product-media-storage.md)). Files live in the folder named by `MEDIA_STORAGE_DIR`: an absolute path to an existing folder **outside** the project (never in Git or `public/`). Without it, photos cannot be uploaded and the Office says why. In production the local folder is refused unless `MEDIA_LOCAL_STORAGE_IN_PRODUCTION=allow` (a deployment decision for a host with a persistent, backed-up disk; no such host is chosen).
+
+- Upload: JPEG, PNG or WebP decided by the file's bytes (never its name), at most 10 MB and 200 to 8,000 pixels a side, read with a byte limit. `sharp` 0.35.5 (Apache-2.0; its prebuilt libvips binaries are LGPL-3.0-or-later, to include in the licence review, RU-5) decodes the whole image, so damaged, truncated, animated or fake files are refused; it is re-encoded in the same format at most 2,400 pixels a side with orientation applied and all metadata removed (EXIF including GPS, XMP, comments). Only that copy is stored, under a random key. SVG, HTML and anything else are refused.
+- Management: English and Bangla descriptions (alt text), order (first is shown in lists), replace in place, remove (needs a tick and a confirmation; the stored file is deleted). Every change names the product version, so a second tab is refused, and runs once per idempotency key. At most 12 photos per product (a technical bound; how many a product needs is not decided, I-5).
+- Records and files stay in step: a new file is written before its record and deleted again if the record is not committed (refused, failed or a replay); a replaced or removed file is deleted after its record. `product_media` is the manifest (product, key, type, size, SHA-256, times). `npm run media:verify` lists missing, changed, unreferenced and unexpected files; the Exports page has the manifest as a dataset.
+- Serving: `/office/media/{id}` for the signed-in Owner only (`401` otherwise), `private, no-cache` with an ETag, `nosniff` and a sandbox policy; `?w=320|640|1280` gives a smaller copy.
+- **Database backups do not contain the photo files**: copy the folder separately ([runbook](docs/operations/runbook.md), Product photos).
+
 ## API
 
 Owner-only endpoints under `/api/v1`, authenticated with a Bearer token only (browser cookies are refused). The contract is served at `/api/v1/openapi.json`; usage, errors, idempotency, limits, pagination and the compatibility rules are in [docs/api/README.md](docs/api/README.md), decisions in [ADR-0004](docs/adr/0004-api-v1-and-bearer-transport.md) and [ADR-0005](docs/adr/0005-operation-idempotency.md).
 
 | Endpoint | Permission |
 |---|---|
-| `GET /api/v1/products`, `GET /api/v1/products/{productId}` | `catalog:read` |
-| `POST /api/v1/products`, `POST .../products/{productId}/variants`, `.../archive`, `POST .../variants/{variantId}/deactivate`, `PATCH /api/v1/products/{productId}`, `PATCH /api/v1/variants/{variantId}` | `catalog:write` |
+| `GET /api/v1/products`, `GET /api/v1/products/{productId}`, `GET .../products/{productId}/readiness`, `GET /api/v1/categories` | `catalog:read` |
+| `POST /api/v1/products`, `POST .../products/{productId}/variants`, `.../archive`, `POST .../variants/{variantId}/deactivate`, `PATCH /api/v1/products/{productId}`, `PUT .../products/{productId}/measurements`, `PATCH /api/v1/variants/{variantId}`, `POST /api/v1/categories` | `catalog:write` |
 | `POST /api/v1/stock-receipts` / `POST /api/v1/stock-adjustments` | `stock:receive` / `stock:adjust` |
 | `GET /api/v1/skus/{sku}/stock` (on-hand, reserved, available), `GET /api/v1/skus/{sku}/movements` | `stock:read` |
 | `GET /api/v1/orders`, `GET /api/v1/orders/{orderId}`, `GET /api/v1/delivery-zones` | `orders:read` |
@@ -201,7 +215,11 @@ A minimal, functional internal area at `/office` (`src/app/office`), built with 
 | `/office` | Products (draft, archived), oldest first, 25 per page; search by English or Bangla name, slug or SKU, status filter, next and first page, all kept in the URL | `catalog:read` |
 | `/office/products/new` | Create a draft product (English and Bangla fields) | `catalog:write` |
 | `/office/products/{id}` | Details, variants with price (BDT) and on-hand stock; edit links, add a variant, deactivate one, archive the product (both ask for confirmation first) | `catalog:read`, `stock:read`; changes `catalog:write` |
-| `/office/products/{id}/edit` | Edit a draft product's English and Bangla names and descriptions (prefilled) | `catalog:read`, `catalog:write` |
+| `/office/products/{id}` (since H.18) | Also: every content field with which languages are missing, the advisory readiness checklist, the size chart, photo thumbnails and a link to the storefront preview | as above |
+| `/office/products/{id}/edit` | Edit a draft product's English and Bangla names, descriptions, fabric (with the confirmation tick), care and size guidance, its category and the featured flag (prefilled) | `catalog:read`, `catalog:write` |
+| `/office/products/{id}/measurements` | Size chart in centimetres for each size on its active SKUs | `catalog:read`, `catalog:write` |
+| `/office/products/{id}/photos` | Upload, describe, reorder, replace and remove photos (Product photos above) | `catalog:read`; changes `catalog:write` |
+| `/office/categories` | Create categories (slug, English and Bangla names) and rename them | `catalog:read`, `catalog:write` |
 | `/office/variants/{id}/edit` | Edit an active variant's size, colour and price in Taka (prefilled); shows its stock, which the edit never changes | `catalog:read`, `catalog:write`, `stock:read` |
 | `/office/orders` | Orders newest first; filter by order status, "needs attention" (deadline passed, expired, open cancellation request) and order number; the four dimensions side by side | `orders:read` |
 | `/office/orders/new` | Assisted order (Messenger, WhatsApp, other): customer, Bangladesh phone, address, configured zone, up to 5 SKU lines; stock reserved at once | `orders:write` |
@@ -222,11 +240,11 @@ How it works:
 - Errors shown are the services' safe messages or a generic one; raw errors and SQL never reach the page.
 - Every `/office` response also sends `Content-Security-Policy: frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Robots-Tag: noindex, nofollow`, `X-Content-Type-Options: nosniff` and `Referrer-Policy: same-origin` (`next.config.ts`); pages are dynamic, so they are not cached.
 
-Not built: changing a slug or SKU, reactivating a variant, un-archiving a product, images, publication, expenses and supplier records, courier statement reconciliation, and export endpoints in `/api/v1`. Edit forms carry the version they were loaded from; saving after another tab or client changed the record shows a "reload" message and keeps what was typed. While a form saves, its fields and button are disabled. The first Owner of an installation is created with `npm run auth:bootstrap-owner`. Tested with fictional accounts against `babysunray_test`: integration tests of every Server Action, and real-browser tests (`npm run test:e2e`) of sign-in, sign-out, access control, the catalogue and stock flows, editing (including a stale second tab), search, filter and paging, the archive and deactivate confirmations, double submission, a lost response and its retry, error messages, keyboard use and a phone-sized screen.
+Not built: changing a slug or SKU, reactivating a variant, un-archiving a product, publication, a photo API, expenses and supplier records, courier statement reconciliation, and export endpoints in `/api/v1`. Edit forms carry the version they were loaded from; saving after another tab or client changed the record shows a "reload" message and keeps what was typed. While a form saves, its fields and button are disabled. The first Owner of an installation is created with `npm run auth:bootstrap-owner`. Tested with fictional accounts against `babysunray_test`: integration tests of every Server Action, and real-browser tests (`npm run test:e2e`) of sign-in, sign-out, access control, the catalogue and stock flows, editing (including a stale second tab), search, filter and paging, the archive and deactivate confirmations, double submission, a lost response and its retry, error messages, keyboard use and a phone-sized screen.
 
 ## Backup and recovery
 
-Local tooling only (`src/db/backup.mts`, `scripts/backup-*.mts`); how to use it is in the [runbook](docs/operations/runbook.md), section 8. A backup is a `pg_dump` custom-format archive (schema, data, sequences, triggers, migration history) streamed into chunked AES-256-GCM encryption with a scrypt key from an interactive passphrase, so no plaintext dump is written to disk; session, verification and rate-limit table data are left out. Changed, reordered or cut-short files and wrong passphrases are refused before any data is used (unit tests). `npm run backup:drill` proves a full backup, verify and restore on fictional data in `babysunray_test` (every table, sequence, constraint and trigger compared). **Not decided, so not built:** a schedule, retention, an off-device copy, and the RPO and RTO (K-4, K-5, K-8, K-9). `backup:restore` has not yet been run against a real `babysunray_restore` database. An export is not a backup.
+Local tooling only (`src/db/backup.mts`, `scripts/backup-*.mts`); how to use it is in the [runbook](docs/operations/runbook.md), section 8. A backup is a `pg_dump` custom-format archive (schema, data, sequences, triggers, migration history) streamed into chunked AES-256-GCM encryption with a scrypt key from an interactive passphrase, so no plaintext dump is written to disk; session, verification and rate-limit table data are left out. Changed, reordered or cut-short files and wrong passphrases are refused before any data is used (unit tests). `npm run backup:drill` proves a full backup, verify and restore on fictional data in `babysunray_test` (every table, sequence, constraint and trigger compared). **Not decided, so not built:** a schedule, retention, an off-device copy, and the RPO and RTO (K-4, K-5, K-8, K-9). Product photo files are **not** in these backups; only their records are (Product photos). `backup:restore` has not yet been run against a real `babysunray_restore` database. An export is not a backup.
 
 ## Documentation
 
@@ -239,6 +257,7 @@ Local tooling only (`src/db/backup.mts`, `scripts/backup-*.mts`); how to use it 
 | [ADR-0003: Authentication foundation](docs/adr/0003-authentication-foundation.md) | Better Auth, sessions, Owner bootstrap, permissions, user actors | Draft — Founder Review (decisions founder-approved) |
 | [ADR-0004: API v1 and Bearer transport](docs/adr/0004-api-v1-and-bearer-transport.md) | Versioned API, Bearer-only transport, OpenAPI, body limits, CORS policy, rate limits | Draft — Founder Review |
 | [ADR-0005: Operation idempotency](docs/adr/0005-operation-idempotency.md) | One key per user and operation, committed with the operation | Draft — Founder Review |
+| [ADR-0006: Product photo storage](docs/adr/0006-product-media-storage.md) | A storage interface with a local development folder outside the repository, a manifest, fail-closed in production | Draft — Founder Review |
 | [API guide](docs/api/README.md) | Calling `/api/v1`, errors, pagination, compatibility rules | Draft — Founder Review |
 | [Operations runbook](docs/operations/runbook.md) | Running, checking, exports, stock counts, backup and restore, outage procedure | Draft — Founder Review |
 | [Export formats](docs/operations/exports.md) | Datasets, columns, types, spreadsheet safety, JSON layout | Draft — Founder Review |

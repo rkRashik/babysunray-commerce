@@ -7,12 +7,18 @@ import {
   PG_UNIQUE_VIOLATION,
   pgErrorCode,
 } from "@/db/database";
-import { inventoryBalances, products, variants } from "@/db/schema";
+import { inventoryBalances, productCategories, productMeasurements, productMedia, products, variants } from "@/db/schema";
+import type { Actor } from "../actor";
 import { DomainError } from "../domain-error";
+import { contentText, type Measurement, MEASUREMENT_POINTS, validateMeasurements } from "./content";
 import { normalizeSearch, normalizeSku, optionalText, validateId, validatePricePaisa, validateSlug, validateVersion } from "./rules";
 
 export type Product = typeof products.$inferSelect;
 export type Variant = typeof variants.$inferSelect;
+export type Category = typeof productCategories.$inferSelect;
+export type ProductMedia = typeof productMedia.$inferSelect;
+/** A product with everything the Office, the API and the storefront preview show about it. */
+export type ProductDetail = Product & { variants: Variant[]; measurements: Measurement[]; media: ProductMedia[]; category: Category | null };
 
 export type NewProduct = {
   slug: string;
@@ -95,41 +101,161 @@ export async function deactivateVariant(db: Db, variantId: string): Promise<Vari
   return variant;
 }
 
-/** The editable text of a draft product. Absent: unchanged. null or blank: cleared. Slug and id never change. */
-export type ProductChanges = Partial<Pick<NewProduct, "nameEn" | "nameBn" | "descriptionEn" | "descriptionBn">>;
+/**
+ * The editable content of a draft product. Absent: unchanged. null or blank: cleared. Slug and id never change.
+ * `fabricConfirmed: true` records that the Owner confirmed the fabric statement as sent (requirement S-11);
+ * any change to the fabric text without it clears an earlier confirmation.
+ */
+export type ProductChanges = Partial<
+  Pick<NewProduct, "nameEn" | "nameBn" | "descriptionEn" | "descriptionBn"> & {
+    fabricEn: string | null;
+    fabricBn: string | null;
+    careEn: string | null;
+    careBn: string | null;
+    sizeGuidanceEn: string | null;
+    sizeGuidanceBn: string | null;
+    categoryId: string | null;
+    featured: boolean;
+    fabricConfirmed: boolean;
+  }
+>;
 /** The editable fields of a variant. Absent: unchanged; size and colour may be cleared. SKU and id never change. */
 export type VariantChanges = { size?: string | null; colour?: string | null; pricePaisa?: number };
 
 const conflict = (what: string) =>
   new DomainError("VERSION_CONFLICT", `This ${what} was changed after you loaded it. Reload it, check the current values and make your change again.`);
 
+type ProductSet = Partial<Pick<Product, "nameEn" | "nameBn" | "descriptionEn" | "descriptionBn" | "fabricEn" | "fabricBn" | "careEn" | "careBn" | "sizeGuidanceEn" | "sizeGuidanceBn" | "categoryId" | "featured">>;
+
+/** Locks a draft product at the expected version, or throws (not found, archived, stale). */
+async function lockDraft(tx: Db, id: string, version: number): Promise<Product> {
+  const [current] = await tx.select().from(products).where(eq(products.id, id)).for("update");
+  if (!current) throw new DomainError("PRODUCT_NOT_FOUND", "Product not found.");
+  if (current.status !== "draft") throw new DomainError("PRODUCT_NOT_EDITABLE", "An archived product cannot be edited.");
+  if (current.version !== version) throw conflict("product");
+  return current;
+}
+
+/** Adds one to a locked product's version: every content, measurement or photo change goes through here. */
+export async function bumpProductVersion(tx: Db, id: string, set: Record<string, unknown> = {}): Promise<Product> {
+  const [product] = await tx
+    .update(products)
+    .set({ ...set, version: sql`${products.version} + 1`, updatedAt: sql`now()` })
+    .where(eq(products.id, id))
+    .returning();
+  return product;
+}
+
+/** Locks a draft product for a change by its id and the version the client last saw (photos, measurements). */
+export async function lockDraftProduct(tx: Db, productId: string, expectedVersion: number): Promise<Product> {
+  return lockDraft(tx, validateId(productId, "productId"), validateVersion(expectedVersion));
+}
+
 /**
- * Edits a draft product's names and descriptions if it is still at `expectedVersion`, and adds one to its
- * version. The row is locked first, so of two edits based on the same version exactly one succeeds and the
- * other gets VERSION_CONFLICT. Archived products are not edited (and never turned back into drafts).
+ * Edits a draft product's content if it is still at `expectedVersion`, and adds one to its version. The row
+ * is locked first, so of two edits based on the same version exactly one succeeds and the other gets
+ * VERSION_CONFLICT. Archived products are not edited (and never turned back into drafts). Confirming the
+ * fabric statement records the acting user and the time; it needs fabric text in at least one language.
  */
-export async function updateProduct(db: Db, productId: string, expectedVersion: number, changes: ProductChanges): Promise<Product> {
+export async function updateProduct(db: Db, productId: string, expectedVersion: number, changes: ProductChanges, actor?: Actor): Promise<Product> {
   const id = validateId(productId, "productId");
   const version = validateVersion(expectedVersion);
-  const set: { nameEn?: string | null; nameBn?: string | null; descriptionEn?: string | null; descriptionBn?: string | null } = {};
+  const set: ProductSet = {};
   for (const [field, max] of [["nameEn", 200], ["nameBn", 200], ["descriptionEn", 5000], ["descriptionBn", 5000]] as const) {
     if (changes[field] !== undefined) set[field] = optionalText(changes[field], field, max);
   }
-  if (Object.keys(set).length === 0) throw new DomainError("INVALID_INPUT", "Nothing to change: send at least one field.");
+  for (const field of ["fabricEn", "fabricBn", "careEn", "careBn", "sizeGuidanceEn", "sizeGuidanceBn"] as const) {
+    if (changes[field] !== undefined) set[field] = contentText(changes[field], field);
+  }
+  if (changes.categoryId !== undefined) set.categoryId = changes.categoryId === null ? null : validateId(changes.categoryId, "categoryId");
+  if (changes.featured !== undefined) {
+    if (typeof changes.featured !== "boolean") throw new DomainError("INVALID_INPUT", "featured must be true or false.");
+    set.featured = changes.featured;
+  }
+  if (changes.fabricConfirmed !== undefined && typeof changes.fabricConfirmed !== "boolean") throw new DomainError("INVALID_INPUT", "fabricConfirmed must be true or false.");
+  if (Object.keys(set).length === 0 && changes.fabricConfirmed === undefined) throw new DomainError("INVALID_INPUT", "Nothing to change: send at least one field.");
+  try {
+    return await db.transaction(async (tx) => {
+      const current = await lockDraft(tx, id, version);
+      const next = { ...current, ...set };
+      if (next.nameEn === null && next.nameBn === null) throw new DomainError("INVALID_INPUT", "A product needs a name in English or Bangla.");
+      const fabricChanged = next.fabricEn !== current.fabricEn || next.fabricBn !== current.fabricBn;
+      let confirmation: { fabricConfirmedAt: Date | ReturnType<typeof sql> | null; fabricConfirmedByUserId: string | null } | null = null;
+      if (changes.fabricConfirmed === true) {
+        if (next.fabricEn === null && next.fabricBn === null) throw new DomainError("INVALID_INPUT", "Enter the fabric statement before confirming it.");
+        if (actor?.type !== "user") throw new DomainError("INVALID_INPUT", "Only a signed-in user can confirm a fabric statement.");
+        confirmation = fabricChanged || current.fabricConfirmedAt === null ? { fabricConfirmedAt: sql`now()`, fabricConfirmedByUserId: actor.ref } : null;
+      } else if (changes.fabricConfirmed === false || fabricChanged) {
+        confirmation = { fabricConfirmedAt: null, fabricConfirmedByUserId: null };
+      }
+      return bumpProductVersion(tx, id, { ...set, ...(confirmation ?? {}) });
+    });
+  } catch (error) {
+    throw mapWriteError(error, { [PG_FOREIGN_KEY_VIOLATION]: "CATEGORY_NOT_FOUND" });
+  }
+}
+
+/**
+ * Replaces a draft product's whole size chart (validated by validateMeasurements; an empty list removes it)
+ * if the product is still at `expectedVersion`, and adds one to its version.
+ */
+export async function replaceMeasurements(db: Db, productId: string, expectedVersion: number, rows: { size: string; point: string; valueMm: number }[]): Promise<Product> {
+  const id = validateId(productId, "productId");
+  const version = validateVersion(expectedVersion);
+  const measurements = validateMeasurements(rows);
   return db.transaction(async (tx) => {
-    const [current] = await tx.select().from(products).where(eq(products.id, id)).for("update");
-    if (!current) throw new DomainError("PRODUCT_NOT_FOUND", "Product not found.");
-    if (current.status !== "draft") throw new DomainError("PRODUCT_NOT_EDITABLE", "An archived product cannot be edited.");
-    if (current.version !== version) throw conflict("product");
-    const next = { ...current, ...set };
-    if (next.nameEn === null && next.nameBn === null) throw new DomainError("INVALID_INPUT", "A product needs a name in English or Bangla.");
-    const [product] = await tx
-      .update(products)
-      .set({ ...set, version: current.version + 1, updatedAt: sql`now()` })
-      .where(eq(products.id, id))
-      .returning();
-    return product;
+    await lockDraft(tx, id, version);
+    await tx.delete(productMeasurements).where(eq(productMeasurements.productId, id));
+    if (measurements.length) await tx.insert(productMeasurements).values(measurements.map((m) => ({ productId: id, ...m })));
+    return bumpProductVersion(tx, id);
   });
+}
+
+export type NewCategory = { slug: string; nameEn?: string | null; nameBn?: string | null };
+
+const categoryNames = (input: { nameEn?: string | null; nameBn?: string | null }) => ({
+  nameEn: optionalText(input.nameEn, "nameEn", 100),
+  nameBn: optionalText(input.nameBn, "nameBn", 100),
+});
+
+/** Creates an Owner-defined category: an ASCII slug and a name in English or Bangla (or both). */
+export async function createCategory(db: Db, input: NewCategory): Promise<Category> {
+  const values = { slug: validateSlug(input.slug), ...categoryNames(input) };
+  if (values.nameEn === null && values.nameBn === null) throw new DomainError("INVALID_INPUT", "A category needs a name in English or Bangla.");
+  try {
+    const [category] = await db.insert(productCategories).values(values).returning();
+    return category;
+  } catch (error) {
+    if (pgErrorCode(error) === PG_UNIQUE_VIOLATION) throw new DomainError("SLUG_TAKEN", "A category with this slug already exists.");
+    throw mapWriteError(error, {});
+  }
+}
+
+/** Renames a category if it is still at `expectedVersion`. The slug never changes. */
+export async function updateCategory(db: Db, categoryId: string, expectedVersion: number, input: { nameEn?: string | null; nameBn?: string | null }): Promise<Category> {
+  const id = validateId(categoryId, "categoryId");
+  const version = validateVersion(expectedVersion);
+  const names = categoryNames(input);
+  if (names.nameEn === null && names.nameBn === null) throw new DomainError("INVALID_INPUT", "A category needs a name in English or Bangla.");
+  return db.transaction(async (tx) => {
+    const [current] = await tx.select().from(productCategories).where(eq(productCategories.id, id)).for("update");
+    if (!current) throw new DomainError("CATEGORY_NOT_FOUND", "Category not found.");
+    if (current.version !== version) throw conflict("category");
+    const [category] = await tx
+      .update(productCategories)
+      .set({ ...names, version: sql`${productCategories.version} + 1`, updatedAt: sql`now()` })
+      .where(eq(productCategories.id, id))
+      .returning();
+    return category;
+  });
+}
+
+export const listCategories = (db: Db) => db.select().from(productCategories).orderBy(asc(productCategories.slug));
+
+export async function getCategory(db: Db, categoryId: string): Promise<Category> {
+  const [category] = await db.select().from(productCategories).where(eq(productCategories.id, validateId(categoryId, "categoryId")));
+  if (!category) throw new DomainError("CATEGORY_NOT_FOUND", "Category not found.");
+  return category;
 }
 
 /**
@@ -169,6 +295,7 @@ const MESSAGES = {
   SLUG_TAKEN: "A product with this slug already exists.",
   SKU_TAKEN: "A variant with this SKU already exists.",
   PRODUCT_NOT_FOUND: "Product not found.",
+  CATEGORY_NOT_FOUND: "Category not found.",
 } as const;
 
 function mapWriteError(error: unknown, codes: Record<string, keyof typeof MESSAGES>): unknown {
@@ -239,11 +366,25 @@ export async function getVariant(db: Db, variantId: string): Promise<Variant> {
   return variant;
 }
 
-/** One product with its variants (ordered by SKU). */
-export async function getProductWithVariants(db: Db, productId: string): Promise<Product & { variants: Variant[] }> {
+/**
+ * One product with its variants (by SKU), size chart (by size, then point), photos (by position) and
+ * category, read from one snapshot, one query at a time (a savepoint when `db` is already a transaction).
+ */
+export async function getProductWithVariants(db: Db, productId: string): Promise<ProductDetail> {
   const id = validateId(productId, "productId");
-  const [product] = await db.select().from(products).where(eq(products.id, id));
-  if (!product) throw new DomainError("PRODUCT_NOT_FOUND", "Product not found.");
-  const productVariants = await db.select().from(variants).where(eq(variants.productId, id)).orderBy(asc(variants.sku));
-  return { ...product, variants: productVariants };
+  return db.transaction(
+    async (tx) => {
+      const [product] = await tx.select().from(products).where(eq(products.id, id));
+      if (!product) throw new DomainError("PRODUCT_NOT_FOUND", "Product not found.");
+      const productVariants = await tx.select().from(variants).where(eq(variants.productId, id)).orderBy(asc(variants.sku));
+      const rows = await tx.select().from(productMeasurements).where(eq(productMeasurements.productId, id));
+      const media = await tx.select().from(productMedia).where(eq(productMedia.productId, id)).orderBy(asc(productMedia.position), asc(productMedia.createdAt));
+      const [category] = product.categoryId ? await tx.select().from(productCategories).where(eq(productCategories.id, product.categoryId)) : [];
+      const measurements = rows
+        .map(({ size, point, valueMm }) => ({ size, point, valueMm }))
+        .sort((a, b) => (a.size < b.size ? -1 : a.size > b.size ? 1 : MEASUREMENT_POINTS.indexOf(a.point) - MEASUREMENT_POINTS.indexOf(b.point)));
+      return { ...product, variants: productVariants, measurements, media, category: category ?? null };
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
 }

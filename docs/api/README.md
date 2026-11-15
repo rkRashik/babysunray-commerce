@@ -122,6 +122,8 @@ Version 1.1.0 added the write endpoints, problem codes, the `body` error locatio
 
 Version 1.2.0 (compatible) added `PATCH /products/{productId}`, `PATCH /variants/{variantId}`, the optional `q` search parameter, the `version` field on products and variants, and the 409 codes `VERSION_CONFLICT`, `PRODUCT_NOT_EDITABLE` and `VARIANT_NOT_EDITABLE`.
 
+Version 1.4.0 added product content: `category`, `fabric` (with `confirmedAt`), `care`, `sizeGuidance`, `featured`, `measurements` and `photos` (metadata only) on the product, the same content fields in `PATCH /products/{productId}`, `PUT /products/{productId}/measurements`, `GET /products/{productId}/readiness` (advisory; it publishes nothing), `GET` and `POST /categories`, and the problem code `CATEGORY_NOT_FOUND`. Only fields were added; no field was removed or changed. Photo upload and viewing are Owner Office only.
+
 Version 1.3.0 added the order and delivery-zone endpoints, `reserved` and `available` on stock levels, the movement types `dispatch` and `return_restock` (the movement `type` list is now documented as one that may grow), and the problem codes `ORDER_NOT_FOUND`, `RETURN_NOT_FOUND`, `QUARANTINE_ITEM_NOT_FOUND`, `INVALID_TRANSITION`, `DELIVERY_ZONE_UNAVAILABLE`, `VARIANT_NOT_ORDERABLE` and `PAYMENT_LIMIT_EXCEEDED`. The new movement types are a change a strict 1.2.0 client would notice; no such client exists.
 
 ## Testing

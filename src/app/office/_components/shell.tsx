@@ -21,7 +21,7 @@ export function OfficeShell({
   notice?: string;
   /** Where this page sits, from Products down; the page itself is the title. */
   breadcrumbs?: Crumb[];
-  current?: "dashboard" | "products" | "new" | "orders" | "delivery" | "reports" | "counts" | "exports";
+  current?: "dashboard" | "products" | "new" | "categories" | "orders" | "delivery" | "reports" | "counts" | "exports" | "preview";
 }) {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
@@ -44,6 +44,9 @@ export function OfficeShell({
             <Link href="/office/products/new" aria-current={current === "new" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
               New product
             </Link>
+            <Link href="/office/categories" aria-current={current === "categories" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
+              Categories
+            </Link>
             <Link href="/office/orders" aria-current={current === "orders" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
               Orders
             </Link>
@@ -58,6 +61,9 @@ export function OfficeShell({
             </Link>
             <Link href="/office/exports" aria-current={current === "exports" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
               Exports
+            </Link>
+            <Link href="/office/storefront-preview/en" aria-current={current === "preview" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
+              Storefront preview
             </Link>
           </nav>
           <SignOutButton />
@@ -147,5 +153,13 @@ const NOTICES: Record<string, string> = {
   "counts-saved": "Counted quantities saved. Nothing in stock has changed yet.",
   applied: "Stock count applied. Each difference was recorded as a stock adjustment.",
   discarded: "Stock count discarded. Nothing in stock changed.",
+  "measurements-saved": "Size chart saved.",
+  "category-created": "Category created.",
+  "category-updated": "Category names saved.",
+  "photo-uploaded": "Photo uploaded.",
+  "photo-replaced": "Photo replaced. The old file was deleted.",
+  "photo-described": "Photo descriptions saved.",
+  "photo-moved": "Photo order saved.",
+  "photo-removed": "Photo removed and its stored file deleted.",
 };
 export const noticeFor = (done: string | string[] | undefined) => (typeof done === "string" ? NOTICES[done] : undefined);

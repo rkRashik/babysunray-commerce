@@ -67,7 +67,7 @@ beforeEach(async () => {
 });
 
 async function newSku(stock: number) {
-  const { variant } = await createTestVariant(db, "ops");
+  const { variant } = await createTestVariant(db, "ownops");
   if (stock > 0) await receiveStock(db, { sku: variant.sku, quantity: stock, actor: TEST_ACTOR });
   return { sku: variant.sku, variantId: variant.id };
 }

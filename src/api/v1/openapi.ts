@@ -8,7 +8,7 @@ import { apiRegistry, PROBLEM_CODES, type ProblemCode } from "./schemas";
 // parameters are written out below. tests/db/api*.integration.test.ts check real responses against this
 // document, and tests/api/openapi.test.ts validates it against the OpenAPI 3.1 schema.
 
-export const API_VERSION = "1.3.0";
+export const API_VERSION = "1.4.0";
 
 const ref = (id: string) => ({ $ref: `#/components/schemas/${id}` });
 
@@ -369,18 +369,68 @@ export function buildOpenApiDocument(serverUrl?: string) {
         }),
         patch: write({
           operationId: "updateProduct",
-          summary: "Edit a draft product's names and descriptions",
+          summary: "Edit a draft product's content",
           description:
-            "Partial update: a field left out keeps its value; null or an empty string clears it. Send the `version` you last read; " +
+            "Partial update of names, descriptions and (since 1.4.0) fabric, care, size guidance, category and featured: a field left out keeps its value; " +
+            "null or an empty string clears it. Changing the fabric text clears an earlier fabric confirmation unless `fabricConfirmed` is true in the same request. " +
+            "An unknown category is 404 CATEGORY_NOT_FOUND. Send the `version` you last read; " +
             "if the product changed since, nothing is saved and the answer is 409 VERSION_CONFLICT (read it again and retry). " +
             "Archived products cannot be edited (409 PRODUCT_NOT_EDITABLE). Slug, id and status never change here; at least one name must remain.",
           permission: "catalog:write",
           parameters: [uuidParameter("productId")],
           request: { schemaId: "UpdateProductRequest", required: true },
           ok: { status: "200", description: "The product as it is now.", schemaId: "ProductResponse" },
-          notFound: ["PRODUCT_NOT_FOUND"],
+          notFound: ["PRODUCT_NOT_FOUND", "CATEGORY_NOT_FOUND"],
           conflict: ["VERSION_CONFLICT", "PRODUCT_NOT_EDITABLE"],
           allow: "GET, PATCH",
+        }),
+      },
+      "/products/{productId}/measurements": {
+        put: write({
+          operationId: "replaceMeasurements",
+          summary: "Replace a draft product's size chart",
+          description:
+            "Added in 1.4.0. Sends the whole chart in whole millimetres: one value per size and measuring point; an empty list removes it. " +
+            "Send the product `version` you last read; a stale one gets 409 VERSION_CONFLICT and nothing changes.",
+          permission: "catalog:write",
+          parameters: [uuidParameter("productId")],
+          request: { schemaId: "ReplaceMeasurementsRequest", required: true },
+          ok: { status: "200", description: "The product as it is now.", schemaId: "ProductResponse" },
+          notFound: ["PRODUCT_NOT_FOUND"],
+          conflict: ["VERSION_CONFLICT", "PRODUCT_NOT_EDITABLE"],
+          allow: "PUT",
+        }),
+      },
+      "/products/{productId}/readiness": {
+        get: read("GET", {
+          operationId: "getProductReadiness",
+          summary: "Advisory publishing checklist for a product",
+          description:
+            "Added in 1.4.0. Requires `catalog:read`. Read-only: it never publishes anything and is not an approval to publish (no publish operation exists). " +
+            "Each item names its basis: an approved requirement, a proposed rule waiting for the founder, or an engineering recommendation.",
+          parameters: [uuidParameter("productId")],
+          responses: {
+            "200": ok("The checklist.", "ReadinessResponse"),
+            "404": problemResponse("No product has this id.", ["PRODUCT_NOT_FOUND"]),
+          },
+        }),
+      },
+      "/categories": {
+        get: read("GET, POST", {
+          operationId: "listCategories",
+          summary: "List product categories",
+          description: "Added in 1.4.0. Requires `catalog:read`. Every category, ordered by slug (a short list, not paged).",
+          responses: { "200": ok("The categories.", "CategoryList") },
+        }),
+        post: write({
+          operationId: "createCategory",
+          summary: "Create a product category",
+          description: "Added in 1.4.0. A slug (never changes) and a name in English or Bangla.",
+          permission: "catalog:write",
+          request: { schemaId: "CreateCategoryRequest", required: true },
+          ok: { status: "201", description: "The created category.", schemaId: "CategoryResponse" },
+          conflict: ["SLUG_TAKEN"],
+          allow: "GET, POST",
         }),
       },
       "/products/{productId}/variants": {

@@ -1,18 +1,24 @@
 import "server-only";
 import type { Db } from "@/db/database";
-import { assertPermission, type Principal } from "../auth/principal";
+import { actorFor, assertPermission, type Principal } from "../auth/principal";
 import { type Once, runOnce } from "../idempotency/service";
 import {
   archiveProduct,
+  type Category,
+  createCategory,
   createProduct,
   createVariant,
   deactivateVariant,
+  getCategory,
   getProductWithVariants,
   getVariant,
+  type NewCategory,
   type NewProduct,
   type NewVariant,
-  type Product,
   type ProductChanges,
+  type ProductDetail,
+  replaceMeasurements,
+  updateCategory,
   updateProduct,
   updateVariant,
   type Variant,
@@ -23,7 +29,7 @@ import {
 // `catalog:write` and runs once per idempotency key. A replay returns the resource as it is now (a product
 // may have been archived since); nothing here publishes a product (requirement I-6 is open).
 
-type ProductWithVariants = Product & { variants: Variant[] };
+type ProductWithVariants = ProductDetail;
 const loadProduct = (db: Db, ref: { productId: string }) => getProductWithVariants(db, ref.productId);
 const loadVariant = (db: Db, ref: { variantId: string }) => getVariant(db, ref.variantId);
 
@@ -72,8 +78,9 @@ export async function archiveProductOnce(db: Db, principal: Principal, idempoten
 }
 
 /**
- * Edits a draft product's text. `expectedVersion` is the version the client last saw; a stale one gets
- * VERSION_CONFLICT. A retry with the same key and request returns the first result and changes nothing.
+ * Edits a draft product's content (text, category, featured, fabric confirmation). `expectedVersion` is the
+ * version the client last saw; a stale one gets VERSION_CONFLICT. A retry with the same key and request
+ * returns the first result and changes nothing. A fabric confirmation names the signed-in user.
  */
 export async function updateProductOnce(
   db: Db,
@@ -87,7 +94,7 @@ export async function updateProductOnce(
   return runOnce(
     db,
     { userId: user.userId, operation: "catalog.product.update", key: idempotencyKey, request },
-    async (tx) => ({ productId: (await updateProduct(tx, request.productId, request.expectedVersion, request.changes)).id }),
+    async (tx) => ({ productId: (await updateProduct(tx, request.productId, request.expectedVersion, request.changes, actorFor(user))).id }),
     loadProduct,
   );
 }
@@ -116,5 +123,51 @@ export async function deactivateVariantOnce(db: Db, principal: Principal, idempo
     { userId: user.userId, operation: "catalog.variant.deactivate", key: idempotencyKey, request: { variantId } },
     async (tx) => ({ variantId: (await deactivateVariant(tx, variantId)).id }),
     loadVariant,
+  );
+}
+
+/** Replaces a draft product's size chart (millimetres), with the same version and retry rules. */
+export async function replaceMeasurementsOnce(
+  db: Db,
+  principal: Principal,
+  idempotencyKey: string,
+  input: { productId: string; expectedVersion: number; measurements: { size: string; point: string; valueMm: number }[] },
+): Promise<Once<ProductWithVariants>> {
+  const user = assertPermission(principal, "catalog:write");
+  const request = { productId: input.productId, expectedVersion: input.expectedVersion, measurements: input.measurements.map((m) => ({ size: m.size, point: m.point, valueMm: m.valueMm })) };
+  return runOnce(
+    db,
+    { userId: user.userId, operation: "catalog.product.measurements", key: idempotencyKey, request },
+    async (tx) => ({ productId: (await replaceMeasurements(tx, request.productId, request.expectedVersion, request.measurements)).id }),
+    loadProduct,
+  );
+}
+
+const loadCategory = (db: Db, ref: { categoryId: string }) => getCategory(db, ref.categoryId);
+
+export async function createCategoryOnce(db: Db, principal: Principal, idempotencyKey: string, input: NewCategory): Promise<Once<Category>> {
+  const user = assertPermission(principal, "catalog:write");
+  const request = { slug: input.slug, nameEn: input.nameEn ?? null, nameBn: input.nameBn ?? null };
+  return runOnce(
+    db,
+    { userId: user.userId, operation: "catalog.category.create", key: idempotencyKey, request },
+    async (tx) => ({ categoryId: (await createCategory(tx, request)).id }),
+    loadCategory,
+  );
+}
+
+export async function updateCategoryOnce(
+  db: Db,
+  principal: Principal,
+  idempotencyKey: string,
+  input: { categoryId: string; expectedVersion: number; nameEn: string | null; nameBn: string | null },
+): Promise<Once<Category>> {
+  const user = assertPermission(principal, "catalog:write");
+  const request = { ...input };
+  return runOnce(
+    db,
+    { userId: user.userId, operation: "catalog.category.update", key: idempotencyKey, request },
+    async (tx) => ({ categoryId: (await updateCategory(tx, request.categoryId, request.expectedVersion, request)).id }),
+    loadCategory,
   );
 }

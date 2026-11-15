@@ -1,5 +1,6 @@
 import { DEV_TARGET, parseSafeDatabaseUrl, RESTORE_TARGET, TEST_TARGET } from "../db/connection-guard.mts";
 import { authSettingProblems } from "../modules/auth/settings";
+import { mediaStoreConfig } from "../modules/media/storage";
 import { readRateLimits } from "../modules/rate-limit/service";
 
 // Configuration readiness for `npm run config:check`: which variables are set and valid. It reports variable names and reasons only, never a value, and changes
@@ -46,14 +47,18 @@ function authChecks(env: Env): ConfigCheck[] {
 }
 
 /** Every variable this project reads, checked without connecting to anything. */
-export function configChecks(env: Env): ConfigCheck[] {
+export function configChecks(env: Env, projectRoot = process.cwd()): ConfigCheck[] {
+  const media = mediaStoreConfig(env, projectRoot);
   return [
     check("DATABASE_URL", "required", env, (v) => parseSafeDatabaseUrl(v, DEV_TARGET), "The application's database: the local babysunray_dev database and role on port 5432."),
     ...authChecks(env),
     check("TEST_DATABASE_URL", "optional", env, (v) => parseSafeDatabaseUrl(v, TEST_TARGET), "Tests and the restore drill (local babysunray_test only)."),
     check("RESTORE_DATABASE_URL", "optional", env, (v) => parseSafeDatabaseUrl(v, RESTORE_TARGET), "Only for backup:restore (an empty local babysunray_restore)."),
+    env.MEDIA_STORAGE_DIR
+      ? { name: "MEDIA_STORAGE_DIR", need: "optional", status: media.ok ? "ok" : "invalid", detail: media.ok ? "Product photos (outside the project folder)." : media.problem }
+      : { name: "MEDIA_STORAGE_DIR", need: "optional", status: "missing", detail: "Product photos; without it photos cannot be uploaded." },
     ...(["API_RATE_LIMIT_READS_PER_MINUTE", "API_RATE_LIMIT_WRITES_PER_MINUTE"] as const).map((name) =>
-      check(name, "optional", env, () => readRateLimits(env), "Optional; empty means the default."),
+      check(name, "optional", env, () => readRateLimits(env), "Empty means the default."),
     ),
   ];
 }

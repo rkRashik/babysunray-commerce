@@ -72,6 +72,79 @@ export const DATASETS: Dataset[] = [
        order by p.created_at, p.id, v.created_at, v.id`,
   },
   {
+    name: "product_content",
+    title: "Product content in English and Bangla",
+    personalData: false,
+    orderFilters: false,
+    columns: [
+      t("product_id"),
+      t("slug"),
+      t("product_status"),
+      t("category_slug"),
+      { key: "featured", type: "boolean" },
+      t("name_en"),
+      t("name_bn"),
+      t("description_en"),
+      t("description_bn"),
+      t("fabric_en"),
+      t("fabric_bn"),
+      ts("fabric_confirmed_at"),
+      t("care_en"),
+      t("care_bn"),
+      t("size_guidance_en"),
+      t("size_guidance_bn"),
+      n("version"),
+      ts("updated_at"),
+    ],
+    query: (where) => sql`
+      select p.id as product_id, p.slug, p.status as product_status, c.slug as category_slug, p.featured, p.name_en, p.name_bn, p.description_en, p.description_bn,
+             p.fabric_en, p.fabric_bn, ${iso("p.fabric_confirmed_at")} as fabric_confirmed_at, p.care_en, p.care_bn, p.size_guidance_en, p.size_guidance_bn,
+             p.version, ${iso("p.updated_at")} as updated_at
+        from products p left join product_categories c on c.id = p.category_id
+       where ${where}
+       order by p.created_at, p.id`,
+  },
+  {
+    name: "product_measurements",
+    title: "Size charts (whole millimetres)",
+    personalData: false,
+    orderFilters: false,
+    columns: [t("product_id"), t("slug"), t("size"), t("point"), n("value_mm", "Whole millimetres (10 mm = 1 cm)")],
+    query: (where) => sql`
+      select m.product_id, p.slug, m.size, m.point, m.value_mm
+        from product_measurements m join products p on p.id = m.product_id
+       where ${where}
+       order by p.created_at, p.id, m.size, m.point`,
+  },
+  {
+    name: "product_media",
+    title: "Photo manifest (which stored file belongs to which product)",
+    personalData: false,
+    orderFilters: false,
+    columns: [
+      t("media_id"),
+      t("product_id"),
+      t("slug"),
+      n("position"),
+      t("storage_key", "File name in the media storage folder"),
+      t("content_type"),
+      n("byte_size"),
+      n("width"),
+      n("height"),
+      t("sha256", "SHA-256 of the stored file"),
+      t("alt_en"),
+      t("alt_bn"),
+      ts("created_at"),
+      ts("updated_at"),
+    ],
+    query: (where) => sql`
+      select m.id as media_id, m.product_id, p.slug, m.position, m.storage_key, m.content_type, m.byte_size, m.width, m.height, m.sha256, m.alt_en, m.alt_bn,
+             ${iso("m.created_at")} as created_at, ${iso("m.updated_at")} as updated_at
+        from product_media m join products p on p.id = m.product_id
+       where ${where}
+       order by p.created_at, p.id, m.position`,
+  },
+  {
     name: "stock",
     title: "Current stock (on hand, reserved, available, awaiting inspection)",
     personalData: false,

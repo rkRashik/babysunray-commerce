@@ -1,7 +1,8 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { hashPassword } from "better-auth/crypto";
 import type { Client } from "pg";
@@ -100,8 +101,11 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 
   let child: ChildProcess | undefined;
   let nextEnvBefore: string | null = null;
+  // Fictional test photos only, in a throwaway folder outside the project (never the founder's media folder).
+  const mediaDir = mkdtempSync(path.join(os.tmpdir(), "babysunray-e2e-media-"));
   const teardown = async () => {
     if (child) stop(child);
+    rmSync(mediaDir, { recursive: true, force: true });
     // `next dev` rewrites next-env.d.ts for its output directory; put back what the developer had.
     if (nextEnvBefore !== null) writeFileSync(NEXT_ENV, nextEnvBefore);
     await lock.end();
@@ -123,7 +127,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     const baseURL = `http://127.0.0.1:${port}`;
     const env: NodeJS.ProcessEnv = { ...process.env };
     for (const name of Object.keys(env)) {
-      if (/^(DATABASE_URL|TEST_DATABASE_URL|BETTER_AUTH_|API_RATE_LIMIT_|NODE_ENV$)/.test(name)) delete env[name];
+      if (/^(DATABASE_URL|TEST_DATABASE_URL|BETTER_AUTH_|API_RATE_LIMIT_|MEDIA_|NODE_ENV$)/.test(name)) delete env[name];
     }
     Object.assign(env, {
       DATABASE_URL: url,
@@ -131,6 +135,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       BETTER_AUTH_URL: baseURL,
       E2E_NEXT_DIST_DIR: DIST_DIR,
       NEXT_TELEMETRY_DISABLED: "1",
+      MEDIA_STORAGE_DIR: mediaDir,
     });
     let output = "";
     child = spawn(process.execPath, [path.join(ROOT, "node_modules/next/dist/bin/next"), "dev", "--port", String(port), "--hostname", "127.0.0.1"], {
@@ -151,6 +156,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     process.env.E2E_BASE_URL = baseURL;
     process.env.E2E_OWNER_PASSWORD = password;
     process.env.E2E_TEST_DATABASE_URL = url;
+    process.env.E2E_MEDIA_DIR = mediaDir;
     return teardown;
   } catch (error) {
     await teardown();

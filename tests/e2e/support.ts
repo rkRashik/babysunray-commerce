@@ -107,3 +107,14 @@ export async function expectLabelledFields(page: Page): Promise<void> {
   });
   expect(duplicates).toEqual([]);
 }
+
+/** The product (id, slug) a seeded SKU belongs to. */
+export async function productOf(sku: string): Promise<{ id: string; slug: string }> {
+  const db = await testDatabase();
+  try {
+    const { rows } = await db.query<{ id: string; slug: string }>("select p.id, p.slug from products p join variants v on v.product_id = p.id where v.sku = $1", [sku]);
+    return rows[0];
+  } finally {
+    await db.end();
+  }
+}

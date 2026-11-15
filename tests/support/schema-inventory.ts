@@ -117,6 +117,15 @@ const EXPECTED_DEFAULTS: Record<string, string> = {
   "public.stock_counts.version": "1",
   "public.stock_counts.created_at": "now()",
   "public.stock_counts.updated_at": "now()",
+  // Migration 0011: categories, product content, measurements and the media manifest.
+  "public.product_categories.id": "gen_random_uuid()",
+  "public.product_categories.version": "1",
+  "public.product_categories.created_at": "now()",
+  "public.product_categories.updated_at": "now()",
+  "public.products.featured": "false",
+  "public.product_media.id": "gen_random_uuid()",
+  "public.product_media.created_at": "now()",
+  "public.product_media.updated_at": "now()",
   "drizzle.__drizzle_migrations.id": "nextval('drizzle.__drizzle_migrations_id_seq'::regclass)",
 };
 

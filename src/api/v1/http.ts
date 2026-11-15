@@ -55,6 +55,7 @@ const PROBLEMS: Record<ProblemCode, [status: number, title: string]> = {
   DELIVERY_ZONE_UNAVAILABLE: [409, "No active delivery charge for this zone"],
   VARIANT_NOT_ORDERABLE: [409, "SKU cannot be ordered"],
   PAYMENT_LIMIT_EXCEEDED: [409, "Amount exceeds what is allowed"],
+  CATEGORY_NOT_FOUND: [404, "Category not found"],
   PAYLOAD_TOO_LARGE: [413, "Request body too large"],
   UNSUPPORTED_MEDIA_TYPE: [415, "Unsupported media type"],
   IDEMPOTENCY_KEY_REUSED: [422, "Idempotency-Key reused"],
@@ -236,6 +237,7 @@ const DOMAIN_TO_PROBLEM: Partial<Record<DomainError["code"], ProblemCode>> = {
   DELIVERY_ZONE_UNAVAILABLE: "DELIVERY_ZONE_UNAVAILABLE",
   VARIANT_NOT_ORDERABLE: "VARIANT_NOT_ORDERABLE",
   PAYMENT_LIMIT_EXCEEDED: "PAYMENT_LIMIT_EXCEEDED",
+  CATEGORY_NOT_FOUND: "CATEGORY_NOT_FOUND",
 };
 
 function toProblem(error: unknown, requestId: string): Response {

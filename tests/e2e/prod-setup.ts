@@ -63,6 +63,9 @@ export default async function prodSetup(): Promise<() => Promise<void>> {
   assertSafeTestDatabaseUrl(url, process.env.DATABASE_URL ?? fileEnv.DATABASE_URL);
   const lock = await lockTestDatabase(url);
   const certDir = mkdtempSync(path.join(os.tmpdir(), "babysunray-e2e-tls-"));
+  // Fictional test photos only, in a throwaway folder outside the project. Allowing local storage under
+  // NODE_ENV=production is this harness's explicit choice for a local disk, as the runbook describes.
+  const mediaDir = mkdtempSync(path.join(os.tmpdir(), "babysunray-e2e-media-"));
   let child: ChildProcess | undefined;
   let proxy: https.Server | undefined;
   let nextEnvBefore: string | null = null;
@@ -70,6 +73,7 @@ export default async function prodSetup(): Promise<() => Promise<void>> {
     if (child) stop(child);
     if (proxy) await new Promise((r) => proxy?.close(r));
     rmSync(certDir, { recursive: true, force: true });
+    rmSync(mediaDir, { recursive: true, force: true });
     if (nextEnvBefore !== null) writeFileSync(NEXT_ENV, nextEnvBefore);
     await lock.end();
   };
@@ -87,8 +91,8 @@ export default async function prodSetup(): Promise<() => Promise<void>> {
     const [proxyPort, appPort] = [await freePort(), await freePort()];
     const baseURL = `https://127.0.0.1:${proxyPort}`;
     const env: NodeJS.ProcessEnv = { ...process.env };
-    for (const name of Object.keys(env)) if (/^(DATABASE_URL|TEST_DATABASE_URL|BETTER_AUTH_|API_RATE_LIMIT_|NODE_ENV$)/.test(name)) delete env[name];
-    Object.assign(env, { DATABASE_URL: url, BETTER_AUTH_SECRET: randomBytes(32).toString("base64"), BETTER_AUTH_URL: baseURL, E2E_NEXT_DIST_DIR: DIST_DIR, NEXT_TELEMETRY_DISABLED: "1" });
+    for (const name of Object.keys(env)) if (/^(DATABASE_URL|TEST_DATABASE_URL|BETTER_AUTH_|API_RATE_LIMIT_|MEDIA_|NODE_ENV$)/.test(name)) delete env[name];
+    Object.assign(env, { DATABASE_URL: url, BETTER_AUTH_SECRET: randomBytes(32).toString("base64"), BETTER_AUTH_URL: baseURL, E2E_NEXT_DIST_DIR: DIST_DIR, NEXT_TELEMETRY_DISABLED: "1", MEDIA_STORAGE_DIR: mediaDir, MEDIA_LOCAL_STORAGE_IN_PRODUCTION: "allow" });
 
     let output = "";
     const keep = (chunk: Buffer) => {
@@ -107,6 +111,7 @@ export default async function prodSetup(): Promise<() => Promise<void>> {
     process.env.E2E_BASE_URL = baseURL;
     process.env.E2E_OWNER_PASSWORD = password;
     process.env.E2E_TEST_DATABASE_URL = url;
+    process.env.E2E_MEDIA_DIR = mediaDir;
     return teardown;
   } catch (error) {
     await teardown();

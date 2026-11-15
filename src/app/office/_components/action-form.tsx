@@ -209,3 +209,34 @@ export function Choice({ name, legend, options, defaultValue }: { name: string; 
     </fieldset>
   );
 }
+
+/** A labelled drop-down that keeps the chosen value when the action answers with an error. */
+export function SelectField({ name, label, options, defaultValue, hint }: { name: string; label: string; options: { value: string; label: string; lang?: string }[]; defaultValue?: string; hint?: string }) {
+  const value = useValue(name, defaultValue);
+  const id = useId();
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium">
+        {label}
+      </label>
+      <select id={id} name={name} defaultValue={value} aria-describedby={hint ? `${id}-hint` : undefined} className={INPUT}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value} lang={o.lang}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {hint ? (
+        <p id={`${id}-hint`} className="mt-1 text-xs text-gray-600">
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** An input for a table cell, named by its column and row header (aria-label), keeping typed values after an error. */
+export function CellInput({ name, label, defaultValue, inputMode = "decimal" }: { name: string; label: string; defaultValue?: string; inputMode?: "decimal" | "numeric" | "text" }) {
+  const value = useValue(name, defaultValue);
+  return <input type="text" name={name} aria-label={label} inputMode={inputMode} autoComplete="off" defaultValue={value} className="block w-20 rounded border border-gray-400 bg-white px-2 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900" />;
+}
