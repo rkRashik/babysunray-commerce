@@ -79,6 +79,7 @@ describe("migrations", () => {
       "products_slug_format",
       "products_slug_key",
       "products_status_valid",
+      "products_version_positive",
       "stock_movements_actor_ref_format",
       "stock_movements_actor_type_valid",
       "stock_movements_actor_user_consistent",
@@ -95,6 +96,7 @@ describe("migrations", () => {
       "variants_sku_canonical",
       "variants_sku_key",
       "variants_status_valid",
+      "variants_version_positive",
     ]);
 
     const trigger = await client.query(

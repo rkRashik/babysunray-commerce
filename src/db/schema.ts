@@ -6,6 +6,9 @@ import { bigint, boolean, check, index, integer, jsonb, pgTable, primaryKey, tex
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
+// Optimistic concurrency for editable rows: every update adds one, and an edit names the version it was
+// based on, so a stale form or client cannot silently overwrite a newer change (migration 0007).
+const version = () => integer("version").notNull().default(1);
 
 // A product is never published by this schema: publication rules (requirement I-6) are not approved yet.
 export const products = pgTable(
@@ -18,10 +21,12 @@ export const products = pgTable(
     descriptionEn: text("description_en"),
     descriptionBn: text("description_bn"),
     status: text("status", { enum: ["draft", "archived"] }).notNull().default("draft"),
+    version: version(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
+    check("products_version_positive", sql`${t.version} >= 1`),
     check("products_slug_format", sql`${t.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and length(${t.slug}) <= 100`),
     check("products_status_valid", sql`${t.status} in ('draft', 'archived')`),
     check("products_name_present", sql`${t.nameEn} is not null or ${t.nameBn} is not null`),
@@ -51,10 +56,12 @@ export const variants = pgTable(
     // Integer paisa. The upper bound is Number.MAX_SAFE_INTEGER, so every stored value is exact as a JS number.
     pricePaisa: bigint("price_paisa", { mode: "number" }).notNull(),
     status: text("status", { enum: ["active", "inactive"] }).notNull().default("active"),
+    version: version(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
+    check("variants_version_positive", sql`${t.version} >= 1`),
     index("variants_product_id_idx").on(t.productId),
     check("variants_sku_canonical", sql`${t.sku} ~ '^[A-Z0-9_-]{1,64}$'`),
     check(

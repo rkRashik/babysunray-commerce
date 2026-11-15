@@ -33,6 +33,8 @@ describe("OpenAPI document", () => {
         "GET /products",
         "POST /products",
         "GET /products/{productId}",
+        "PATCH /products/{productId}",
+        "PATCH /variants/{variantId}",
         "POST /products/{productId}/variants",
         "POST /products/{productId}/archive",
         "POST /variants/{variantId}/deactivate",

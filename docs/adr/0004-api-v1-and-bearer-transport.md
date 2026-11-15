@@ -5,7 +5,7 @@
 **Deciders:** Founder
 **Related:** [ADR-0001](0001-application-stack.md) (item 7), [ADR-0003](0003-authentication-foundation.md), [API guide](../api/README.md), [Product requirements](../product/requirements.md) (API-1 to API-12, open decision 17)
 
-**In short:** The founder approved the versioned REST direction (`/api/v1`, OpenAPI) in Gate H.2 and authorised, in batch H.2a + H.3 (2026-11-15), Better Auth's Bearer plugin for Owner-only read endpoints if it could be shown safe. This ADR records what was built: four read-only endpoints, a Bearer-only API transport kept strictly apart from the browser cookie, and the contract tooling. Batch H.4–H.6 (2026-11-15) added Owner-only write endpoints for stock and the draft catalogue, request-body limits, a no-CORS origin policy and per-user rate limits (section "Writes and limits"); idempotency is in [ADR-0005](0005-operation-idempotency.md). Native apps are **not** built.
+**In short:** The founder approved the versioned REST direction (`/api/v1`, OpenAPI) in Gate H.2 and authorised, in batch H.2a + H.3 (2026-11-15), Better Auth's Bearer plugin for Owner-only read endpoints if it could be shown safe. This ADR records what was built: four read-only endpoints, a Bearer-only API transport kept strictly apart from the browser cookie, and the contract tooling. Batch H.4–H.6 (2026-11-15) added Owner-only write endpoints for stock and the draft catalogue, request-body limits, a no-CORS origin policy and per-user rate limits (section "Writes and limits"); idempotency is in [ADR-0005](0005-operation-idempotency.md). Batch H.7–H.9 added `PATCH` edits of draft products and active variants with optimistic versions, and Owner product search (API guide, Editing and Search). Native apps are **not** built.
 
 ## Context
 
@@ -40,7 +40,7 @@ The Bearer integration was reviewed again before writes were exposed (browser to
 | Actor | Always `actorFor(principal)` of the Bearer token's user; the body cannot carry an actor, user id or role. |
 | CORS | No CORS: no `Access-Control-*` header on any response, `OPTIONS` answered 405, and a request with an `Origin` other than `BETTER_AUTH_URL` refused (403 `ORIGIN_NOT_ALLOWED`) on reads and writes. No wildcard, no allow-list. |
 | Rate limits | PostgreSQL table `api_rate_limits` (migration `0006`): one fixed one-minute window per user and category (`read`, `write`), counted by one atomic upsert after authentication. Defaults 300 reads and 60 writes per minute, configurable by environment (`src/modules/rate-limit/service.ts`). 429 with `Retry-After`. No client IP or forwarded header is used. |
-| Contract | OpenAPI `info.version` 1.1.0. Writes document the `Idempotency-Key` parameter, request schemas, `Idempotent-Replayed` header and 400, 401, 403, 404, 405, 409, 413, 415, 422, 429 and 500 as implemented; reads gained 403 `ORIGIN_NOT_ALLOWED` and 429. A test checks that the documented operations are exactly the implemented ones. |
+| Contract | OpenAPI `info.version` 1.2.0 (1.1.0 for batch H.4–H.6; 1.2.0 added draft editing with PATCH and an optional `version` check, and product search with `q`, in batch H.7–H.9). Writes document the `Idempotency-Key` parameter, request schemas, `Idempotent-Replayed` header and 400, 401, 403, 404, 405, 409, 413, 415, 422, 429 and 500 as implemented; reads gained 403 `ORIGIN_NOT_ALLOWED` and 429. A test checks that the documented operations are exactly the implemented ones. |
 
 ## Consequences
 

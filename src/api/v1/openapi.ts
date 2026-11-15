@@ -6,7 +6,7 @@ import { apiRegistry, PROBLEM_CODES, type ProblemCode } from "./schemas";
 // parameters are written out below. tests/db/api*.integration.test.ts check real responses against this
 // document, and tests/api/openapi.test.ts validates it against the OpenAPI 3.1 schema.
 
-export const API_VERSION = "1.1.0";
+export const API_VERSION = "1.2.0";
 
 const ref = (id: string) => ({ $ref: `#/components/schemas/${id}` });
 
@@ -95,7 +95,7 @@ type Write = {
   allow: string;
 };
 
-/** A POST operation: every write shares the Idempotency-Key header, body handling and error responses. */
+/** A POST or PATCH operation: every write shares the Idempotency-Key header, body handling and error responses. */
 function write(w: Write) {
   return {
     operationId: w.operationId,
@@ -152,6 +152,15 @@ export function buildOpenApiDocument(serverUrl?: string) {
             limitParameter,
             cursorParameter,
             { name: "status", in: "query", required: false, schema: { type: "string", enum: ["draft", "archived"] } },
+            {
+              name: "q",
+              in: "query",
+              required: false,
+              description:
+                "Search text (added in 1.2.0): matches anywhere in the slug, the English or Bangla name, or any SKU of the product, case-insensitively. " +
+                "Unicode NFC-normalised, trimmed, inner spaces collapsed; empty means no search. % and _ match themselves. At most 100 characters; control characters are refused.",
+              schema: { type: "string", maxLength: 100 },
+            },
           ],
           responses: { "200": ok("A page of products.", "ProductList") },
         }),
@@ -167,7 +176,7 @@ export function buildOpenApiDocument(serverUrl?: string) {
         }),
       },
       "/products/{productId}": {
-        get: read("GET", {
+        get: read("GET, PATCH", {
           operationId: "getProduct",
           summary: "Get a product with its variants",
           description: "Requires `catalog:read`.",
@@ -176,6 +185,21 @@ export function buildOpenApiDocument(serverUrl?: string) {
             "200": ok("The product.", "ProductResponse"),
             "404": problemResponse("No product has this id.", ["PRODUCT_NOT_FOUND"]),
           },
+        }),
+        patch: write({
+          operationId: "updateProduct",
+          summary: "Edit a draft product's names and descriptions",
+          description:
+            "Partial update: a field left out keeps its value; null or an empty string clears it. Send the `version` you last read; " +
+            "if the product changed since, nothing is saved and the answer is 409 VERSION_CONFLICT (read it again and retry). " +
+            "Archived products cannot be edited (409 PRODUCT_NOT_EDITABLE). Slug, id and status never change here; at least one name must remain.",
+          permission: "catalog:write",
+          parameters: [uuidParameter("productId")],
+          request: { schemaId: "UpdateProductRequest", required: true },
+          ok: { status: "200", description: "The product as it is now.", schemaId: "ProductResponse" },
+          notFound: ["PRODUCT_NOT_FOUND"],
+          conflict: ["VERSION_CONFLICT", "PRODUCT_NOT_EDITABLE"],
+          allow: "GET, PATCH",
         }),
       },
       "/products/{productId}/variants": {
@@ -203,6 +227,23 @@ export function buildOpenApiDocument(serverUrl?: string) {
           ok: { status: "200", description: "The product as it is now.", schemaId: "ProductResponse" },
           notFound: ["PRODUCT_NOT_FOUND"],
           allow: "POST",
+        }),
+      },
+      "/variants/{variantId}": {
+        patch: write({
+          operationId: "updateVariant",
+          summary: "Edit a variant's size, colour and price",
+          description:
+            "Partial update of an active variant of a draft product: a field left out keeps its value; size and colour can be cleared with null or \"\". " +
+            "Send the `version` you last read (from the product); a stale one gets 409 VERSION_CONFLICT and nothing is saved. " +
+            "Inactive variants and variants of archived products cannot be edited (409 VARIANT_NOT_EDITABLE). SKU, id, status and stock never change here.",
+          permission: "catalog:write",
+          parameters: [uuidParameter("variantId")],
+          request: { schemaId: "UpdateVariantRequest", required: true },
+          ok: { status: "200", description: "The variant as it is now.", schemaId: "VariantResponse" },
+          notFound: ["VARIANT_NOT_FOUND"],
+          conflict: ["VERSION_CONFLICT", "VARIANT_NOT_EDITABLE"],
+          allow: "PATCH",
         }),
       },
       "/variants/{variantId}/deactivate": {

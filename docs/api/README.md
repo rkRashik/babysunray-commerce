@@ -11,9 +11,11 @@ Owner-only endpoints for the draft catalogue and physical stock. There are no pu
 
 | Endpoint | Permission | Does |
 |---|---|---|
-| `GET /api/v1/products` | `catalog:read` | Products, oldest first; `status`, `limit`, `cursor` |
+| `GET /api/v1/products` | `catalog:read` | Products, oldest first; `q` (search), `status`, `limit`, `cursor` |
 | `POST /api/v1/products` | `catalog:write` | Create a draft product (201) |
 | `GET /api/v1/products/{productId}` | `catalog:read` | One product with its variants |
+| `PATCH /api/v1/products/{productId}` | `catalog:write` | Edit a draft product's names and descriptions (200) |
+| `PATCH /api/v1/variants/{variantId}` | `catalog:write` | Edit an active variant's size, colour and price (200) |
 | `POST /api/v1/products/{productId}/variants` | `catalog:write` | Add a variant (SKU) with a zero stock balance (201) |
 | `POST /api/v1/products/{productId}/archive` | `catalog:write` | Archive a product (200); nothing is deleted |
 | `POST /api/v1/variants/{variantId}/deactivate` | `catalog:write` | Mark a variant inactive (200); it keeps stock and history |
@@ -33,11 +35,13 @@ Every endpoint needs `Authorization: Bearer <token>`. Browser cookies are not ac
 2. Read the token from the `set-auth-token` response header. (The `token` field in the JSON body is the unsigned value and does **not** work as a Bearer token.)
 3. Send it on each call. Sign out with `POST /api/auth/sign-out` and the same header.
 
+Do not keep cookies from the sign-in response (turn off the HTTP library's cookie jar). A request that carries the session cookie is treated as a browser request by Better Auth, and `POST /api/auth/sign-out` then answers 403 without the site's `Origin` (seen in the HTTP smoke test, `tests/e2e/api-smoke.spec.ts`). `/api/v1` itself ignores cookies.
+
 The token is a session: it expires with it, and sign-out, `revoke-session` or disabling the user ends it. Browsers never receive it. Keep it in the platform's secure storage, never in a URL or log.
 
 ## Writes
 
-- **Idempotency-Key** (required on every POST): a new value per operation, 16 to 128 characters of `A-Z a-z 0-9 _ . : -` (a UUID fits), plain or in double quotes. Generate it before the first attempt and reuse it only to retry that same request.
+- **Idempotency-Key** (required on every POST and PATCH): a new value per operation, 16 to 128 characters of `A-Z a-z 0-9 _ . : -` (a UUID fits), plain or in double quotes. Generate it before the first attempt and reuse it only to retry that same request.
   - Same key, same body: the operation runs once. A retry gets the first result, same status, with `Idempotent-Replayed: true`. This covers a lost response.
   - Same key, different body or endpoint: `422 IDEMPOTENCY_KEY_REUSED`; nothing runs.
   - A failed request (validation, conflict, server error) records nothing; the key can be retried.
@@ -45,6 +49,18 @@ The token is a session: it expires with it, and sign-out, `revoke-session` or di
   - Records are kept; no key expires yet (retention is a pending founder decision).
 - **Body:** JSON (`Content-Type: application/json`, UTF-8), at most 64 KiB. Unknown fields are errors. Archive and deactivate take no body or `{}`.
 - **Money** is integer paisa (`pricePaisa`, 1 BDT = 100 paisa). **Times** are UTC, ISO 8601.
+
+## Editing (PATCH)
+
+- Products and variants carry a `version` (a whole number that grows with every change, including archive and deactivate). An edit sends the `version` it last read; if the row changed since, nothing is saved and the answer is `409 VERSION_CONFLICT`: read it again, check the values and retry with a new key. Of two edits based on the same version, exactly one wins.
+- Partial update: a field left out keeps its value; `null` or `""` clears an optional text. A product must keep at least one name.
+- A product can be edited only while it is a draft (`409 PRODUCT_NOT_EDITABLE` once archived; archiving is never undone here). A variant can be edited only while it is active and its product is a draft (`409 VARIANT_NOT_EDITABLE`).
+- Never changed by an edit: ids, slug, SKU, status and stock. Those fields are refused as unknown.
+- A retried edit with the same key and body returns the first result and does not edit again, even if the version has moved on since.
+
+## Search
+
+`GET /api/v1/products?q=...` finds products whose slug, English name, Bangla name or any SKU contains the text, ignoring case. The text is Unicode NFC-normalised (Bangla typed with separate vowel signs matches the same text stored precomposed), trimmed and its inner spaces collapsed; an empty `q` means no search. `%`, `_` and `\` match themselves, and the value is always a bound query parameter. At most 100 characters; control characters are refused (400). It combines with `status`, and `cursor` pages through the matches in the same order as the full list. Without an index the search reads every product row, which suits a small catalogue; an index (for example trigram) would need a reviewed migration once the catalogue grows.
 
 ## Responses
 
@@ -58,7 +74,7 @@ The token is a session: it expires with it, and sign-out, `revoke-session` or di
 | 403 | `FORBIDDEN`, `ORIGIN_NOT_ALLOWED` |
 | 404 | `PRODUCT_NOT_FOUND`, `VARIANT_NOT_FOUND`, `ROUTE_NOT_FOUND` |
 | 405 | `METHOD_NOT_ALLOWED` |
-| 409 | `SLUG_TAKEN`, `SKU_TAKEN`, `INSUFFICIENT_STOCK`, `STOCK_LIMIT_EXCEEDED` |
+| 409 | `SLUG_TAKEN`, `SKU_TAKEN`, `INSUFFICIENT_STOCK`, `STOCK_LIMIT_EXCEEDED`, `VERSION_CONFLICT`, `PRODUCT_NOT_EDITABLE`, `VARIANT_NOT_EDITABLE` |
 | 413 | `PAYLOAD_TOO_LARGE` |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` |
 | 422 | `IDEMPOTENCY_KEY_REUSED` |
@@ -83,6 +99,8 @@ Within `/api/v1`, only compatible changes are made:
 - A new major version runs alongside the old one. The old one is retired only after its clients have moved; the timing is a founder decision.
 
 Version 1.1.0 added the write endpoints, problem codes, the `body` error location, and the 403 `ORIGIN_NOT_ALLOWED` and 429 responses on the existing read endpoints. No client existed for 1.0.0. From now on, clients should be prepared for 429 on any endpoint and for new values of `errors[].location`.
+
+Version 1.2.0 (compatible) added `PATCH /products/{productId}`, `PATCH /variants/{variantId}`, the optional `q` search parameter, the `version` field on products and variants, and the 409 codes `VERSION_CONFLICT`, `PRODUCT_NOT_EDITABLE` and `VARIANT_NOT_EDITABLE`.
 
 ## Testing
 

@@ -31,6 +31,10 @@ export const PROBLEM_CODES = [
   "SKU_TAKEN",
   "INSUFFICIENT_STOCK",
   "STOCK_LIMIT_EXCEEDED",
+  // Added in 1.2.0 with draft editing.
+  "VERSION_CONFLICT",
+  "PRODUCT_NOT_EDITABLE",
+  "VARIANT_NOT_EDITABLE",
 ] as const;
 export type ProblemCode = (typeof PROBLEM_CODES)[number];
 
@@ -55,6 +59,7 @@ export const problemSchema = z
   .register(apiRegistry, { id: "Problem", description: "RFC 9457 problem details with a stable `code`." });
 
 const timestamp = z.iso.datetime().meta({ description: "UTC, ISO 8601." });
+const version = z.int().min(1).meta({ description: "Changes with every update. Send it back as `version` when editing." });
 const localised = z.object({ en: z.string().nullable(), bn: z.string().nullable() });
 
 export const variantSchema = z
@@ -65,6 +70,7 @@ export const variantSchema = z
     colour: z.string().nullable(),
     pricePaisa: z.int().min(1).meta({ description: "Integer paisa (1 BDT = 100 paisa)." }),
     status: z.enum(["active", "inactive"]),
+    version,
     createdAt: timestamp,
     updatedAt: timestamp,
   })
@@ -76,6 +82,7 @@ export const productSummarySchema = z
     slug: z.string(),
     status: z.enum(["draft", "archived"]),
     name: localised,
+    version,
     createdAt: timestamp,
     updatedAt: timestamp,
   })
@@ -139,7 +146,12 @@ const limit = z
 const cursor = z.string().min(1).max(200).optional().meta({ description: "Opaque; from `page.nextCursor`." });
 
 export const DEFAULT_LIMIT = 25;
-export const productListQuery = z.strictObject({ limit, cursor, status: z.enum(["draft", "archived"]).optional() });
+export const productListQuery = z.strictObject({
+  limit,
+  cursor,
+  status: z.enum(["draft", "archived"]).optional(),
+  q: z.string().max(100).optional().meta({ description: "Search text, at most 100 characters." }),
+});
 export const movementListQuery = z.strictObject({ limit, cursor });
 export const productPath = z.strictObject({ productId: z.uuid() });
 export const skuPath = z.strictObject({ sku: z.string().min(1).max(64).meta({ description: "Case-insensitive." }) });
@@ -190,6 +202,30 @@ export const createVariantRequest = z
   })
   .register(apiRegistry, { id: "CreateVariantRequest" });
 
+const expectedVersion = z.int().min(1).max(2_147_483_647).meta({ description: "The `version` you last read. A stale one is refused with VERSION_CONFLICT." });
+const editableText = (max: number) => z.string().max(max).nullable().optional();
+const localisedEdit = (max: number) =>
+  z.strictObject({ en: editableText(max), bn: editableText(max) }).meta({ description: "Leave a language out to keep it; null or \"\" clears it." });
+
+export const updateProductRequest = z
+  .strictObject({
+    version: expectedVersion,
+    name: localisedEdit(200).optional(),
+    description: localisedEdit(5000).optional(),
+  })
+  .meta({ description: "Partial update of a draft product's text. Slug and status do not change here. At least one name must remain." })
+  .register(apiRegistry, { id: "UpdateProductRequest" });
+
+export const updateVariantRequest = z
+  .strictObject({
+    version: expectedVersion,
+    size: editableText(64).meta({ description: "Leave out to keep; null or \"\" clears." }),
+    colour: editableText(64).meta({ description: "Leave out to keep; null or \"\" clears." }),
+    pricePaisa: z.int().min(1).max(Number.MAX_SAFE_INTEGER).optional().meta({ description: "Integer paisa (1 BDT = 100 paisa)." }),
+  })
+  .meta({ description: "Partial update of an active variant. SKU, status and stock do not change here." })
+  .register(apiRegistry, { id: "UpdateVariantRequest" });
+
 /** Archive and deactivate take no input: no body, or an empty JSON object. */
 export const emptyRequest = z.strictObject({}).optional().register(apiRegistry, { id: "EmptyRequest" });
 
@@ -226,6 +262,7 @@ export const toVariantDto = (v: Variant): z.infer<typeof variantSchema> => ({
   colour: v.colour,
   pricePaisa: v.pricePaisa,
   status: v.status,
+  version: v.version,
   createdAt: v.createdAt.toISOString(),
   updatedAt: v.updatedAt.toISOString(),
 });
@@ -235,6 +272,7 @@ export const toProductSummaryDto = (p: Product): z.infer<typeof productSummarySc
   slug: p.slug,
   status: p.status,
   name: { en: p.nameEn, bn: p.nameBn },
+  version: p.version,
   createdAt: p.createdAt.toISOString(),
   updatedAt: p.updatedAt.toISOString(),
 });

@@ -47,6 +47,26 @@ export function validatePricePaisa(raw: number): number {
   return raw;
 }
 
+/** The version an edit was based on (optimistic concurrency): a positive whole number. */
+export function validateVersion(raw: number): number {
+  if (!Number.isSafeInteger(raw) || raw < 1 || raw > 2_147_483_647) throw invalidInput("version", "must be a positive whole number");
+  return raw;
+}
+
+export const MAX_SEARCH_LENGTH = 100;
+
+/**
+ * A search term: Unicode NFC, trimmed, inner whitespace collapsed to one space. Empty means "no search".
+ * Control characters (PostgreSQL text cannot even hold NUL) and terms over 100 characters are refused.
+ */
+export function normalizeSearch(raw: string): string | null {
+  if (typeof raw !== "string") throw invalidInput("q", "must be text");
+  const term = raw.normalize("NFC").trim().replace(/\s+/g, " ");
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(term)) throw invalidInput("q", "must not contain control characters");
+  if (term.length > MAX_SEARCH_LENGTH) throw invalidInput("q", `must be at most ${MAX_SEARCH_LENGTH} characters`);
+  return term.length === 0 ? null : term;
+}
+
 export function validateId(raw: string, field: string): string {
   if (typeof raw !== "string" || !UUID.test(raw)) throw invalidInput(field, "must be a UUID");
   return raw.toLowerCase();

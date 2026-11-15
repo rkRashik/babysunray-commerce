@@ -23,6 +23,7 @@ const ROUTES: Record<string, RouteModule> = {
   "/products/{productId}": (await import("../../src/app/api/v1/products/[productId]/route")) as unknown as RouteModule,
   "/products/{productId}/variants": (await import("../../src/app/api/v1/products/[productId]/variants/route")) as unknown as RouteModule,
   "/products/{productId}/archive": (await import("../../src/app/api/v1/products/[productId]/archive/route")) as unknown as RouteModule,
+  "/variants/{variantId}": (await import("../../src/app/api/v1/variants/[variantId]/route")) as unknown as RouteModule,
   "/variants/{variantId}/deactivate": (await import("../../src/app/api/v1/variants/[variantId]/deactivate/route")) as unknown as RouteModule,
   "/stock-receipts": (await import("../../src/app/api/v1/stock-receipts/route")) as unknown as RouteModule,
   "/stock-adjustments": (await import("../../src/app/api/v1/stock-adjustments/route")) as unknown as RouteModule,
@@ -90,7 +91,7 @@ type Call = {
 async function call({ method = "POST", path, template, params = {}, token = tokenA, key = randomUUID(), body, raw, headers = {} }: Call) {
   const h = new Headers(headers);
   if (token) h.set("authorization", `Bearer ${token}`);
-  if (key && method === "POST") h.set("idempotency-key", key);
+  if (key && method !== "GET") h.set("idempotency-key", key);
   if (body !== undefined && !h.has("content-type")) h.set("content-type", "application/json");
   const request = new Request(`${BASE_URL}/api/v1${path}`, {
     method,
@@ -532,7 +533,7 @@ describe("failures and contract", () => {
 
   it("documents every route and method that exists, and nothing else", async () => {
     const implemented = Object.entries(ROUTES).flatMap(([template, module]) =>
-      ["GET", "POST"].flatMap((m) => (module[m] ? [`${m.toLowerCase()} ${template}`] : [])),
+      ["GET", "POST", "PATCH"].flatMap((m) => (module[m] ? [`${m.toLowerCase()} ${template}`] : [])),
     );
     // A route exports 405 handlers for the methods it does not support; ask each handler.
     const real: string[] = [];
@@ -546,5 +547,164 @@ describe("failures and contract", () => {
     }
     const documented = Object.entries(doc.paths).flatMap(([template, item]) => Object.keys(item).map((m) => `${m} ${template}`));
     expect(real.sort()).toEqual(documented.sort());
+  });
+});
+
+describe("draft editing (PATCH)", () => {
+  const editProduct = (id: string, body: unknown, extra: Partial<Call> = {}) => ({
+    method: "PATCH",
+    path: `/products/${id}`,
+    template: "/products/{productId}",
+    params: { productId: id },
+    body,
+    ...extra,
+  });
+  const editVariant = (id: string, body: unknown, extra: Partial<Call> = {}) => ({
+    method: "PATCH",
+    path: `/variants/${id}`,
+    template: "/variants/{variantId}",
+    params: { variantId: id },
+    body,
+    ...extra,
+  });
+
+  it("edits a draft product's text, keeps slug and id, and bumps the version", async () => {
+    const { product } = await createTestVariant(db, "wedit");
+    const { status, body } = await call(editProduct(product.id, { version: 1, name: { en: "Renamed Romper" }, description: { bn: "নতুন বিবরণ" } }));
+    expect(status).toBe(200);
+    expect(body.data).toMatchObject({ id: product.id, slug: product.slug, version: 2, name: { en: "Renamed Romper", bn: "পরীক্ষামূলক রম্পার" } });
+    expect(body.data.description).toEqual({ en: null, bn: "নতুন বিবরণ" });
+  });
+
+  it("refuses a stale version with 409 VERSION_CONFLICT and saves nothing", async () => {
+    const { product } = await createTestVariant(db, "wstale");
+    expect((await call(editProduct(product.id, { version: 1, name: { en: "First edit" } }))).status).toBe(200);
+    const stale = await call(editProduct(product.id, { version: 1, name: { en: "Stale edit" } }));
+    expect(stale.status).toBe(409);
+    expect(stale.body.code).toBe("VERSION_CONFLICT");
+    const { rows } = await pool.query("select name_en, version from products where id = $1", [product.id]);
+    expect(rows).toEqual([{ name_en: "First edit", version: 2 }]);
+  });
+
+  it("replays a retried edit with the same key instead of editing twice", async () => {
+    const { product } = await createTestVariant(db, "wreplay");
+    const key = randomUUID();
+    const first = await call(editProduct(product.id, { version: 1, name: { en: "Once" } }, { key }));
+    const again = await call(editProduct(product.id, { version: 1, name: { en: "Once" } }, { key }));
+    expect(first.status).toBe(200);
+    expect(again.status).toBe(200);
+    expect(again.response.headers.get("idempotent-replayed")).toBe("true");
+    expect(again.body.data.version).toBe(2);
+    const reused = await call(editProduct(product.id, { version: 1, name: { en: "Different" } }, { key }));
+    expect(reused.status).toBe(422);
+    expect(reused.body.code).toBe("IDEMPOTENCY_KEY_REUSED");
+  });
+
+  it("refuses archived products, removing every name, unknown fields, and a missing version", async () => {
+    const { product } = await createTestVariant(db, "wbad");
+    const cases: [unknown, number, string][] = [
+      [{ version: 1, name: { en: null, bn: "" } }, 400, "VALIDATION_FAILED"],
+      [{ version: 1 }, 400, "VALIDATION_FAILED"],
+      [{ name: { en: "No version" } }, 400, "VALIDATION_FAILED"],
+      [{ version: 1, slug: "new-slug" }, 400, "VALIDATION_FAILED"],
+      [{ version: 1, status: "draft" }, 400, "VALIDATION_FAILED"],
+      [{ version: 0, name: { en: "x" } }, 400, "VALIDATION_FAILED"],
+      [{ version: 1, name: { en: "x".repeat(201) } }, 400, "VALIDATION_FAILED"],
+    ];
+    for (const [body, status, code] of cases) {
+      const answer = await call(editProduct(product.id, body));
+      expect([answer.status, answer.body.code], JSON.stringify(body)).toEqual([status, code]);
+    }
+    await call({ path: `/products/${product.id}/archive`, template: "/products/{productId}/archive", params: { productId: product.id } });
+    const archived = await call(editProduct(product.id, { version: 2, name: { en: "Back to draft?" } }));
+    expect([archived.status, archived.body.code]).toEqual([409, "PRODUCT_NOT_EDITABLE"]);
+    expect((await pool.query("select status, name_en from products where id = $1", [product.id])).rows).toEqual([
+      { status: "archived", name_en: "Test Romper" },
+    ]);
+  });
+
+  it("needs a Bearer token, ignores cookies and refuses other origins", async () => {
+    const { product } = await createTestVariant(db, "wpauth");
+    const { cookie } = await signIn(auth, A.email, A.password);
+    const cookieOnly = await call(editProduct(product.id, { version: 1, name: { en: "x" } }, { token: null, headers: { cookie } }));
+    expect(cookieOnly.status).toBe(401);
+    const otherOrigin = await call(editProduct(product.id, { version: 1, name: { en: "x" } }, { headers: { origin: "https://evil.example" } }));
+    expect([otherOrigin.status, otherOrigin.body.code]).toEqual([403, "ORIGIN_NOT_ALLOWED"]);
+    const noKey = await call(editProduct(product.id, { version: 1, name: { en: "x" } }, { key: null }));
+    expect(noKey.body.code).toBe("IDEMPOTENCY_KEY_REQUIRED");
+    expect(await count(pool, "select count(*) from products where id = $1 and version = 1", [product.id])).toBe(1);
+  });
+
+  it("scopes keys per user: the same key from another Owner is its own request and meets the version check", async () => {
+    const { product } = await createTestVariant(db, "wcross");
+    const key = randomUUID();
+    expect((await call(editProduct(product.id, { version: 1, name: { en: "By A" } }, { key }))).status).toBe(200);
+    const fromB = await call(editProduct(product.id, { version: 1, name: { en: "By A" } }, { key, token: tokenB }));
+    expect([fromB.status, fromB.body.code]).toEqual([409, "VERSION_CONFLICT"]);
+  });
+
+  it("edits a variant's price in exact paisa without touching its SKU or stock", async () => {
+    const { variant } = await createTestVariant(db, "wvar");
+    await call(receipt(variant.sku, 6));
+    const { status, body } = await call(editVariant(variant.id, { version: 1, pricePaisa: 9_007_199_254_740_991, colour: null }));
+    expect(status).toBe(200);
+    expect(body.data).toMatchObject({ id: variant.id, sku: variant.sku, pricePaisa: 9_007_199_254_740_991, colour: null, size: "0-3M", version: 2 });
+    expect((await pool.query("select on_hand from inventory_balances where variant_id = $1", [variant.id])).rows).toEqual([{ on_hand: 6 }]);
+    expect(await movementsOf(variant.id)).toBe(1);
+    for (const bad of [{ version: 2, pricePaisa: 0 }, { version: 2, pricePaisa: 1.5 }, { version: 2, pricePaisa: "850" }, { version: 2, sku: "NEW-SKU" }, { version: 2, status: "active" }]) {
+      expect((await call(editVariant(variant.id, bad))).status, JSON.stringify(bad)).toBe(400);
+    }
+    const unknown = await call(editVariant("3f8a6c1e-2b4d-4e6f-8a1b-2c3d4e5f6a7b", { version: 1, size: "1Y" }));
+    expect([unknown.status, unknown.body.code]).toEqual([404, "VARIANT_NOT_FOUND"]);
+  });
+
+  it("refuses inactive variants and variants of archived products", async () => {
+    const one = await createTestVariant(db, "wvoff");
+    await call({ path: `/variants/${one.variant.id}/deactivate`, template: "/variants/{variantId}/deactivate", params: { variantId: one.variant.id } });
+    const inactive = await call(editVariant(one.variant.id, { version: 2, size: "1Y" }));
+    expect([inactive.status, inactive.body.code]).toEqual([409, "VARIANT_NOT_EDITABLE"]);
+    const two = await createTestVariant(db, "wvarch");
+    await call({ path: `/products/${two.product.id}/archive`, template: "/products/{productId}/archive", params: { productId: two.product.id } });
+    const archived = await call(editVariant(two.variant.id, { version: 1, size: "1Y" }));
+    expect([archived.status, archived.body.code]).toEqual([409, "VARIANT_NOT_EDITABLE"]);
+  });
+});
+
+describe("product search (GET /products?q=)", () => {
+  const search = (query: Record<string, string>) => call({ method: "GET", path: `/products?${new URLSearchParams(query)}`, template: "/products" });
+
+  it("finds products by English or Bangla name, slug and SKU, case-insensitively", async () => {
+    const { product, variant } = await createTestVariant(db, "wsearch");
+    for (const q of ["test romper", "TEST ROMPER", "পরীক্ষামূলক", product.slug.toUpperCase(), variant.sku.toLowerCase()]) {
+      const { status, body } = await search({ q, limit: "100" });
+      expect(status, q).toBe(200);
+      expect(body.data.map((p: { id: string }) => p.id), q).toContain(product.id);
+    }
+  });
+
+  it("treats SQL and LIKE syntax as plain text and refuses unsafe input", async () => {
+    const total = await count(pool, "select count(*) from products");
+    expect(total).toBeGreaterThan(0);
+    for (const q of ["' or 1=1 --", "%", "_", "\\", "'; drop table products; --"]) {
+      const { status, body } = await search({ q, limit: "100" });
+      expect(status, q).toBe(200);
+      // Every hit really contains the characters typed (an underscore SKU may exist); nothing else comes back.
+      for (const item of body.data as { id: string }[]) {
+        const literal = await count(
+          pool,
+          `select count(*) from products p where p.id = $1 and (position($2 in p.slug) > 0 or position($2 in coalesce(p.name_en, '')) > 0
+             or position($2 in coalesce(p.name_bn, '')) > 0 or exists (select 1 from variants v where v.product_id = p.id and position(upper($2) in v.sku) > 0))`,
+          [item.id, q],
+        );
+        expect(literal, q).toBe(1);
+      }
+    }
+    expect(await count(pool, "select count(*) from products")).toBe(total);
+    const long = await search({ q: "x".repeat(101) });
+    expect([long.status, long.body.errors]).toEqual([400, [{ location: "query", name: "q", message: "is above the maximum" }]]);
+    const control = await search({ q: "romper\u0000" });
+    expect([control.status, control.body.code]).toEqual([400, "VALIDATION_FAILED"]);
+    const repeated = await call({ method: "GET", path: "/products?q=a&q=b", template: "/products" });
+    expect(repeated.status).toBe(400);
   });
 });

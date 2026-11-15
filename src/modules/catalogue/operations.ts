@@ -12,7 +12,11 @@ import {
   type NewProduct,
   type NewVariant,
   type Product,
+  type ProductChanges,
+  updateProduct,
+  updateVariant,
   type Variant,
+  type VariantChanges,
 } from "./service";
 
 // Draft catalogue changes for every client (the /api/v1 routes and the Owner Office). Each requires
@@ -64,6 +68,44 @@ export async function archiveProductOnce(db: Db, principal: Principal, idempoten
     { userId: user.userId, operation: "catalog.product.archive", key: idempotencyKey, request: { productId } },
     async (tx) => ({ productId: (await archiveProduct(tx, productId)).id }),
     loadProduct,
+  );
+}
+
+/**
+ * Edits a draft product's text. `expectedVersion` is the version the client last saw; a stale one gets
+ * VERSION_CONFLICT. A retry with the same key and request returns the first result and changes nothing.
+ */
+export async function updateProductOnce(
+  db: Db,
+  principal: Principal,
+  idempotencyKey: string,
+  input: { productId: string; expectedVersion: number; changes: ProductChanges },
+): Promise<Once<ProductWithVariants>> {
+  const user = assertPermission(principal, "catalog:write");
+  // Absent fields stay absent (undefined is left out of the fingerprint); null means "clear".
+  const request = { productId: input.productId, expectedVersion: input.expectedVersion, changes: { ...input.changes } };
+  return runOnce(
+    db,
+    { userId: user.userId, operation: "catalog.product.update", key: idempotencyKey, request },
+    async (tx) => ({ productId: (await updateProduct(tx, request.productId, request.expectedVersion, request.changes)).id }),
+    loadProduct,
+  );
+}
+
+/** Edits a variant's size, colour and price, with the same version and retry rules as updateProductOnce. */
+export async function updateVariantOnce(
+  db: Db,
+  principal: Principal,
+  idempotencyKey: string,
+  input: { variantId: string; expectedVersion: number; changes: VariantChanges },
+): Promise<Once<Variant>> {
+  const user = assertPermission(principal, "catalog:write");
+  const request = { variantId: input.variantId, expectedVersion: input.expectedVersion, changes: { ...input.changes } };
+  return runOnce(
+    db,
+    { userId: user.userId, operation: "catalog.variant.update", key: idempotencyKey, request },
+    async (tx) => ({ variantId: (await updateVariant(tx, request.variantId, request.expectedVersion, request.changes)).id }),
+    loadVariant,
   );
 }
 

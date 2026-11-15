@@ -45,6 +45,9 @@ const PROBLEMS: Record<ProblemCode, [status: number, title: string]> = {
   SKU_TAKEN: [409, "SKU already used"],
   INSUFFICIENT_STOCK: [409, "Not enough stock"],
   STOCK_LIMIT_EXCEEDED: [409, "Stock quantity too large"],
+  VERSION_CONFLICT: [409, "Changed since it was read"],
+  PRODUCT_NOT_EDITABLE: [409, "Product cannot be edited"],
+  VARIANT_NOT_EDITABLE: [409, "Variant cannot be edited"],
   PAYLOAD_TOO_LARGE: [413, "Request body too large"],
   UNSUPPORTED_MEDIA_TYPE: [415, "Unsupported media type"],
   IDEMPOTENCY_KEY_REUSED: [422, "Idempotency-Key reused"],
@@ -216,6 +219,9 @@ const DOMAIN_TO_PROBLEM: Partial<Record<DomainError["code"], ProblemCode>> = {
   INSUFFICIENT_STOCK: "INSUFFICIENT_STOCK",
   STOCK_LIMIT_EXCEEDED: "STOCK_LIMIT_EXCEEDED",
   IDEMPOTENCY_KEY_REUSED: "IDEMPOTENCY_KEY_REUSED",
+  VERSION_CONFLICT: "VERSION_CONFLICT",
+  PRODUCT_NOT_EDITABLE: "PRODUCT_NOT_EDITABLE",
+  VARIANT_NOT_EDITABLE: "VARIANT_NOT_EDITABLE",
 };
 
 function toProblem(error: unknown, requestId: string): Response {
@@ -282,7 +288,7 @@ export function apiGet<P = Record<string, never>>(permission: Permission, handle
 type WriteHandler<P, B> = (input: { params: P; body: B; idempotencyKey: string; db: Db; principal: Principal }) => Promise<Once<unknown>>;
 
 /**
- * A POST endpoint that changes data: Bearer principal with `permission`, a mandatory Idempotency-Key and a
+ * A POST or PATCH endpoint that changes data: Bearer principal with `permission`, a mandatory Idempotency-Key and a
  * strict JSON body. The handler runs a shared operation once per key; a replay answers with the same
  * status and `Idempotent-Replayed: true`.
  */

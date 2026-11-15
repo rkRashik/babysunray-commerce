@@ -73,6 +73,9 @@ const EXPECTED_DEFAULTS: Record<string, string> = {
   "public.variants.updated_at": "now()",
   // Migration 0006: operation idempotency (api_rate_limits has no defaults).
   "public.idempotency_records.created_at": "now()",
+  // Migration 0007: optimistic-concurrency versions.
+  "public.products.version": "1",
+  "public.variants.version": "1",
   "drizzle.__drizzle_migrations.id": "nextval('drizzle.__drizzle_migrations_id_seq'::regclass)",
 };
 

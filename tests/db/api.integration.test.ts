@@ -188,7 +188,7 @@ describe("products", () => {
     const { body } = await get({ path: "/products?status=archived&limit=100", template: "/products" });
     expect(body.data.every((p: { status: string }) => p.status === "archived")).toBe(true);
     const item = body.data.find((p: { id: string }) => p.id === id);
-    expect(Object.keys(item).sort()).toEqual(["createdAt", "id", "name", "slug", "status", "updatedAt"]);
+    expect(Object.keys(item).sort()).toEqual(["createdAt", "id", "name", "slug", "status", "updatedAt", "version"]);
     expect(item.name).toEqual({ en: "Test Romper", bn: "পরীক্ষা" });
   });
 

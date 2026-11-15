@@ -1,5 +1,6 @@
-import { apiGet, methodNotAllowed, parsePath } from "@/api/v1/http";
-import { productPath, toProductDto } from "@/api/v1/schemas";
+import { apiGet, apiPost, methodNotAllowed, parsePath } from "@/api/v1/http";
+import { productPath, toProductDto, updateProductRequest } from "@/api/v1/schemas";
+import { updateProductOnce } from "@/modules/catalogue/operations";
 import { getProductWithVariants } from "@/modules/catalogue/service";
 
 export const runtime = "nodejs";
@@ -11,4 +12,19 @@ export const GET = apiGet<{ productId: string }>("catalog:read", async ({ params
   return { data: toProductDto(await getProductWithVariants(db, productId)) };
 });
 
-export const { POST, PUT, PATCH, DELETE, OPTIONS } = methodNotAllowed("GET");
+// PATCH /api/v1/products/{productId}: edits a draft product's names and descriptions (optimistic `version`).
+export const PATCH = apiPost<{ productId: string }, typeof updateProductRequest>(
+  "catalog:write",
+  { body: updateProductRequest, status: 200 },
+  async ({ params, body, idempotencyKey, db, principal }) => {
+    const { productId } = parsePath(params, productPath);
+    const { value, replayed } = await updateProductOnce(db, principal, idempotencyKey, {
+      productId,
+      expectedVersion: body.version,
+      changes: { nameEn: body.name?.en, nameBn: body.name?.bn, descriptionEn: body.description?.en, descriptionBn: body.description?.bn },
+    });
+    return { value: toProductDto(value), replayed };
+  },
+);
+
+export const { POST, PUT, DELETE, OPTIONS } = methodNotAllowed("GET, PATCH");
