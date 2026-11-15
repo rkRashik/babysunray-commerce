@@ -2,7 +2,8 @@ import type { MeasurementPoint } from "../catalogue/content";
 
 // Interface text of the storefront preview in English and Bangla (requirement S-1). Wording is a draft for the
 // founder's review (Draft — Founder Review): it makes no product claim, delivery promise or policy statement
-// beyond the founder-approved order rules. Product content itself always comes from the Owner, never from here.
+// beyond the founder-approved order rules. It is generic: the shop's name and description are per-installation
+// settings (src/config/installation.ts). Product content itself always comes from the Owner, never from here.
 // Plain data, safe in client components.
 
 export const LANGS = ["en", "bn"] as const;
@@ -15,8 +16,8 @@ const en = {
   previewBanner: "Storefront Preview — Not Live",
   previewNote: "Only you can see this page. Products are drafts, nothing is published, and no order can be placed here.",
   backToOffice: "Back to the Owner Office",
-  storeLine: "Baby and kids clothing, delivered across Bangladesh from Dhaka. Pay in cash when your order arrives.",
   prototypeNote: "Prototype layout. The final design is not decided yet.",
+  contactLabel: "Contact",
   skip: "Skip to content",
   menu: "Menu",
   closeMenu: "Close menu",
@@ -175,8 +176,8 @@ const bn: Dictionary = {
   previewBanner: "স্টোরফ্রন্ট প্রিভিউ — লাইভ নয়",
   previewNote: "এই পাতা শুধু আপনি দেখতে পাচ্ছেন। পণ্যগুলো খসড়া, কিছুই প্রকাশিত নয়, এবং এখান থেকে কোনো অর্ডার দেওয়া যায় না।",
   backToOffice: "ওনার অফিসে ফিরে যান",
-  storeLine: "শিশু ও বাচ্চাদের পোশাক, ঢাকা থেকে সারা বাংলাদেশে ডেলিভারি। পণ্য হাতে পেয়ে নগদে মূল্য পরিশোধ করুন।",
   prototypeNote: "প্রোটোটাইপ নকশা। চূড়ান্ত ডিজাইন এখনো ঠিক হয়নি।",
+  contactLabel: "যোগাযোগ",
   skip: "মূল অংশে যান",
   menu: "মেনু",
   closeMenu: "মেনু বন্ধ করুন",

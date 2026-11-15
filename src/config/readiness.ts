@@ -1,6 +1,7 @@
 import { DEV_TARGET, parseSafeDatabaseUrl, RESTORE_TARGET, TEST_TARGET } from "../db/connection-guard.mts";
 import { authSettingProblems } from "../modules/auth/settings";
 import { mediaStoreConfig } from "../modules/media/storage";
+import { DEFAULT_STORE_NAME, readInstallationIdentity } from "./installation";
 import { readRateLimits } from "../modules/rate-limit/service";
 
 // Configuration readiness for `npm run config:check`: which variables are set and valid. It reports variable names and reasons only, never a value, and changes
@@ -57,6 +58,7 @@ export function configChecks(env: Env, projectRoot = process.cwd()): ConfigCheck
     env.MEDIA_STORAGE_DIR
       ? { name: "MEDIA_STORAGE_DIR", need: "optional", status: media.ok ? "ok" : "invalid", detail: media.ok ? "Product photos (outside the project folder)." : media.problem }
       : { name: "MEDIA_STORAGE_DIR", need: "optional", status: "missing", detail: "Product photos; without it photos cannot be uploaded." },
+    ...identityChecks(env),
     ...(["API_RATE_LIMIT_READS_PER_MINUTE", "API_RATE_LIMIT_WRITES_PER_MINUTE"] as const).map((name) =>
       check(name, "optional", env, () => readRateLimits(env), "Empty means the default."),
     ),
@@ -65,3 +67,14 @@ export function configChecks(env: Env, projectRoot = process.cwd()): ConfigCheck
 
 /** True when nothing required is missing or invalid, and nothing that is set is invalid. */
 export const configReady = (checks: ConfigCheck[]) => checks.every((c) => c.status === "ok" || (c.need === "optional" && c.status === "missing"));
+
+/** The shop's public identity settings (src/config/installation.ts): optional, with neutral defaults. */
+function identityChecks(env: Env): ConfigCheck[] {
+  const { problems } = readInstallationIdentity(env);
+  const invalid = problems.map((problem): ConfigCheck => ({ name: problem.match(/STORE_[A-Z_*]+/)?.[0] ?? "STORE_*", need: "optional", status: "invalid", detail: problem }));
+  if (invalid.some((c) => c.name === "STORE_NAME")) return invalid;
+  const name: ConfigCheck = env.STORE_NAME?.trim()
+    ? { name: "STORE_NAME", need: "optional", status: "ok", detail: "The shop's name in the storefront preview." }
+    : { name: "STORE_NAME", need: "optional", status: "missing", detail: `The shop's name; the preview shows "${DEFAULT_STORE_NAME}" until it is set.` };
+  return [name, ...invalid];
+}

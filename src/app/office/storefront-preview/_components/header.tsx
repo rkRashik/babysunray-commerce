@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { STORE_NAME } from "@/config/brand";
 import { dictionary, type Lang } from "@/modules/storefront/i18n";
 import type { Facets } from "@/modules/storefront/service";
 import { CartLink, LanguageSwitch } from "./header-client";
@@ -45,13 +44,13 @@ function Search({ lang, id }: { lang: Lang; id: string }) {
   );
 }
 
-export function Header({ lang, facets }: { lang: Lang; facets: Facets }) {
+export function Header({ lang, facets, storeName }: { lang: Lang; facets: Facets; storeName: string }) {
   const t = dictionary(lang);
   return (
     <header className="border-b border-sf-line bg-sf-ivory">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-        <Link href={base(lang)} className="mr-auto inline-flex min-h-11 items-center rounded-sm text-xl font-semibold" lang="en">
-          {STORE_NAME}
+        <Link href={base(lang)} className="mr-auto inline-flex min-h-11 items-center rounded-sm text-xl font-semibold">
+          {storeName}
         </Link>
         <nav aria-label={t.mainNav} className="hidden md:block">
           <Nav lang={lang} facets={facets} className="flex flex-wrap items-center gap-x-5" />

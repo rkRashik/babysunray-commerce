@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { InstallationIdentity } from "@/config/installation";
 import { dictionary, formatTaka, type Lang, localised } from "@/modules/storefront/i18n";
 import type { PhotoRef, ProductCard } from "@/modules/storefront/service";
 
@@ -111,12 +112,19 @@ export function PreviewBanner({ lang }: { lang: Lang }) {
   );
 }
 
-export function Footer({ lang }: { lang: Lang }) {
+export function Footer({ lang, identity }: { lang: Lang; identity: InstallationIdentity }) {
   const t = dictionary(lang);
+  const line = localised(lang, identity.storeLine.en, identity.storeLine.bn);
+  const contact = [identity.contact.phone, identity.contact.email].filter(Boolean).join(" · ");
   return (
     <footer className="mt-16 border-t border-sf-line">
       <div className="mx-auto max-w-6xl space-y-2 px-4 py-8 text-sm text-sf-umber">
-        <p>{t.storeLine}</p>
+        {line ? <p>{line}</p> : null}
+        {contact ? (
+          <p data-testid="store-contact">
+            {t.contactLabel}: <span lang="en">{contact}</span>
+          </p>
+        ) : null}
         <p>{t.policiesPending}</p>
         <p>{t.prototypeNote}</p>
       </div>
