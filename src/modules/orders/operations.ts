@@ -1,7 +1,7 @@
 import "server-only";
-import { and, eq, lte, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Db } from "@/db/database";
-import { deliveryZones, orders } from "@/db/schema";
+import { deliveryZones } from "@/db/schema";
 import { actorFor, assertPermission, type Principal } from "../auth/principal";
 import { DomainError } from "../domain-error";
 import { type Once, runOnce } from "../idempotency/service";
@@ -21,6 +21,7 @@ import {
   packOrder,
   receiveRto,
   recordRtoCharge,
+  releaseOverdue,
   reviewCancellation,
   submitOrder,
 } from "./service";
@@ -31,19 +32,6 @@ import { createTrackingLink, revokeTrackingLink } from "./tracking";
 // returns the order as it is now. Owner transitions name the order version the client saw.
 
 const loadOrder = (db: Db, ref: { orderId: string }) => getOrderDetail(db, ref.orderId);
-
-/**
- * Expired holds never block new work (founder rule D): before reserving, release overdue ones. Cheap when
- * nothing is overdue (one indexed query).
- */
-export async function releaseOverdue(db: Db): Promise<void> {
-  const [due] = await db
-    .select({ id: orders.id })
-    .from(orders)
-    .where(and(eq(orders.orderStatus, "pending_verification"), lte(orders.verificationExpiresAt, sql`now()`)))
-    .limit(1);
-  if (due) await expireOverdueVerifications(db);
-}
 
 export async function submitOrderOnce(db: Db, principal: Principal, idempotencyKey: string, input: NewOrder): Promise<Once<OrderDetail>> {
   const user = assertPermission(principal, "orders:write");

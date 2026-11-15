@@ -17,6 +17,14 @@ export const PERMISSIONS = [
   // The private storefront preview (draft products, cart and checkout simulation). Never granted to anonymous
   // visitors: a public storefront would need its own, published-only reads.
   "storefront:preview",
+  // Recording an internal product review (Gate H.26): separate from editing, so a later role can edit without
+  // reviewing. A review publishes nothing.
+  "catalog:review",
+  // Private customer-policy drafts (S-17): reading may show unpublished wording; writing never publishes.
+  "policies:read",
+  "policies:write",
+  // The launch-readiness overview (what still blocks a public shop).
+  "launch:read",
   "users:manage",
 ] as const;
 

@@ -7,6 +7,7 @@ import {
   createProductOnce,
   createVariantOnce,
   deactivateVariantOnce,
+  reviewProductOnce,
   updateProductOnce,
   updateVariantOnce,
 } from "@/modules/catalogue/operations";
@@ -171,4 +172,16 @@ export async function adjustStockAction(_: FormState, form: FormData): Promise<F
     return formError(error, form);
   }
   redirect(`/office/skus/${encodeURIComponent(sku)}?done=adjusted`);
+}
+
+// Records an internal review of the content the Owner was shown (its digest travels in the form). Publishes nothing.
+export async function reviewProductAction(_: FormState, form: FormData): Promise<FormState> {
+  const principal = await requireOffice("catalog:review");
+  const productId = text(form, "productId");
+  try {
+    await reviewProductOnce(getDb(), principal, text(form, "idempotencyKey"), { productId, contentSha256: text(form, "contentSha256") });
+  } catch (error) {
+    return formError(error, form);
+  }
+  redirect(`/office/products/${productId}?done=reviewed`);
 }

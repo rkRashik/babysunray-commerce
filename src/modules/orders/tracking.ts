@@ -5,7 +5,7 @@ import type { Db } from "@/db/database";
 import { orderItems, orders, orderTrackingTokens } from "@/db/schema";
 import type { Actor } from "../actor";
 import { DomainError } from "../domain-error";
-import { addEvent, lockOrder } from "./internal";
+import { addEvent, lockOrder, type OrderActor } from "./internal";
 import { allowedActions, formatOrderNumber, maskName, maskPhone, trackingLinkLive, ZONE_LABELS } from "./rules";
 import { customerCancel, requestCancellation } from "./service";
 
@@ -20,7 +20,7 @@ const digest = (token: string) => createHash("sha256").update(token).digest("hex
  * Revokes the order's current link (if any) and creates a new one. The token is returned only here, once,
  * for the Owner to send to the customer; it cannot be shown again (create another instead).
  */
-export async function createTrackingLink(tx: Db, orderId: string, actor: Actor): Promise<{ token: string; tokenId: string }> {
+export async function createTrackingLink(tx: Db, orderId: string, actor: OrderActor): Promise<{ token: string; tokenId: string }> {
   const locked = await lockOrder(tx, orderId);
   if (!locked) throw new DomainError("ORDER_NOT_FOUND", "Order not found.");
   const revoked = await tx

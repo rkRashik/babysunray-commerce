@@ -24,6 +24,7 @@ import {
   type Variant,
   type VariantChanges,
 } from "./service";
+import { recordProductReview } from "./review";
 
 // Draft catalogue changes for every client (the /api/v1 routes and the Owner Office). Each requires
 // `catalog:write` and runs once per idempotency key. A replay returns the resource as it is now (a product
@@ -169,5 +170,20 @@ export async function updateCategoryOnce(
     { userId: user.userId, operation: "catalog.category.update", key: idempotencyKey, request },
     async (tx) => ({ categoryId: (await updateCategory(tx, request.categoryId, request.expectedVersion, request)).id }),
     loadCategory,
+  );
+}
+
+/**
+ * Records the Owner's internal review of a draft product's current content (review.ts). `contentSha256` is the
+ * digest the Owner's screen showed; a changed product is refused (VERSION_CONFLICT). Publishes nothing.
+ */
+export async function reviewProductOnce(db: Db, principal: Principal, idempotencyKey: string, input: { productId: string; contentSha256: string }): Promise<Once<{ reviewId: string; productId: string }>> {
+  const user = assertPermission(principal, "catalog:review");
+  const request = { productId: input.productId, contentSha256: input.contentSha256 };
+  return runOnce(
+    db,
+    { userId: user.userId, operation: "catalog.product.review", key: idempotencyKey, request },
+    async (tx) => ({ ...(await recordProductReview(tx, request.productId, request.contentSha256, actorFor(user))), productId: request.productId }),
+    async (_tx, ref: { reviewId: string; productId: string }) => ref,
   );
 }

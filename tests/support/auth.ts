@@ -88,7 +88,10 @@ export async function clearAuthState(pool: Pool): Promise<void> {
        and not exists (select 1 from stock_counts where created_by_user_id = u.id or closed_by_user_id = u.id)
        and not exists (select 1 from product_media where created_by_user_id = u.id)
        and not exists (select 1 from products where fabric_confirmed_by_user_id = u.id)
-       and not exists (select 1 from catalogue_imports where actor_user_id = u.id)`,
+       and not exists (select 1 from catalogue_imports where actor_user_id = u.id)
+       and not exists (select 1 from product_reviews where reviewed_by_user_id = u.id)
+       and not exists (select 1 from policy_drafts where updated_by_user_id = u.id or reviewed_by_user_id = u.id)
+       and not exists (select 1 from policy_draft_events where actor_user_id = u.id)`,
   );
 }
 

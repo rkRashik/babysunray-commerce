@@ -102,7 +102,7 @@ export class RequestValidationError extends Error {
 }
 
 /** A transport-level refusal with a fixed problem code (body too large, bad media type, ...). */
-class ApiProblem extends Error {
+export class ApiProblem extends Error {
   constructor(
     readonly code: ProblemCode,
     readonly detail?: string,

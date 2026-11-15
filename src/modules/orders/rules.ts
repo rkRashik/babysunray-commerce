@@ -41,6 +41,37 @@ export function requiredText(raw: unknown, field: string, max: number, multiline
   return text;
 }
 
+export type DetailsField = "name" | "phone" | "address";
+export type DetailsError = "name_required" | "name_too_long" | "name_invalid" | "phone_invalid" | "address_required" | "address_too_long" | "address_invalid";
+export type CustomerDetails = { customerName: string; customerPhone: string; deliveryAddress: string };
+
+/**
+ * A customer's own name, Bangladesh mobile number and delivery address, checked by the same rules as an order
+ * (submitOrder): either the normalised values or a stable error code per field (for bilingual messages). Used by
+ * the storefront preview's simulation and the guest checkout service, so both accept exactly the same input.
+ */
+export function checkCustomerDetails(input: { name: unknown; phone: unknown; address: unknown }): { values: CustomerDetails | null; errors: Partial<Record<DetailsField, DetailsError>> } {
+  const errors: Partial<Record<DetailsField, DetailsError>> = {};
+  const text = (raw: unknown, field: string, max: number, multiline: boolean, prefix: "name" | "address") => {
+    try {
+      return requiredText(raw, field, max, multiline);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      errors[prefix] = message.includes("is required") ? `${prefix}_required` : message.includes("at most") ? `${prefix}_too_long` : `${prefix}_invalid`;
+      return null;
+    }
+  };
+  const customerName = text(input.name, "customerName", 100, false, "name");
+  const deliveryAddress = text(input.address, "deliveryAddress", 500, true, "address");
+  let customerPhone: string | null = null;
+  try {
+    customerPhone = normalizeBdPhone(typeof input.phone === "string" ? input.phone : "");
+  } catch {
+    errors.phone = "phone_invalid";
+  }
+  return { values: customerName && deliveryAddress && customerPhone ? { customerName, customerPhone, deliveryAddress } : null, errors };
+}
+
 export function optionalNote(raw: unknown, field: string, max: number): string | null {
   if (raw === undefined || raw === null || (typeof raw === "string" && raw.trim() === "")) return null;
   return requiredText(raw, field, max, true);

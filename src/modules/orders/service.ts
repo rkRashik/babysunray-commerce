@@ -54,7 +54,7 @@ function normaliseItems(items: NewOrder["items"]): { sku: string; quantity: numb
  * snapshotted. Throws (and creates nothing) if a zone is unconfigured, a SKU is unknown or not orderable, or
  * any line lacks available stock. Totals are computed here; no client-supplied amount is used.
  */
-export async function submitOrder(tx: Db, input: NewOrder, actor: Actor): Promise<Order> {
+export async function submitOrder(tx: Db, input: NewOrder, actor: OrderActor): Promise<Order> {
   if (!ORDER_SOURCES.includes(input.source)) throw invalidInput("source", "must be website, messenger, whatsapp or other");
   if (!DELIVERY_ZONES.includes(input.deliveryZone)) throw invalidInput("deliveryZone", "must be dhaka_city or outside_dhaka");
   const values = {
@@ -172,6 +172,19 @@ export async function expireOverdueVerifications(db: Db, options: { limit?: numb
   let expired = 0;
   for (const { id } of due) if (await db.transaction((tx) => expireIfOverdue(tx, id))) expired += 1;
   return expired;
+}
+
+/**
+ * Expired holds never block new work (founder rule D): before reserving, release overdue ones. Cheap when
+ * nothing is overdue (one indexed query).
+ */
+export async function releaseOverdue(db: Db): Promise<void> {
+  const [due] = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(and(eq(orders.orderStatus, "pending_verification"), lte(orders.verificationExpiresAt, sql`now()`)))
+    .limit(1);
+  if (due) await expireOverdueVerifications(db);
 }
 
 /** Effective cancellation (rule C): releases any active hold exactly once and closes the order. */

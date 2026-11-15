@@ -87,6 +87,7 @@ describe("destructive reset statements", () => {
       '"public"."catalogue_imports"',
       '"public"."delivery_zones"',
       '"public"."export_requests"',
+      '"public"."guest_checkout_submissions"',
       '"public"."idempotency_records"',
       '"public"."inventory_balances"',
       '"public"."order_events"',
@@ -94,9 +95,12 @@ describe("destructive reset statements", () => {
       '"public"."order_tracking_tokens"',
       '"public"."orders"',
       '"public"."payment_entries"',
+      '"public"."policy_draft_events"',
+      '"public"."policy_drafts"',
       '"public"."product_categories"',
       '"public"."product_measurements"',
       '"public"."product_media"',
+      '"public"."product_reviews"',
       '"public"."products"',
       '"public"."quarantine_items"',
       '"public"."return_items"',
@@ -110,7 +114,7 @@ describe("destructive reset statements", () => {
       '"public"."variants"',
     ]);
     expect(fn).toBe(
-      'drop function if exists "public"."stock_movements_reject_change"(), "public"."user_access_revoke_sessions"(), "public"."append_only_reject_change"() restrict;',
+      'drop function if exists "public"."stock_movements_reject_change"(), "public"."user_access_revoke_sessions"(), "public"."append_only_reject_change"(), "public"."guest_checkout_submissions_guard"() restrict;',
     );
     expect(history).toBe('drop table if exists "drizzle"."__drizzle_migrations" restrict;');
   });

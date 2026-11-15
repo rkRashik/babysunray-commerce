@@ -57,6 +57,9 @@ const LABELS: Record<string, string> = {
   chargePaisa: "Charge",
   rtoChargePaisa: "RTO charge",
   returnShippingCostPaisa: "Return shipping cost",
+  bodyEn: "English text",
+  bodyBn: "Bangla text",
+  contentSha256: "Reviewed content",
 };
 
 function readable(message: string): string {

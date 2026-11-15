@@ -92,6 +92,13 @@
       "when": 1794760253038,
       "tag": "0012_catalogue_imports_and_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794775767532,
+      "tag": "0013_guest_checkout_launch_preparation",
+      "breakpoints": true
     }
   ]
 }

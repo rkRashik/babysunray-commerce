@@ -21,7 +21,7 @@ export function OfficeShell({
   notice?: string;
   /** Where this page sits, from Products down; the page itself is the title. */
   breadcrumbs?: Crumb[];
-  current?: "dashboard" | "products" | "new" | "import" | "preparation" | "categories" | "orders" | "delivery" | "reports" | "counts" | "exports" | "media" | "preview";
+  current?: "dashboard" | "products" | "new" | "import" | "preparation" | "reviews" | "categories" | "orders" | "delivery" | "reports" | "counts" | "exports" | "media" | "preview" | "policies" | "launch";
 }) {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
@@ -50,6 +50,9 @@ export function OfficeShell({
             <Link href="/office/catalogue-preparation" aria-current={current === "preparation" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
               Preparation
             </Link>
+            <Link href="/office/product-reviews" aria-current={current === "reviews" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
+              Product reviews
+            </Link>
             <Link href="/office/categories" aria-current={current === "categories" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
               Categories
             </Link>
@@ -73,6 +76,12 @@ export function OfficeShell({
             </Link>
             <Link href="/office/storefront-preview/en" aria-current={current === "preview" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
               Storefront preview
+            </Link>
+            <Link href="/office/policies" aria-current={current === "policies" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
+              Policy drafts
+            </Link>
+            <Link href="/office/launch-readiness" aria-current={current === "launch" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
+              Launch readiness
             </Link>
           </nav>
           <SignOutButton />
@@ -170,5 +179,8 @@ const NOTICES: Record<string, string> = {
   "photo-described": "Photo descriptions saved.",
   "photo-moved": "Photo order saved.",
   "photo-removed": "Photo removed and its stored file deleted.",
+  reviewed: "Review recorded for the content as it is now. Nothing was published.",
+  "policy-saved": "Draft saved. It is private and not published.",
+  "policy-reviewed": "Marked as reviewed by you. This is not publication or legal approval.",
 };
 export const noticeFor = (done: string | string[] | undefined) => (typeof done === "string" ? NOTICES[done] : undefined);

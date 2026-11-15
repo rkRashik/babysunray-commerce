@@ -358,7 +358,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
           {order.events.map((e) => (
             <li key={e.id}>
               <span className="text-gray-600">{formatTime(e.createdAt)}</span> · {e.event.replace(/_/g, " ")} ·{" "}
-              {e.actorType === "user" ? "Owner" : e.actorType === "customer" ? "Customer (tracking link)" : `System (${e.actorRef})`}
+              {e.actorType === "user" ? "Owner" : e.actorType === "customer" ? (e.actorRef === "guest-checkout" ? "Customer (website checkout)" : "Customer (tracking link)") : `System (${e.actorRef})`}
             </li>
           ))}
         </ol>

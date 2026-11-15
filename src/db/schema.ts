@@ -912,3 +912,104 @@ export const stockCountLines = pgTable(
     check("stock_count_lines_applied_consistent", sql`${t.movementId} is null or (${t.appliedDelta} is not null and ${t.appliedDelta} <> 0)`),
   ],
 );
+
+// ---------------------------------------------------------------------------------------------------------
+// Gate H.25-H.28 (migration 0013): anonymous checkout idempotency, internal product reviews and private policy
+// drafts. None of these publishes anything or opens checkout (docs/operations/launch-readiness.md).
+
+// One row per anonymous checkout submission (src/modules/orders/guest-checkout.ts). The client's key is never
+// stored: only its SHA-256 (the primary key) and an HMAC of the canonical request keyed by the key itself, so
+// the row holds nothing a reader could turn back into the customer's name, phone or address without the key.
+// The row is claimed by INSERT in the same transaction that creates the order and then names that order; a
+// trigger refuses any other change and every delete, so a committed submission always points at its order.
+export const guestCheckoutSubmissions = pgTable(
+  "guest_checkout_submissions",
+  {
+    keyHash: text("key_hash").primaryKey(),
+    requestMac: text("request_mac").notNull(),
+    orderId: uuid("order_id")
+      .unique("guest_checkout_submissions_order_id_key")
+      .references(() => orders.id, { onDelete: "restrict" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check("guest_checkout_submissions_key_hash_format", sql`${t.keyHash} ~ '^[0-9a-f]{64}$'`),
+    check("guest_checkout_submissions_request_mac_format", sql`${t.requestMac} ~ '^[0-9a-f]{64}$'`),
+  ],
+);
+
+// Append-only record of the Owner's internal reviews of a draft product (src/modules/catalogue/review.ts). A
+// review names the SHA-256 of the product's reviewable content at that moment; it counts as current only while
+// the content still has that digest, so any later change to text, claims, measurements, photos or SKUs makes it
+// outdated without touching this table. A review never publishes a product and grants no public visibility.
+// open_items lists the readiness items (src/modules/catalogue/readiness.ts) that were not met when reviewed.
+export const productReviews = pgTable(
+  "product_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "restrict" }),
+    contentSha256: text("content_sha256").notNull(),
+    openItems: jsonb("open_items").notNull(),
+    reviewedByUserId: userRef("reviewed_by_user_id").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("product_reviews_product_id_created_at_idx").on(t.productId, t.createdAt),
+    check("product_reviews_content_sha256_format", sql`${t.contentSha256} ~ '^[0-9a-f]{64}$'`),
+    check("product_reviews_open_items_array", sql`jsonb_typeof(${t.openItems}) = 'array'`),
+  ],
+);
+
+// Private drafts of the customer policies public checkout depends on (S-17, G-7), one row per kind once the
+// Owner first saves it. Text is the Owner's own, shown as plain text only. "Reviewed" means the Owner marked
+// this exact version as reviewed; any edit clears it. There is no published state: nothing here is shown to a
+// customer, and a reviewed draft is not founder approval or publication.
+// The same list is POLICY_KINDS in src/modules/policies/drafts.ts (a unit test keeps them equal).
+const POLICY_KINDS = ["delivery", "returns", "privacy", "checkout_notices"] as const;
+export const policyDrafts = pgTable(
+  "policy_drafts",
+  {
+    kind: text("kind", { enum: POLICY_KINDS }).primaryKey(),
+    bodyEn: text("body_en"),
+    bodyBn: text("body_bn"),
+    version: version(),
+    updatedAt: updatedAt(),
+    updatedByUserId: userRef("updated_by_user_id").notNull(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewedByUserId: userRef("reviewed_by_user_id"),
+  },
+  (t) => [
+    check("policy_drafts_kind_valid", sql`${t.kind} in ('delivery', 'returns', 'privacy', 'checkout_notices')`),
+    check("policy_drafts_version_positive", sql`${t.version} >= 1`),
+    check("policy_drafts_bodies_valid", sql`btrim(${t.bodyEn}) <> '' and length(${t.bodyEn}) <= 20000 and btrim(${t.bodyBn}) <> '' and length(${t.bodyBn}) <= 20000`),
+    check(
+      "policy_drafts_review_consistent",
+      sql`(${t.reviewedAt} is null) = (${t.reviewedByUserId} is null) and (${t.reviewedAt} is null or (${t.bodyEn} is not null and ${t.bodyBn} is not null))`,
+    ),
+  ],
+);
+
+// Append-only audit of policy draft changes (trigger as for export_requests): who saved or marked which version,
+// when, and the SHA-256 of each language's text at that moment (never a second copy of the text).
+export const policyDraftEvents = pgTable(
+  "policy_draft_events",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    kind: text("kind", { enum: POLICY_KINDS }).notNull(),
+    event: text("event", { enum: ["saved", "marked_reviewed"] }).notNull(),
+    version: integer("version").notNull(),
+    bodyEnSha256: text("body_en_sha256"),
+    bodyBnSha256: text("body_bn_sha256"),
+    actorUserId: userRef("actor_user_id").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("policy_draft_events_kind_id_idx").on(t.kind, t.id),
+    check("policy_draft_events_kind_valid", sql`${t.kind} in ('delivery', 'returns', 'privacy', 'checkout_notices')`),
+    check("policy_draft_events_event_valid", sql`${t.event} in ('saved', 'marked_reviewed')`),
+    check("policy_draft_events_version_positive", sql`${t.version} >= 1`),
+    check("policy_draft_events_sha256_format", sql`${t.bodyEnSha256} ~ '^[0-9a-f]{64}$' and ${t.bodyBnSha256} ~ '^[0-9a-f]{64}$'`),
+  ],
+);

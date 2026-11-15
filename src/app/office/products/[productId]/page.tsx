@@ -4,11 +4,12 @@ import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
 import { formatCentimetres, MEASUREMENT_POINTS } from "@/modules/catalogue/content";
 import { evaluateReadiness } from "@/modules/catalogue/readiness";
+import { reviewHistory, reviewStates } from "@/modules/catalogue/review";
 import { getProductWithVariants } from "@/modules/catalogue/service";
 import { DomainError } from "@/modules/domain-error";
 import { getStockLevel } from "@/modules/inventory/service";
 import { formatPaisa } from "@/modules/money";
-import { archiveProductAction, createVariantAction, deactivateVariantAction } from "../../actions";
+import { archiveProductAction, createVariantAction, deactivateVariantAction, reviewProductAction } from "../../actions";
 import { ActionForm, Field } from "../../_components/action-form";
 import { Bilingual, ReadinessList } from "../../_components/content";
 import { MEASUREMENT_LABELS } from "../../_lib/labels";
@@ -31,6 +32,8 @@ export default async function ProductPage({ params, searchParams }: Props) {
     throw error;
   });
   const stock = await Promise.all(product.variants.map((v) => getStockLevel(db, v.sku)));
+  const review = (await reviewStates(db, [product.id])).get(product.id);
+  const history = await reviewHistory(db, product.id);
   const { done } = await searchParams;
   const draft = product.status === "draft";
   const { title, lang } = productTitle(product);
@@ -73,6 +76,34 @@ export default async function ProductPage({ params, searchParams }: Props) {
 
       <Section title="Publishing readiness">
         <ReadinessList items={evaluateReadiness(product)} />
+      </Section>
+
+      <Section title="Internal review">
+        <p className="text-sm" data-testid="review-state">
+          {!review?.reviewedAt
+            ? "Not reviewed yet."
+            : review.current
+              ? `Reviewed on ${formatTime(review.reviewedAt)}; the content has not changed since.`
+              : `Outdated: reviewed on ${formatTime(review.reviewedAt)}, and the content (text, claims, sizes, photos, SKUs or prices) has changed since.`}
+        </p>
+        <p className="text-xs text-gray-600">
+          A review records that you checked this content as it is now. It does not publish the product or make it visible to anyone; no publication rule is approved.
+        </p>
+        {draft && !review?.current && review ? (
+          <ActionForm action={reviewProductAction} idempotencyKey={randomUUID()} hidden={{ productId: product.id, contentSha256: review.contentSha256 }} submitLabel="Mark the current content as reviewed" variant="secondary" />
+        ) : null}
+        {history.length ? (
+          <details className="text-sm">
+            <summary className="cursor-pointer font-medium">Review history ({history.length})</summary>
+            <ul className="mt-2 space-y-1">
+              {history.map((h) => (
+                <li key={h.id}>
+                  {formatTime(h.createdAt)} by the Owner{(h.openItems as string[]).length ? ` · open then: ${(h.openItems as string[]).join(", ")}` : " · nothing open"}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </Section>
 
       <Section title="Size chart (cm)">

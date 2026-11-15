@@ -414,6 +414,29 @@ export const DATASETS: Dataset[] = [
        order by c.created_at, c.id, v.sku`,
   },
   {
+    // Private drafts for external review (S-17): unpublished wording, Owner-only like every export. Plain text.
+    name: "policy_drafts",
+    title: "Customer policy drafts (unpublished)",
+    personalData: false,
+    orderFilters: false,
+    columns: [t("kind"), t("status", "empty, drafted or reviewed; never published"), n("version"), t("body_en"), t("body_bn"), ts("updated_at"), t("updated_by_user_id"), ts("reviewed_at"), t("reviewed_by_user_id")],
+    query: (where) => sql`
+      select kind, case when reviewed_at is not null then 'reviewed' when body_en is not null or body_bn is not null then 'drafted' else 'empty' end as status,
+             version, body_en, body_bn, ${iso("updated_at")} as updated_at, updated_by_user_id, ${iso("reviewed_at")} as reviewed_at, reviewed_by_user_id
+        from policy_drafts where ${where} order by kind`,
+  },
+  {
+    name: "product_reviews",
+    title: "Internal product reviews (not publication)",
+    personalData: false,
+    dateColumn: { sql: sql`r.created_at`, description: "when the review was recorded", kind: "timestamp" },
+    orderFilters: false,
+    columns: [t("review_id"), ts("reviewed_at"), t("reviewed_by_user_id"), t("product_id"), t("slug"), t("content_sha256"), { key: "open_items", type: "json" }],
+    query: (where) => sql`
+      select r.id as review_id, ${iso("r.created_at")} as reviewed_at, r.reviewed_by_user_id, r.product_id, p.slug, r.content_sha256, r.open_items
+        from product_reviews r join products p on p.id = r.product_id where ${where} order by r.created_at, r.id`,
+  },
+  {
     name: "export_requests",
     title: "Export audit log",
     personalData: false,

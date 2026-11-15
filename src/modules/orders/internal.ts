@@ -10,9 +10,13 @@ import { allowedActions, type OrderAction, type OrderState } from "./rules";
 // Shared by the order services: lock an order, check a transition against the rules, record history.
 
 export type Order = typeof orders.$inferSelect;
-/** Who acted. Customers act only through a tracking link and carry no identity. */
-export type OrderActor = Actor | { type: "customer"; ref: "tracking-link" };
+/**
+ * Who acted. Customers carry no identity: they act through a tracking link, or (once public checkout is approved)
+ * submit through the guest checkout service. Neither is ever a user: a customer action never names the Owner.
+ */
+export type OrderActor = Actor | { type: "customer"; ref: "tracking-link" | "guest-checkout" };
 export const CUSTOMER: OrderActor = { type: "customer", ref: "tracking-link" };
+export const GUEST_CHECKOUT: OrderActor = { type: "customer", ref: "guest-checkout" };
 export const EXPIRY_ACTOR: Actor = { type: "system", ref: "verification-expiry" };
 
 export type LockedOrder = { order: Order; state: OrderState; now: Date };

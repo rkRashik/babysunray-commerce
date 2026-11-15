@@ -3,7 +3,7 @@ import type { Db } from "@/db/database";
 import { actorFor, assertPermission, type Principal } from "../auth/principal";
 import { normalizeSku } from "../catalogue/rules";
 import { type Once, runOnce } from "../idempotency/service";
-import { releaseOverdue } from "../orders/operations";
+import { releaseOverdue } from "../orders/service";
 import { applyStockCount, type CountDetail, type CountEntry, discardStockCount, getStockCount, parseSkuList, recordCounts, startStockCount } from "./counts";
 import { adjustStock, getStockMovement, receiveStock, type StockMovement } from "./service";
 

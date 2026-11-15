@@ -6,7 +6,7 @@ import { assertPermission, type Principal } from "../auth/principal";
 import { normalizeSearch } from "../catalogue/rules";
 import { getProductWithVariants, type ProductDetail } from "../catalogue/service";
 import { DomainError } from "../domain-error";
-import { DELIVERY_ZONES, type DeliveryZone, normalizeBdPhone, requiredText } from "../orders/rules";
+import { checkCustomerDetails, DELIVERY_ZONES, type DeliveryZone, type DetailsError } from "../orders/rules";
 import { type CartLine, validateCartLines } from "./cart";
 
 // The private storefront preview's reads, cart quote and checkout simulation. Every function requires the
@@ -251,7 +251,7 @@ export async function quoteCart(db: Db, principal: Principal, input: { lines: un
 }
 
 export type CheckoutInput = { name: unknown; phone: unknown; address: unknown; zone: unknown; lines: unknown };
-export type CheckoutError = "name_required" | "name_too_long" | "name_invalid" | "phone_invalid" | "address_required" | "address_too_long" | "address_invalid" | "zone_required" | "zone_unavailable" | "cart_empty" | "cart_invalid" | "cart_stock";
+export type CheckoutError = DetailsError | "zone_required" | "zone_unavailable" | "cart_empty" | "cart_invalid" | "cart_stock";
 export type CheckoutResult = {
   ok: boolean;
   errors: Partial<Record<"name" | "phone" | "address" | "zone" | "cart", CheckoutError>>;
@@ -260,17 +260,6 @@ export type CheckoutResult = {
   customer: { name: string; phone: string; address: string } | null;
 };
 
-function textCode(raw: unknown, field: string, max: number, multiline: boolean, prefix: "name" | "address"): { value?: string; error?: CheckoutError } {
-  try {
-    return { value: requiredText(raw, field, max, multiline) };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (message.includes("is required")) return { error: `${prefix}_required` };
-    if (message.includes("at most")) return { error: `${prefix}_too_long` };
-    return { error: `${prefix}_invalid` };
-  }
-}
-
 /**
  * The customer checkout, simulated: the same validation an order would get (name, Bangladesh mobile number,
  * address, a configured zone, every line available) and the authoritative total, then nothing else. It never
@@ -278,17 +267,8 @@ function textCode(raw: unknown, field: string, max: number, multiline: boolean, 
  */
 export async function simulateCheckout(db: Db, principal: Principal, input: CheckoutInput): Promise<CheckoutResult> {
   assertPermission(principal, "storefront:preview");
-  const errors: CheckoutResult["errors"] = {};
-  const name = textCode(input.name, "customerName", 100, false, "name");
-  const address = textCode(input.address, "deliveryAddress", 500, true, "address");
-  if (name.error) errors.name = name.error;
-  if (address.error) errors.address = address.error;
-  let phone: string | null = null;
-  try {
-    phone = normalizeBdPhone(typeof input.phone === "string" ? input.phone : "");
-  } catch {
-    errors.phone = "phone_invalid";
-  }
+  const details = checkCustomerDetails(input);
+  const errors: CheckoutResult["errors"] = { ...details.errors };
   const zoneChosen = DELIVERY_ZONES.includes(input.zone as DeliveryZone);
   if (!zoneChosen) errors.zone = "zone_required";
   let quote: Quote | null = null;
@@ -302,5 +282,6 @@ export async function simulateCheckout(db: Db, principal: Principal, input: Chec
     errors.cart = "cart_invalid";
   }
   const ok = Object.keys(errors).length === 0;
-  return { ok, errors, quote, customer: ok && name.value && address.value && phone ? { name: name.value, phone, address: address.value } : null };
+  const v = details.values;
+  return { ok, errors, quote, customer: ok && v ? { name: v.customerName, phone: v.customerPhone, address: v.deliveryAddress } : null };
 }
