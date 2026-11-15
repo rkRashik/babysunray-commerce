@@ -1,8 +1,9 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { asc } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import type { Db } from "@/db/database";
 import { productMedia } from "@/db/schema";
+import { assertPermission, type Principal } from "../auth/principal";
 import { type MediaStore, STORAGE_KEY } from "./storage";
 
 // The media manifest check (requirement K-2): every photo record must have its file, byte for byte (size and
@@ -36,11 +37,40 @@ export async function verifyMediaStore(db: Db, store: MediaStore): Promise<Media
   }
   const known = new Set(rows.map((r) => r.key));
   for (const name of (await store.entries()).sort()) {
-    if (STORAGE_KEY.test(name)) {
+    const regular = (await store.info(name))?.regularFile === true;
+    // A link or folder under a photo's name is never treated as a photo.
+    if (STORAGE_KEY.test(name) && regular) {
       if (!known.has(name)) result.unreferenced.push(name);
     } else result.unexpected.push(name);
   }
   return result;
+}
+
+/** Files without a record are kept this long before they may be removed, so an upload in progress is never touched. */
+export const UNREFERENCED_GRACE_MS = 60 * 60 * 1000;
+
+/**
+ * Removes photo files that no record uses and that have not changed for an hour (left by an interrupted upload or
+ * removal). Each file is checked again against the records just before it is deleted. Only regular files named like
+ * a photo are ever deleted; unexpected entries are left alone. Owner only (catalog:write), never automatic.
+ */
+export async function removeUnreferencedFiles(db: Db, principal: Principal, store: MediaStore, now = Date.now()): Promise<{ removed: string[]; kept: string[] }> {
+  assertPermission(principal, "catalog:write");
+  const { unreferenced } = await verifyMediaStore(db, store);
+  const removed: string[] = [];
+  const kept: string[] = [];
+  for (const key of unreferenced) {
+    const info = await store.info(key);
+    const [stillUnreferenced] = await db.select({ n: sql<number>`count(*)`.mapWith(Number) }).from(productMedia).where(eq(productMedia.storageKey, key));
+    if (!info?.regularFile || info.modifiedMs > now - UNREFERENCED_GRACE_MS || stillUnreferenced.n !== 0) {
+      kept.push(key);
+      continue;
+    }
+    await store.remove(key);
+    removed.push(key);
+  }
+  if (removed.length) console.log(JSON.stringify({ level: "info", event: "media_unreferenced_removed", count: removed.length }));
+  return { removed, kept };
 }
 
 export const mediaHealthy = (c: MediaCheck) => c.missing.length + c.changed.length + c.unreferenced.length + c.unexpected.length === 0;

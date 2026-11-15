@@ -5,7 +5,9 @@ import { getDb } from "@/db/client";
 import { MEASUREMENT_POINTS, parseCentimetres } from "@/modules/catalogue/content";
 import { createCategoryOnce, replaceMeasurementsOnce, updateCategoryOnce } from "@/modules/catalogue/operations";
 import { DomainError } from "@/modules/domain-error";
+import { removeUnreferencedFiles } from "@/modules/media/manifest";
 import { describePhotoOnce, movePhotoOnce, removePhotoOnce } from "@/modules/media/operations";
+import { getMediaStore } from "@/modules/media/storage";
 import { formError, type FormState, optional, text, wholeNumber } from "./_lib/form";
 import { MEASUREMENT_LABELS } from "./_lib/labels";
 import { requireOffice } from "./_lib/session";
@@ -108,4 +110,17 @@ export async function removePhotoAction(_: FormState, form: FormData): Promise<F
     return formError(error, form);
   }
   redirect(photosPage(productId, "photo-removed"));
+}
+
+/** Deletes photo files no record uses (older than an hour), after an explicit tick. Never automatic. */
+export async function removeUnreferencedAction(_: FormState, form: FormData): Promise<FormState> {
+  const principal = await requireOffice("catalog:write");
+  let removed = 0;
+  try {
+    if (text(form, "confirmCleanup") !== "on") throw new DomainError("INVALID_INPUT", "Tick the box to confirm that these files should be deleted.");
+    removed = (await removeUnreferencedFiles(getDb(), principal, getMediaStore())).removed.length;
+  } catch (error) {
+    return formError(error, form);
+  }
+  redirect(`/office/media-health?done=cleanup&removed=${removed}`);
 }

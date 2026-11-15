@@ -1,6 +1,6 @@
 import "server-only";
-import { open, readdir, readFile, rename, rm } from "node:fs/promises";
-import { statSync } from "node:fs";
+import { lstat, open, readdir, readFile, rename, rm } from "node:fs/promises";
+import { realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { DomainError } from "../domain-error";
 
@@ -19,6 +19,8 @@ export type MediaStore = {
   remove(key: string): Promise<void>;
   /** Every entry name in the store, for the manifest check (including unexpected and partial ones). */
   entries(): Promise<string[]>;
+  /** What an entry is (a regular file or something else, such as a link or folder) and when it last changed. */
+  info(name: string): Promise<{ regularFile: boolean; modifiedMs: number } | null>;
 };
 
 export const STORAGE_KEY = /^[0-9a-f]{32}\.(jpg|png|webp)$/;
@@ -50,6 +52,8 @@ export function localMediaStore(dir: string): MediaStore {
     },
     async read(key) {
       try {
+        // Never follow a link or read a folder placed under a photo's name: only a regular file counts.
+        if (!(await lstat(file(key))).isFile()) return null;
         return await readFile(file(key));
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
@@ -61,6 +65,16 @@ export function localMediaStore(dir: string): MediaStore {
     },
     async entries() {
       return readdir(dir);
+    },
+    async info(name) {
+      if (typeof name !== "string" || name === "" || name === "." || name === ".." || /[\\/]/.test(name)) throw new Error("Invalid media entry name.");
+      try {
+        const s = await lstat(path.join(dir, name));
+        return { regularFile: s.isFile(), modifiedMs: s.mtimeMs };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
+      }
     },
   };
 }
@@ -77,15 +91,24 @@ export function mediaStoreConfig(env: Record<string, string | undefined>, projec
   const raw = env.MEDIA_STORAGE_DIR;
   if (!raw) return { ok: false, problem: "MEDIA_STORAGE_DIR is not set, so photos cannot be stored." };
   if (!path.isAbsolute(raw)) return { ok: false, problem: "MEDIA_STORAGE_DIR must be an absolute path." };
-  const dir = path.resolve(raw);
-  const relative = path.relative(path.resolve(projectRoot), dir);
-  if (relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))) {
-    return { ok: false, problem: "MEDIA_STORAGE_DIR must be outside the project folder (photos are never kept in the repository or public files)." };
-  }
+  let dir: string;
   try {
+    // Real paths, so a link cannot point the photo folder into the project (or a link inside it out of it).
+    dir = realpathSync(path.resolve(raw));
     if (!statSync(dir).isDirectory()) return { ok: false, problem: "MEDIA_STORAGE_DIR is not a folder." };
   } catch {
     return { ok: false, problem: "MEDIA_STORAGE_DIR does not exist. Create the folder first." };
+  }
+  const fold = (p: string) => (process.platform === "win32" ? p.toLowerCase() : p);
+  let root = path.resolve(projectRoot);
+  try {
+    root = realpathSync(root);
+  } catch {
+    // keep the resolved path
+  }
+  const relative = path.relative(fold(root), fold(dir));
+  if (relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))) {
+    return { ok: false, problem: "MEDIA_STORAGE_DIR must be outside the project folder (photos are never kept in the repository or public files)." };
   }
   if (env.NODE_ENV === "production" && env.MEDIA_LOCAL_STORAGE_IN_PRODUCTION !== "allow") {
     return { ok: false, problem: "Local media storage is refused in production unless MEDIA_LOCAL_STORAGE_IN_PRODUCTION=allow (only for a host whose disk is persistent and backed up)." };

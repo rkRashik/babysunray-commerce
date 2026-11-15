@@ -32,6 +32,10 @@ npm run db:migrate   # apply pending migrations to the local babysunray_dev data
 npm run config:check  # which settings are set and valid, whether the database is reachable and migrated; prints no values
 npm run auth:bootstrap-owner  # create the first Owner in babysunray_dev, interactively (see Authentication)
 npm run media:verify  # check the photo manifest of babysunray_dev against MEDIA_STORAGE_DIR; read-only
+npm run media:backup -- --out <dir>   # encrypted backup of the photo files, interactive (see Product photos)
+npm run media:backup:verify -- <file> # decrypt and check a photo backup
+npm run media:restore -- <file> --into <empty dir>  # restore photos into an empty folder only
+npm run media:drill  # photo backup and restore drill on fictional photos in babysunray_test
 npm run orders:expire-verification  # release holds of orders past their 24-hour verification deadline (babysunray_dev only; see Orders)
 npm run backup:create -- --out <dir>  # encrypted backup of babysunray_dev, interactive (see Backup and recovery)
 npm run backup:verify -- <file>       # decrypt and check a backup without touching a database
@@ -187,7 +191,9 @@ Owner Office only, development storage only (`src/modules/media`, [ADR-0006](doc
 - Management: English and Bangla descriptions (alt text), order (first is shown in lists), replace in place, remove (needs a tick and a confirmation; the stored file is deleted). Every change names the product version, so a second tab is refused, and runs once per idempotency key. At most 12 photos per product (a technical bound; how many a product needs is not decided, I-5).
 - Records and files stay in step: a new file is written before its record and deleted again if the record is not committed (refused, failed or a replay); a replaced or removed file is deleted after its record. `product_media` is the manifest (product, key, type, size, SHA-256, times). `npm run media:verify` lists missing, changed, unreferenced and unexpected files; the Exports page has the manifest as a dataset.
 - Serving: `/office/media/{id}` for the signed-in Owner only (`401` otherwise), `private, no-cache` with an ETag, `nosniff` and a sandbox policy; `?w=320|640|1280` gives a smaller copy.
-- **Database backups do not contain the photo files**: copy the folder separately ([runbook](docs/operations/runbook.md), Product photos).
+- **Database backups do not contain the photo files.** `npm run media:backup` makes an encrypted photo backup with the same construction as the database backup, accepted only if folder and records are consistent; `media:backup:verify`, `media:restore` (into an empty folder) and the fictional `media:drill` complete it ([runbook](docs/operations/runbook.md), Product photos). The two backups are separate files from separate moments.
+- Office → Photo storage shows the same check as `media:verify` and can delete files without a record after an explicit tick (only if untouched for an hour).
+- Resized copies are cached in memory (32 MB; a resize costs 35 to 76 ms of CPU, measured); at most two image decodes or resizes run at once.
 
 ## Storefront preview
 

@@ -221,7 +221,7 @@ describe("storage configuration", () => {
     const root = path.resolve(import.meta.dirname, "../..");
     expect(mediaStoreConfig({}, root)).toMatchObject({ ok: false, problem: expect.stringContaining("not set") });
     expect(mediaStoreConfig({ MEDIA_STORAGE_DIR: "relative/media" }, root)).toMatchObject({ ok: false, problem: expect.stringContaining("absolute") });
-    expect(mediaStoreConfig({ MEDIA_STORAGE_DIR: path.join(root, "public", "media") }, root)).toMatchObject({ ok: false, problem: expect.stringContaining("outside the project") });
+    expect(mediaStoreConfig({ MEDIA_STORAGE_DIR: path.join(root, "src") }, root)).toMatchObject({ ok: false, problem: expect.stringContaining("outside the project") });
     expect(mediaStoreConfig({ MEDIA_STORAGE_DIR: root }, root)).toMatchObject({ ok: false, problem: expect.stringContaining("outside the project") });
     expect(mediaStoreConfig({ MEDIA_STORAGE_DIR: path.join(media.dir, "missing") }, root)).toMatchObject({ ok: false, problem: expect.stringContaining("does not exist") });
     expect(mediaStoreConfig({ MEDIA_STORAGE_DIR: media.dir }, root)).toMatchObject({ ok: true });
@@ -285,5 +285,56 @@ describe("Office photo routes", () => {
     expect((await post("not-a-uuid", await fields())).status).toBe(404);
     expect(await count(pool, "select count(*) from product_media where product_id = $1", [productId])).toBe(1);
     expect(mediaHealthy(await verifyMediaStore(db, store))).toBe(true);
+  });
+});
+
+describe("photo folder health", () => {
+  it("deletes only unreferenced regular photo files untouched for an hour, and never touches records' files or other entries", async () => {
+    const { removeUnreferencedFiles } = await import("../../src/modules/media/manifest");
+    const { utimesSync, mkdirSync, rmSync } = await import("node:fs");
+    const productId = await draft();
+    const { value } = await upload(productId, await testImage("png", 400, 300, { colour: 77 }));
+    const kept = value.media[0].storageKey;
+    const old = `${"d".repeat(32)}.png`;
+    const fresh = `${"e".repeat(32)}.png`;
+    const folder = `${"f".repeat(32)}.png`;
+    writeFileSync(path.join(media.dir, old), Buffer.from("old orphan"));
+    writeFileSync(path.join(media.dir, fresh), Buffer.from("fresh orphan"));
+    mkdirSync(path.join(media.dir, folder));
+    const hourAgo = (Date.now() - 2 * 60 * 60 * 1000) / 1000;
+    utimesSync(path.join(media.dir, old), hourAgo, hourAgo);
+    try {
+      const check = await verifyMediaStore(db, store);
+      expect(check.unreferenced).toEqual(expect.arrayContaining([old, fresh]));
+      expect(check.unexpected).toContain(folder);
+      expect(await store.read(folder)).toBeNull();
+      const { removed, kept: notRemoved } = await removeUnreferencedFiles(db, owner, store);
+      expect(removed).toEqual([old]);
+      expect(notRemoved).toContain(fresh);
+      expect(files()).toEqual(expect.arrayContaining([kept, fresh, folder]));
+      expect(files()).not.toContain(old);
+      const forged = Object.freeze({ userId: owner.userId, role: "owner" as const });
+      expect(await errorCodeOf(removeUnreferencedFiles(db, forged, store))).toBe("UNAUTHENTICATED");
+    } finally {
+      rmSync(path.join(media.dir, fresh), { force: true });
+      rmSync(path.join(media.dir, folder), { recursive: true, force: true });
+    }
+  });
+
+  it("keeps resized copies in memory by content: a second request does not read or resize again", async () => {
+    const { cachedRendition } = await import("../../src/modules/media/images");
+    const data = await testImage("jpeg", 1600, 1200, { colour: 33 });
+    let loads = 0;
+    const load = async () => {
+      loads += 1;
+      return data;
+    };
+    const sha = `${randomUUID().replace(/-/g, "")}${"0".repeat(32)}`;
+    const first = await cachedRendition(sha, 640, "jpeg", load);
+    const second = await cachedRendition(sha, 640, "jpeg", load);
+    expect(second).toBe(first);
+    expect(loads).toBe(1);
+    expect((await sharp(first!).metadata()).width).toBe(640);
+    expect(await cachedRendition(`${sha.slice(0, 63)}1`, 640, "jpeg", async () => null)).toBeNull();
   });
 });

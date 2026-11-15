@@ -2,7 +2,7 @@ import { getDb } from "@/db/client";
 import { assertPermission, getPrincipal } from "@/modules/auth/principal";
 import { getAuth } from "@/modules/auth/server";
 import { DomainError } from "@/modules/domain-error";
-import { formatOf, RENDITION_WIDTHS, renderWidth } from "@/modules/media/images";
+import { cachedRendition, formatOf, RENDITION_WIDTHS } from "@/modules/media/images";
 import { getPhoto } from "@/modules/media/service";
 import { getMediaStore } from "@/modules/media/storage";
 
@@ -34,12 +34,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ medi
     const etag = `"${photo.sha256.slice(0, 32)}-${width ?? "full"}"`;
     const headers = { ...HEADERS, "cache-control": "private, no-cache", etag, "content-type": photo.contentType, "content-disposition": "inline" };
     if (request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers });
-    const data = await getMediaStore().read(photo.storageKey);
-    if (!data) {
+    const store = getMediaStore();
+    const body = width ? await cachedRendition(photo.sha256, width, formatOf(photo.contentType)!, () => store.read(photo.storageKey)) : await store.read(photo.storageKey);
+    if (!body) {
       console.error(JSON.stringify({ level: "error", event: "photo_file_missing", mediaId: photo.id }));
       return status(404);
     }
-    const body = width ? await renderWidth(data, formatOf(photo.contentType)!, width) : data;
     return new Response(new Uint8Array(body), { status: 200, headers });
   } catch (error) {
     if (error instanceof DomainError && error.code === "FORBIDDEN") return status(403);

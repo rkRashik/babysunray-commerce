@@ -83,14 +83,21 @@ async function* rechunk(input: AsyncIterable<Uint8Array>, size: number): AsyncGe
 }
 
 export async function* encryptStream(input: AsyncIterable<Uint8Array>, passphrase: string, meta: Pick<BackupHeader, "createdAt" | "database" | "pgDumpVersion">): AsyncGenerator<Buffer> {
+  yield* sealStream(input, passphrase, { format: "babysunray-backup", version: FORMAT_VERSION, ...meta, archive: "pg_dump custom format", excludedTableData: EXCLUDED_TABLE_DATA });
+}
+
+/** The cipher fields every sealed file's header carries (the rest of the header is the caller's description). */
+export type SealFields = { cipher: "AES-256-GCM"; chunkSize: number; noncePrefix: string; kdf: { name: "scrypt"; N: number; r: number; p: number; salt: string } };
+
+/**
+ * Encrypts a byte stream into the sealed format described at the top of this file, with `describe` (format name,
+ * version and other plain facts) as the readable, authenticated header. Shared by database and photo backups.
+ */
+export async function* sealStream(input: AsyncIterable<Uint8Array>, passphrase: string, describe: Record<string, unknown> & { format: string; version: number }): AsyncGenerator<Buffer> {
   const salt = randomBytes(16);
   const prefix = randomBytes(7);
-  const header: BackupHeader = {
-    format: "babysunray-backup",
-    version: FORMAT_VERSION,
-    ...meta,
-    archive: "pg_dump custom format",
-    excludedTableData: EXCLUDED_TABLE_DATA,
+  const header = {
+    ...describe,
     cipher: "AES-256-GCM",
     chunkSize: CHUNK,
     noncePrefix: prefix.toString("base64"),
@@ -140,17 +147,9 @@ function reader(source: AsyncIterator<Uint8Array>) {
 
 const INVALID = "The backup file is damaged, was changed, or the passphrase is wrong.";
 
-function parseHeader(bytes: Buffer): BackupHeader {
-  let h: BackupHeader;
-  try {
-    h = JSON.parse(bytes.toString("utf8"));
-  } catch {
-    throw new Error(INVALID);
-  }
-  // Fail closed on anything this version does not write (including cost parameters that could exhaust memory).
-  const ok =
-    h?.format === "babysunray-backup" &&
-    h.version === FORMAT_VERSION &&
+/** The cipher fields this version writes; anything else (including costlier KDF parameters) is refused. */
+function sealFieldsOk(h: Partial<SealFields>): boolean {
+  return (
     h.cipher === "AES-256-GCM" &&
     h.chunkSize === CHUNK &&
     h.kdf?.name === "scrypt" &&
@@ -158,25 +157,50 @@ function parseHeader(bytes: Buffer): BackupHeader {
     h.kdf.r === KDF.r &&
     h.kdf.p === KDF.p &&
     Buffer.from(h.kdf.salt ?? "", "base64").length === 16 &&
-    Buffer.from(h.noncePrefix ?? "", "base64").length === 7;
-  if (!ok) throw new Error("This is not a backup file this version can read.");
-  return h;
+    Buffer.from(h.noncePrefix ?? "", "base64").length === 7
+  );
 }
+
+function parseHeader<H>(bytes: Buffer, check: (header: Record<string, unknown>) => boolean, kind: string): H & SealFields {
+  let h: Record<string, unknown>;
+  try {
+    h = JSON.parse(bytes.toString("utf8"));
+  } catch {
+    throw new Error(INVALID);
+  }
+  // Fail closed on anything this version does not write (including cost parameters that could exhaust memory).
+  if (!h || typeof h !== "object" || !sealFieldsOk(h as Partial<SealFields>) || !check(h)) throw new Error(`This is not a ${kind} this version can read.`);
+  return h as H & SealFields;
+}
+
+const isDatabaseBackup = (h: Record<string, unknown>) => h.format === "babysunray-backup" && h.version === FORMAT_VERSION;
 
 /**
  * Opens a backup: checks the header, derives the key and returns the plaintext as a stream whose every piece
  * was authenticated before it is yielded. The stream throws (and yields nothing further) at the first bad or
  * missing record, so a consumer must treat an exception as "the backup is unusable".
  */
-export async function openBackup(input: AsyncIterable<Uint8Array>, passphrase: string): Promise<{ header: BackupHeader; plaintext: AsyncGenerator<Buffer> }> {
+export function openBackup(input: AsyncIterable<Uint8Array>, passphrase: string): Promise<{ header: BackupHeader; plaintext: AsyncGenerator<Buffer> }> {
+  return openSealed<BackupHeader>(input, passphrase, isDatabaseBackup, "database backup");
+}
+
+/** openBackup for any sealed format: `check` accepts the header's own fields (format name and version). */
+export async function openSealed<H>(
+  input: AsyncIterable<Uint8Array>,
+  passphrase: string,
+  check: (header: Record<string, unknown>) => boolean,
+  kind: string,
+): Promise<{ header: H & SealFields; plaintext: AsyncGenerator<Buffer> }> {
   const read = reader(input[Symbol.asyncIterator]());
   const magic = await read(MAGIC.length);
   if (!magic.equals(MAGIC)) throw new Error("This is not a backup file.");
-  const length = (await read(4)).readUInt32BE(0);
+  const lengthBytes = await read(4);
+  if (lengthBytes.length !== 4) throw new Error(INVALID);
+  const length = lengthBytes.readUInt32BE(0);
   if (length === 0 || length > MAX_HEADER) throw new Error(INVALID);
   const headerBytes = await read(length);
   if (headerBytes.length !== length) throw new Error(INVALID);
-  const header = parseHeader(headerBytes);
+  const header = parseHeader<H>(headerBytes, check, kind);
   const key = await deriveKey(passphrase, Buffer.from(header.kdf.salt, "base64"), header.kdf);
   const prefix = Buffer.from(header.noncePrefix, "base64");
   async function* plaintext(): AsyncGenerator<Buffer> {

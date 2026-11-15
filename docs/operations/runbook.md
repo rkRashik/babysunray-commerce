@@ -98,7 +98,37 @@ Photos are kept in a folder you choose, outside the project folder, never in Git
 2. Add `MEDIA_STORAGE_DIR=D:/BabySunray-media` to `.env.local` and restart `npm run dev`. `npm run config:check` shows whether it is accepted.
 3. Owner Office → a product → Manage photos. Use only your own photos of the product. The system removes location and camera details and stores a copy at most 2,400 pixels a side; keep your originals.
 
-Backups: `npm run backup:create` saves the database, which holds the photo **records** (which file belongs to which product, size and SHA-256), not the photo **files**. Copy the photo folder separately each time you take a backup, to the same place. After restoring either, run `npm run media:verify`: it lists missing or changed files and files without a record, and changes nothing. A file without a record can be left by an interrupted upload; check it, then delete it by hand. No automatic photo backup, schedule or off-device destination exists (decisions 14 and 15).
+Health: Office → Photo storage (or `npm run media:verify`) compares the folder with the photo records: missing or changed files, files without a record (left by an interrupted upload or removal) and unexpected entries. The page can delete files without a record after an explicit tick, only if they have not changed for an hour; nothing is deleted automatically and unexpected entries are never touched.
+
+### Photo backups (founder only, interactive)
+
+`npm run backup:create` saves the database, which holds the photo **records** (which file belongs to which product, size and SHA-256), **not the photo files**. Back up the files separately:
+
+```
+npm run media:backup -- --out D:/Backups/babysunray
+npm run media:backup:verify -- D:/Backups/babysunray/babysunray_dev-photos-....bsmedia
+```
+
+- Same encryption as the database backup (AES-256-GCM, scrypt key from your passphrase of at least 12 characters, asked twice, never stored). Without the passphrase the photos cannot be read.
+- The file holds every recorded photo's bytes and a manifest (product, position, storage key, type, size, dimensions, SHA-256, descriptions). Files without a record are reported and left out.
+- It is accepted only if it is consistent: every recorded photo exists with its recorded size and SHA-256, and no photo record changed while it ran. Otherwise nothing is kept: run `npm run media:verify`, wait until no one is uploading, and try again.
+- Verification decrypts everything and checks every photo; a wrong passphrase, a changed or cut-short file, a malformed manifest, duplicate or unexpected names and a newer format are all refused.
+
+### Restore photos
+
+```
+npm run media:restore -- D:/Backups/babysunray/babysunray_dev-photos-....bsmedia --into D:/BabySunray-media-restored
+```
+
+The folder must exist, be empty and be outside the project; the photo folder in use is therefore never overwritten. The whole backup is verified first; only checked photo names are written; a failure leaves the folder empty.
+
+### Recovering the database and the photos together
+
+1. Restore the database backup into `babysunray_restore` (section 8) and the photo backup into a new empty folder (above).
+2. Point `DATABASE_URL` and `MEDIA_STORAGE_DIR` at the restored copies (a founder decision; check first), restart, and run `npm run media:verify`.
+3. The two backups are separate files taken at separate moments; nothing makes them one snapshot. They match when no photo was added, changed or removed between them. Check their times (each file name and header has one) and the result of `media:verify`: a photo uploaded after the photo backup shows as a missing file; a photo removed after the database backup shows as a file without a record. Take both backups back to back with no uploads in between.
+
+No schedule, retention period or off-device destination is set up for either backup (decisions 6 and 15; K-4, K-5, K-8, K-9). `npm run media:drill` rehearses the photo backup and restore on fictional photos in `babysunray_test` and temporary folders (result 2026-11-16: passed, 5 photos).
 
 ## 8. Backup and restore
 
