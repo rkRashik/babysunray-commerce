@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { STORE_NAME } from "@/config/brand";
 import { getDb } from "@/db/client";
 import { dictionary, isLang } from "@/modules/storefront/i18n";
 import { listPreviewProducts, previewFacets } from "@/modules/storefront/service";
@@ -22,7 +23,7 @@ export default async function PreviewHome({ params }: { params: Promise<{ lang: 
     <div className="space-y-14">
       <section aria-labelledby="sf-hero" className="sf-dark -mx-4 rounded-sm bg-sf-cocoa px-6 py-10 text-sf-ivory sm:mx-0 sm:px-10 sm:py-14">
         <h1 id="sf-hero" className="max-w-2xl text-3xl font-semibold leading-tight sm:text-5xl" lang="en">
-          BabySunray
+          {STORE_NAME}
         </h1>
         <p className="mt-4 max-w-xl text-lg leading-relaxed text-sf-sand">{t.storeLine}</p>
         <ul aria-label={t.categories} className="mt-8 flex flex-wrap gap-3">

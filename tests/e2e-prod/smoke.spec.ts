@@ -67,3 +67,20 @@ test("an order, a stock count and an export work end to end in the production bu
   await page.goto("/office/exports");
   await expect(page).toHaveURL(/\/office\/login$/);
 });
+
+test("the tracking page and the storefront preview send their private headers in the production build", async ({ page, request, baseURL }) => {
+  const track = await request.get(`${baseURL}/track`);
+  const csp = track.headers()["content-security-policy"] ?? "";
+  for (const directive of ["default-src 'self'", "connect-src 'self'", "frame-ancestors 'none'", "base-uri 'none'", "object-src 'none'"]) expect(csp).toContain(directive);
+  expect(csp).not.toContain("unsafe-eval");
+  expect(track.headers()["referrer-policy"]).toBe("no-referrer");
+  expect(track.headers()["cache-control"]).toContain("no-store");
+
+  await signIn(page);
+  const preview = await page.goto("/office/storefront-preview/en");
+  const headers = preview?.headers() ?? {};
+  expect(headers["x-frame-options"]).toBe("DENY");
+  expect(headers["x-robots-tag"]).toContain("noindex");
+  expect(headers["cache-control"]).toContain("no-store");
+  await expect(page.getByTestId("preview-banner")).toHaveText("Storefront Preview — Not Live");
+});
