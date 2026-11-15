@@ -9,6 +9,7 @@ import {
   pinSearchPath,
   resolveDatabaseUrl,
   resolveEnvValue,
+  RESTORE_TARGET,
   sessionConfig,
   TEST_TARGET,
 } from "../../src/db/connection-guard.mts";
@@ -206,5 +207,18 @@ describe("environment variable precedence", () => {
       vi.stubEnv("DATABASE_URL", "");
       expect(resolveDatabaseUrl(path.join(tmpdir(), "bsr-no-such-dir", ".env.local"))).toBeUndefined();
     });
+  });
+});
+
+describe("RESTORE_TARGET (npm run backup:restore)", () => {
+  it("accepts only the local babysunray_restore database and role", () => {
+    expect(parseSafeDatabaseUrl("postgresql://babysunray_restore:pw@localhost:5432/babysunray_restore", RESTORE_TARGET)).toMatchObject({ database: "babysunray_restore", user: "babysunray_restore" });
+  });
+
+  it("refuses the development and test databases and any other host", () => {
+    expect(failure(() => parseSafeDatabaseUrl(DEV, RESTORE_TARGET))).toContain("babysunray_restore");
+    expect(failure(() => parseSafeDatabaseUrl(TEST, RESTORE_TARGET))).toContain("babysunray_restore");
+    expect(failure(() => parseSafeDatabaseUrl("postgresql://babysunray_restore:pw@db.example.test:5432/babysunray_restore", RESTORE_TARGET))).toContain("local host");
+    expect(failure(() => parseSafeDatabaseUrl(undefined, RESTORE_TARGET))).toContain("RESTORE_DATABASE_URL");
   });
 });

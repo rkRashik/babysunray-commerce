@@ -19,6 +19,10 @@
     "auth:bootstrap-owner": "node scripts/bootstrap-owner.mts",
     "auth:reset-owner-password": "node scripts/reset-owner-password.mts",
     "orders:expire-verification": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/expire-verification.mts",
+    "backup:create": "node scripts/backup-create.mts",
+    "backup:verify": "node scripts/backup-verify.mts",
+    "backup:restore": "node scripts/backup-restore.mts",
+    "backup:drill": "vitest run --config vitest.drill.config.mts",
     "test:e2e": "playwright test",
     "test:contract": "vitest run tests/api && vitest run --config vitest.integration.config.mts tests/db/api.integration.test.ts tests/db/api-write.integration.test.ts tests/db/api-orders.integration.test.ts"
   },

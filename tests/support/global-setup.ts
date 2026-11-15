@@ -2,6 +2,7 @@ import path from "node:path";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { loadEnv } from "vite";
+import type { Client } from "pg";
 import type { TestProject } from "vitest/node";
 import { DROP_MANAGED_STATEMENTS, unexpectedObjects } from "./schema-inventory";
 import { assertSafeTestDatabaseUrl, connectTestClient, lockTestDatabase } from "./test-database";
@@ -33,6 +34,17 @@ export default async function setup(project: TestProject): Promise<() => Promise
 }
 
 export async function resetAndMigrate(url: string | undefined): Promise<void> {
+  await dropManagedObjects(url, async (client) => {
+    await migrate(drizzle({ client }), { migrationsFolder: path.resolve("drizzle") });
+  });
+}
+
+/**
+ * The destructive part of the reset alone (same identity check, unexpected-object check and RESTRICT drops),
+ * then `after` on the same verified connection. The restore drill uses it to empty babysunray_test before
+ * restoring a backup into it.
+ */
+export async function dropManagedObjects(url: string | undefined, after: (client: Client) => Promise<void> = async () => {}): Promise<void> {
   const client = await connectTestClient(url);
   try {
     await client.query("begin");
@@ -52,7 +64,7 @@ export async function resetAndMigrate(url: string | undefined): Promise<void> {
       throw error;
     }
 
-    await migrate(drizzle({ client }), { migrationsFolder: path.resolve("drizzle") });
+    await after(client);
   } finally {
     await client.end();
   }

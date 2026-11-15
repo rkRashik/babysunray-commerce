@@ -28,6 +28,8 @@ next-env.d.ts
 *.dump
 *.backup
 *.sql.gz
+*.bsbackup
+*.bsbackup.partial
 # Anchored to the root so source folders such as src/modules/reports/exports/ stay tracked
 /backups/
 /exports/

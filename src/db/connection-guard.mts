@@ -21,6 +21,14 @@ export const TEST_TARGET: DatabaseTarget = {
   role: "babysunray_test",
 };
 
+// The only database `npm run backup:restore` may restore into: created empty by the founder for that purpose,
+// so a restore can never land in the development or test database.
+export const RESTORE_TARGET: DatabaseTarget = {
+  envName: "RESTORE_DATABASE_URL",
+  database: "babysunray_restore",
+  role: "babysunray_restore",
+};
+
 // The local PostgreSQL port. Another port needs the founder's explicit authorisation.
 export const EXPECTED_PORT = 5432;
 
