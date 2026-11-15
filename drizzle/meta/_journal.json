@@ -64,6 +64,13 @@
       "when": 1794718500240,
       "tag": "0008_orders_reservations_cod",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794729855068,
+      "tag": "0009_owner_operations_exports_stock_counts",
+      "breakpoints": true
     }
   ]
 }

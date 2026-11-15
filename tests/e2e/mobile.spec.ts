@@ -90,3 +90,24 @@ test("navigation and the main screens work without sideways scrolling", async ({
   await page.getByRole("button", { name: "Sign out" }).tap();
   await expect(page).toHaveURL(/\/office\/login$/);
 });
+
+test("dashboard, reports, exports and a stock count on a phone, without sideways scrolling", async ({ page }) => {
+  const sku = await seedSku(2);
+  for (const path of ["/office/dashboard", "/office/reports", "/office/exports", "/office/stock-counts", "/office/print/picking"]) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await noSideScroll(page);
+  }
+  await page.goto("/office/stock-counts");
+  await page.getByLabel("Only the SKUs listed below").tap();
+  await page.getByLabel("SKUs to count").fill(sku);
+  await page.getByRole("button", { name: "Start count" }).tap();
+  await expect(page.getByRole("status").first()).toContainText("Stock count started");
+  await noSideScroll(page);
+  await page.getByLabel(`Counted units of ${sku}`).fill("2");
+  await page.getByRole("button", { name: "Save counts" }).tap();
+  await expect(page.getByTestId(`line-state-${sku}`)).toContainText("difference 0");
+  await page.getByRole("button", { name: "Apply corrections" }).tap();
+  await expect(page.getByTestId("count-status")).toContainText("applied");
+  await noSideScroll(page);
+});

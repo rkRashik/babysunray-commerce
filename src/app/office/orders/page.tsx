@@ -2,7 +2,7 @@ import Link from "next/link";
 import { productCursorCodec } from "@/api/v1/schemas";
 import { getDb } from "@/db/client";
 import { DomainError } from "@/modules/domain-error";
-import { listOrders } from "@/modules/orders/queries";
+import { isOrderQueue, listOrders, ORDER_QUEUES } from "@/modules/orders/queries";
 import { formatOrderNumber, type OrderStatus, verificationOverdue } from "@/modules/orders/rules";
 import { OfficeShell, formatTime } from "../_components/shell";
 import { requireOffice } from "../_lib/session";
@@ -33,19 +33,20 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const query = await searchParams;
   const status = STATUSES.find((s) => s === query.status);
   const attention = query.attention === "true";
+  const queue = isOrderQueue(query.queue) ? query.queue : undefined;
   const number = typeof query.number === "string" ? query.number.trim() : "";
   const after = typeof query.cursor === "string" ? (productCursorCodec.decode(query.cursor) ?? undefined) : undefined;
   let error: string | undefined;
   let page: Awaited<ReturnType<typeof listOrders>> = { items: [], hasMore: false };
   try {
-    page = await listOrders(getDb(), { limit: PAGE_SIZE, status, attention, number: number || undefined, after });
+    page = await listOrders(getDb(), { limit: PAGE_SIZE, status, attention, queue, number: number || undefined, after });
   } catch (e) {
     if (!(e instanceof DomainError)) throw e;
     error = "Enter an order number such as ORD-000042 or 42.";
   }
   const now = new Date();
   const last = page.items.at(-1);
-  const next = page.hasMore && last ? href({ status, attention: attention ? "true" : undefined, number: number || undefined, cursor: productCursorCodec.encode(last.key) }) : null;
+  const next = page.hasMore && last ? href({ status, attention: attention ? "true" : undefined, queue, number: number || undefined, cursor: productCursorCodec.encode(last.key) }) : null;
 
   return (
     <OfficeShell title="Orders" current="orders">
@@ -57,6 +58,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           Needs attention
         </Link>
       </div>
+      {queue ? (
+        <p role="status" className="text-sm text-gray-700">
+          Showing the queue: <strong>{ORDER_QUEUES[queue]}</strong>. <Link href="/office/orders" className="underline">Show all orders</Link>.
+        </p>
+      ) : null}
       <div role="search" aria-label="Find orders">
         <form method="get" action="/office/orders" className="flex flex-col gap-3 rounded border border-gray-300 bg-white p-4 sm:flex-row sm:items-end">
           <div className="flex-1">
@@ -85,7 +91,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             <button type="submit" className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2">
               Show
             </button>
-            {status || number || attention ? (
+            {status || number || attention || queue ? (
               <Link href="/office/orders" className="rounded border border-gray-400 bg-white px-4 py-2 text-sm hover:bg-gray-100">
                 Clear
               </Link>
@@ -100,7 +106,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </p>
       ) : page.items.length === 0 ? (
         <p role="status" className="text-sm text-gray-700">
-          {status || number || attention ? "No orders match." : "No orders yet."} <Link href="/office/orders/new" className="underline">Create an assisted order</Link>.
+          {status || number || attention || queue ? "No orders match." : "No orders yet."} <Link href="/office/orders/new" className="underline">Create an assisted order</Link>.
         </p>
       ) : (
         <ul aria-label="Orders" className="divide-y divide-gray-200 rounded border border-gray-300 bg-white">
@@ -128,7 +134,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       {next || after ? (
         <nav aria-label="Pages" className="flex gap-4 text-sm">
           {after ? (
-            <Link href={href({ status, attention: attention ? "true" : undefined, number: number || undefined })} className="underline">
+            <Link href={href({ status, attention: attention ? "true" : undefined, queue, number: number || undefined })} className="underline">
               First page
             </Link>
           ) : null}

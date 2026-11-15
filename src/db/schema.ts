@@ -673,3 +673,98 @@ export const trackingRateLimits = pgTable(
     check("tracking_rate_limits_count_positive", sql`${t.count} >= 1`),
   ],
 );
+
+// ---------------------------------------------------------------------------------------------------------
+// Owner operations (migration 0009): export audit and physical stock counts.
+
+// Append-only record of every export the Owner requested (requirements D-6, OF-6; trigger, migration 0009):
+// who, when, which dataset and format, and the filters as safe metadata (dates and status values only, never
+// contact data or file contents). Written before the file is generated, so a failed export is audited too.
+export const exportRequests = pgTable(
+  "export_requests",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    actorUserId: userRef("actor_user_id").notNull(),
+    dataset: text("dataset").notNull(),
+    format: text("format", { enum: ["xlsx", "csv", "json"] }).notNull(),
+    scope: text("scope", { enum: ["complete", "filtered"] }).notNull(),
+    filters: jsonb("filters").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("export_requests_created_at_idx").on(t.createdAt),
+    check("export_requests_dataset_valid", sql`${t.dataset} ~ '^[a-z][a-z_]{1,49}$'`),
+    check("export_requests_format_valid", sql`${t.format} in ('xlsx', 'csv', 'json')`),
+    check("export_requests_scope_valid", sql`${t.scope} in ('complete', 'filtered')`),
+    check("export_requests_filters_object", sql`jsonb_typeof(${t.filters}) = 'object'`),
+  ],
+);
+
+// A physical stock count (requirement I-8): a snapshot of the selected SKUs, counted quantities entered by the
+// Owner, and, when applied, one reasoned `adjustment` ledger row per SKU whose count differs. Never a direct
+// balance edit. A draft can be resumed; applied and discarded counts are closed for good.
+export const stockCounts = pgTable(
+  "stock_counts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Short reference for people (COUNT-000001), like orders.number.
+    number: bigint("number", { mode: "number" }).notNull().unique("stock_counts_number_key").generatedAlwaysAsIdentity(),
+    status: text("status", { enum: ["draft", "applied", "discarded"] }).notNull(),
+    scope: text("scope", { enum: ["all", "selected"] }).notNull(),
+    reason: text("reason"),
+    version: version(),
+    createdByUserId: userRef("created_by_user_id").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    closedByUserId: userRef("closed_by_user_id"),
+  },
+  (t) => [
+    index("stock_counts_created_at_idx").on(t.createdAt),
+    check("stock_counts_status_valid", sql`${t.status} in ('draft', 'applied', 'discarded')`),
+    check("stock_counts_scope_valid", sql`${t.scope} in ('all', 'selected')`),
+    check("stock_counts_reason_valid", sql`btrim(${t.reason}) <> '' and length(${t.reason}) <= 400`),
+    check("stock_counts_version_positive", sql`${t.version} >= 1`),
+    check(
+      "stock_counts_close_consistent",
+      sql`(${t.status} = 'draft') = (${t.closedAt} is null) and (${t.closedAt} is null) = (${t.closedByUserId} is null)`,
+    ),
+  ],
+);
+
+// One SKU in a count. snapshot_* is the system balance when the count started (printed on the count sheet).
+// When the Owner enters a counted quantity, basis_on_hand and basis_movement_id record the balance and the
+// SKU's latest ledger row at that moment: applying refuses a line whose SKU moved since (a stale count is
+// never applied as counted - old snapshot). applied_delta and movement_id are set once, when applied.
+export const stockCountLines = pgTable(
+  "stock_count_lines",
+  {
+    countId: uuid("count_id")
+      .notNull()
+      .references(() => stockCounts.id, { onDelete: "restrict" }),
+    variantId: uuid("variant_id")
+      .notNull()
+      .references(() => variants.id, { onDelete: "restrict" }),
+    snapshotOnHand: integer("snapshot_on_hand").notNull(),
+    snapshotReserved: integer("snapshot_reserved").notNull(),
+    counted: integer("counted"),
+    countedAt: timestamp("counted_at", { withTimezone: true }),
+    basisOnHand: integer("basis_on_hand"),
+    // 0 when the SKU had no ledger rows yet (identity ids start at 1).
+    basisMovementId: bigint("basis_movement_id", { mode: "number" }),
+    appliedDelta: integer("applied_delta"),
+    movementId: bigint("movement_id", { mode: "number" })
+      .unique("stock_count_lines_movement_key")
+      .references(() => stockMovements.id, { onDelete: "restrict" }),
+  },
+  (t) => [
+    primaryKey({ name: "stock_count_lines_pkey", columns: [t.countId, t.variantId] }),
+    check("stock_count_lines_snapshot_valid", sql`${t.snapshotOnHand} >= 0 and ${t.snapshotReserved} >= 0 and ${t.snapshotReserved} <= ${t.snapshotOnHand}`),
+    check(
+      "stock_count_lines_count_consistent",
+      sql`(${t.counted} is null) = (${t.countedAt} is null) and (${t.counted} is null) = (${t.basisOnHand} is null) and (${t.counted} is null) = (${t.basisMovementId} is null)`,
+    ),
+    check("stock_count_lines_counted_valid", sql`${t.counted} >= 0 and ${t.basisOnHand} >= 0 and ${t.basisMovementId} >= 0`),
+    check("stock_count_lines_applied_consistent", sql`${t.movementId} is null or (${t.appliedDelta} is not null and ${t.appliedDelta} <> 0)`),
+  ],
+);

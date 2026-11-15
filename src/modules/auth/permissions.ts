@@ -10,6 +10,10 @@ export const PERMISSIONS = [
   "orders:write",
   "payments:record",
   "settings:write",
+  // Dashboard, reports and printed summaries (no customer contact details).
+  "reports:read",
+  // Exports may hold customer personal data (requirement D-6): a permission of its own, audited per request.
+  "exports:create",
   "users:manage",
 ] as const;
 

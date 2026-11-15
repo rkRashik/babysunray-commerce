@@ -123,6 +123,9 @@ export default async function OrderPage({ params, searchParams }: Props) {
       </Section>
 
       <Section title="Customer and delivery">
+        <Link href={`/office/print/orders/${order.id}`} className="inline-block text-sm underline">
+          Print packing and shipping document
+        </Link>
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-[10rem_1fr]">
           <dt className="text-gray-600">Name</dt>
           <dd>{order.customerName}</dd>

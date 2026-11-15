@@ -66,10 +66,13 @@ export async function seedSku(stock: number, pricePaisa = 50_000): Promise<strin
       [product.rows[0].id, sku, pricePaisa],
     );
     await db.query("insert into inventory_balances (variant_id, on_hand) values ($1, $2)", [variant.rows[0].id, stock]);
-    await db.query(
-      "insert into stock_movements (variant_id, movement_type, quantity_delta, actor_type, actor_ref) values ($1, 'receipt', $2, 'system', 'e2e-seed')",
-      [variant.rows[0].id, stock],
-    );
+    // The ledger has no zero-unit receipts: a SKU seeded with no stock has no movement.
+    if (stock > 0) {
+      await db.query(
+        "insert into stock_movements (variant_id, movement_type, quantity_delta, actor_type, actor_ref) values ($1, 'receipt', $2, 'system', 'e2e-seed')",
+        [variant.rows[0].id, stock],
+      );
+    }
   } finally {
     await db.end();
   }

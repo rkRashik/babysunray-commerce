@@ -21,7 +21,7 @@ export function OfficeShell({
   notice?: string;
   /** Where this page sits, from Products down; the page itself is the title. */
   breadcrumbs?: Crumb[];
-  current?: "products" | "new" | "orders" | "delivery";
+  current?: "dashboard" | "products" | "new" | "orders" | "delivery" | "reports" | "counts" | "exports";
 }) {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
@@ -35,6 +35,9 @@ export function OfficeShell({
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <nav aria-label="Owner Office" className="flex flex-wrap items-center gap-4 text-sm">
             <span className="font-semibold">Owner Office</span>
+            <Link href="/office/dashboard" aria-current={current === "dashboard" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
+              Dashboard
+            </Link>
             <Link href="/office" aria-current={current === "products" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
               Products
             </Link>
@@ -46,6 +49,15 @@ export function OfficeShell({
             </Link>
             <Link href="/office/settings/delivery" aria-current={current === "delivery" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
               Delivery charges
+            </Link>
+            <Link href="/office/reports" aria-current={current === "reports" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
+              Reports
+            </Link>
+            <Link href="/office/stock-counts" aria-current={current === "counts" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
+              Stock counts
+            </Link>
+            <Link href="/office/exports" aria-current={current === "exports" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
+              Exports
             </Link>
           </nav>
           <SignOutButton />
@@ -131,5 +143,9 @@ const NOTICES: Record<string, string> = {
   inspected: "Inspection recorded.",
   "link-revoked": "Tracking link revoked.",
   "zone-saved": "Delivery charge saved.",
+  started: "Stock count started. The system quantities below are a snapshot; enter what you count.",
+  "counts-saved": "Counted quantities saved. Nothing in stock has changed yet.",
+  applied: "Stock count applied. Each difference was recorded as a stock adjustment.",
+  discarded: "Stock count discarded. Nothing in stock changed.",
 };
 export const noticeFor = (done: string | string[] | undefined) => (typeof done === "string" ? NOTICES[done] : undefined);

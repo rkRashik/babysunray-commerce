@@ -6,3 +6,33 @@
   font-family: "Noto Sans Bengali", "Nirmala UI", "Vrinda", "Shonar Bangla", system-ui, sans-serif;
   line-height: 1.7;
 }
+
+/* Printed Owner documents (src/app/office/print): A4, readable text, page numbers, and no screen-only controls.
+   Functional only, not an approved visual design. */
+@page {
+  size: A4;
+  margin: 14mm 12mm 16mm;
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 9pt;
+  }
+}
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-sheet {
+    font-size: 10.5pt;
+    color: #000;
+  }
+  .print-sheet table {
+    page-break-inside: auto;
+  }
+  .print-sheet tr,
+  .print-avoid-break {
+    break-inside: avoid;
+  }
+  .print-sheet thead {
+    display: table-header-group;
+  }
+}
