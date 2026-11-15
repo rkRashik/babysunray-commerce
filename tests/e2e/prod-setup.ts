@@ -20,9 +20,8 @@ import { freePort, proveServerUsesTestDatabase, seedOwner, stop, waitForServer }
 const ROOT = process.cwd();
 const DIST_DIR = ".next/e2e-prod";
 const NEXT_ENV = path.join(ROOT, "next-env.d.ts");
-const NEXT_BIN = path.join(ROOT, "node_modules/next/dist/bin/next");
 
-function selfSignedCertificate(dir: string): { key: Buffer; cert: Buffer } {
+export function selfSignedCertificate(dir: string): { key: Buffer; cert: Buffer } {
   const result = spawnSync(
     "openssl",
     ["req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes", "-days", "1", "-subj", "/CN=127.0.0.1", "-addext", "subjectAltName=IP:127.0.0.1", "-keyout", path.join(dir, "key.pem"), "-out", path.join(dir, "cert.pem")],
@@ -33,7 +32,7 @@ function selfSignedCertificate(dir: string): { key: Buffer; cert: Buffer } {
 }
 
 /** A TLS front for the local server: forwards each request unchanged (Host included), marking it as https. */
-function tlsProxy(tls: { key: Buffer; cert: Buffer }, appPort: number): https.Server {
+export function tlsProxy(tls: { key: Buffer; cert: Buffer }, appPort: number): https.Server {
   return https.createServer(tls, (req, res) => {
     const upstream = http.request(
       { host: "127.0.0.1", port: appPort, method: req.method, path: req.url, headers: { ...req.headers, "x-forwarded-proto": "https" } },
@@ -50,8 +49,9 @@ function tlsProxy(tls: { key: Buffer; cert: Buffer }, appPort: number): https.Se
   });
 }
 
-function run(args: string[], env: NodeJS.ProcessEnv, keep: (chunk: Buffer) => void): ChildProcess {
-  const child = spawn(process.execPath, [NEXT_BIN, ...args], { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
+/** Runs this checkout's (or `root`'s) Next.js CLI. */
+export function run(args: string[], env: NodeJS.ProcessEnv, keep: (chunk: Buffer) => void, root = ROOT): ChildProcess {
+  const child = spawn(process.execPath, [path.join(root, "node_modules/next/dist/bin/next"), ...args], { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
   child.stdout?.on("data", keep);
   child.stderr?.on("data", keep);
   return child;

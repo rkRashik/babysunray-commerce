@@ -31,6 +31,7 @@
     "media:drill": "vitest run --config vitest.drill.config.mts tests/drill/media-drill.drill.ts",
     "test:e2e": "playwright test",
     "test:e2e:prod": "playwright test --config playwright.prod.config.ts",
+    "test:install": "playwright test --config playwright.install.config.ts",
     "test:contract": "vitest run tests/api && vitest run --config vitest.integration.config.mts tests/db/api.integration.test.ts tests/db/api-write.integration.test.ts tests/db/api-orders.integration.test.ts"
   },
   "dependencies": {

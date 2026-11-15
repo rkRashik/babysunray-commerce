@@ -33,9 +33,10 @@ export default async function setup(project: TestProject): Promise<() => Promise
   return () => lock.end();
 }
 
-export async function resetAndMigrate(url: string | undefined): Promise<void> {
+/** `migrationsFolder`: another checkout's migrations (the installation rehearsal); default this project's. */
+export async function resetAndMigrate(url: string | undefined, migrationsFolder = path.resolve("drizzle")): Promise<void> {
   await dropManagedObjects(url, async (client) => {
-    await migrate(drizzle({ client }), { migrationsFolder: path.resolve("drizzle") });
+    await migrate(drizzle({ client }), { migrationsFolder });
   });
 }
 
