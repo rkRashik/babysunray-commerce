@@ -32,6 +32,17 @@ It lists every variable as set, missing or invalid with the rule it breaks (neve
 | `MEDIA_STORAGE_DIR` | product photos (Office) and `media:verify` | an absolute path to an existing folder outside the project folder |
 | `MEDIA_LOCAL_STORAGE_IN_PRODUCTION` | production only | must be `allow` for a local photo folder in production; leave empty locally |
 | `PG_BIN` (shell, optional) | backup commands | PostgreSQL's `bin` folder if `pg_dump` is not on the PATH, e.g. `C:\Program Files\PostgreSQL\18\bin` |
+| `STORE_NAME`, `STORE_LINE_EN`, `STORE_LINE_BN`, `STORE_CONTACT_PHONE`, `STORE_CONTACT_EMAIL`, `STORE_THEME_*` (optional) | the shop's name, description, contact and preview colours in the storefront preview | length, characters, phone and email shape, colour contrast ([installation.md](installation.md), section 3) |
+
+**Shop identity on BabySunray's own installation.** Since Gate H.24 the name and description are settings, not code, so the preview shows the neutral "Storefront" until `.env.local` has them. To show BabySunray's name and the store line from the approved business context (B-2, S-4) again, add these lines to `.env.local` yourself and restart `npm run dev`:
+
+```
+STORE_NAME=BabySunray
+STORE_LINE_EN=Baby and kids clothing, delivered across Bangladesh from Dhaka. Pay in cash when your order arrives.
+STORE_LINE_BN=শিশু ও বাচ্চাদের পোশাক, ঢাকা থেকে সারা বাংলাদেশে ডেলিভারি। পণ্য হাতে পেয়ে নগদে মূল্য পরিশোধ করুন।
+```
+
+Contact details and colours are optional; without them no contact is shown and the prototype colours stay.
 
 ## 3. Sign-in troubleshooting
 
