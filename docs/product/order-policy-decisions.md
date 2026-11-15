@@ -84,3 +84,4 @@ Chosen to implement section 1 where it leaves a technical detail open. They make
 - Return inspection criteria (open decision 9) beyond pass or fail with a note.
 - Delivery charge amounts, and any district-level zones (O-8).
 - Public delivery, return/exchange and privacy policy text (S-17, G-7).
+- Whether an order may be closed before its 7-day return window has passed. Today closing is allowed once delivered and settled; a closed order cannot get a return request, so an early close ends the customer's return window in the system.
