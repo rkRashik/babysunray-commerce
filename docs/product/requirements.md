@@ -23,6 +23,7 @@ Revision A.5 records the founder's Gate H.2 approval (15 Nov 2026) of the authen
 Revision A.6 records batch H.2a + H.3 (15 Nov 2026): a read-only, Owner-only `/api/v1` with Bearer authentication and OpenAPI ([ADR-0004](../adr/0004-api-v1-and-bearer-transport.md)). Basis labels are unchanged.
 Revision A.7 records batch H.4–H.6 (15 Nov 2026): operation-level idempotency for stock and draft-catalogue writes ([ADR-0005](../adr/0005-operation-idempotency.md); API-8 for these operations, not O-3, since orders do not exist), Owner-only write endpoints, request-size limits, a no-CORS policy and per-user API rate limits (API-11, [ADR-0004](../adr/0004-api-v1-and-bearer-transport.md)), and a first functional Owner Office for draft products, variants, stock receipts, adjustments and movement history (part of OF-1; README.md, Owner Office). The Office's screens are functional only; final UI design (decision 4) stays open. Basis labels are unchanged.
 Revision A.8 records batch H.7–H.9 (15 Nov 2026): real-browser tests of the Owner Office; a local, operator-only Owner password reset (`npm run auth:reset-owner-password`), which is **not** the recovery path OF-5 asks for and leaves it open; editing of draft product text and of variant size, colour and price through the shared operations, `/api/v1` (PATCH) and the Office, with optimistic versions against stale overwrites; and Owner product search by slug, English or Bangla name and SKU with status filter and paging (part of I-12; order and stock listings do not exist or are not searchable yet). Three editing limits are technical defaults chosen in this batch, pending founder review rather than approved rules: archived products and their variants are not edited, inactive variants are not edited, and slug and SKU never change. Basis labels are unchanged.
+Revision A.9 records the founder's approval of the order business rules (Gate H.10–H.12, 15 Nov 2026): reservation at submission, manual verification, cancellation by stage, 24-hour verification expiry, returns and exchanges, return shipping responsibility, RTO quarantine, order milestones, Owner-configured delivery zones, COD accounting, guest tracking, dispatch deduction, manual COD refunds and further defaults. The rules are reproduced in [order-policy-decisions.md](order-policy-decisions.md) with the states and engineering defaults derived from them. Rows that the founder decided now show the new basis with the old one in brackets (for example "F (was Q)") and a reference to the rule; the requirement text itself is unchanged. These rules authorise the internal Orders system only; public checkout still waits for S-17 and G-7.
 Choices the founder has not made are collected in [section 12](#12-open-decisions) rather than guessed. Earlier AI recommendations (the discarded prototype, the earlier Cloudflare proposal) have **not** been promoted to F.
 
 ## 1. Business context
@@ -127,16 +128,16 @@ The founder requires the outcome in B-12. The approach below is **proposed** unl
 | S-4 | **Cash on delivery (COD)** at launch. Online payment is a later option, subject to merchant approval. *Proposed:* the site does not collect card numbers while on a free-tier host (see ADR-0001). | F + P |
 | S-5 | Assisted ordering (founder enters an order taken on Messenger or WhatsApp) is supported. | F |
 | S-6 | Product pages show sizes in **cm**, variant availability, fabric and care, and a delivery and return explanation. | P |
-| S-7 | The delivery charge is shown before the customer submits the order. | P |
-| S-8 | Checkout is short and labelled for first-time online buyers. After submission the order is shown as *received* and not as *confirmed* until verified. What verification means is a business rule (O-10). | P |
-| S-9 | Customers can follow an order privately without an account, using an opaque, randomly generated tracking link. Lookup by order number plus the last four phone digits is **not** acceptable. SMS one-time codes must not be a required paid dependency. | P |
+| S-7 | The delivery charge is shown before the customer submits the order. *Founder rule I (A.9), [order-policy-decisions.md](order-policy-decisions.md).* | F (was P) |
+| S-8 | Checkout is short and labelled for first-time online buyers. After submission the order is shown as *received* and not as *confirmed* until verified. What verification means is a business rule (O-10). *Founder rule B (A.9): submission is Pending Verification. Checkout wording stays P.* | F + P (was P) |
+| S-9 | Customers can follow an order privately without an account, using an opaque, randomly generated tracking link. Lookup by order number plus the last four phone digits is **not** acceptable. SMS one-time codes must not be a required paid dependency. *Founder rule K (A.9).* | F (was P) |
 | S-10 | Public URLs, analytics and logs contain no customer personal data. | P |
 | S-11 | Product claims, fabric statements and policies are never invented. Competitor product photos are not used. | F |
 | S-12 | Loading, error and offline states are designed. If the order service is unavailable the site says the order was **not** recorded and offers a manual contact route. | P |
 | S-13 | Accessibility: sufficient text contrast, visible focus, persistent field labels, large touch targets. | P |
 | S-14 | **Search, customer accounts, wishlists and reviews: launch scope undecided.** They are neither included nor excluded until the founder decides. | Q |
-| S-15 | A tracking link is a credential and is protected as one. It is long and random; it expires; the owner can revoke or regenerate it. It must not appear in analytics, server or access logs, error reports, or requests to third parties. The tracking page sends no referrer, loads no third-party scripts or embeds, is not cached or indexed, and shows only minimal, masked information. Lookups are rate-limited and failures return one generic message. | P |
-| S-16 | The tracking link's lifetime, and what happens to it after delivery, cancellation or return, are to be defined. | Q |
+| S-15 | A tracking link is a credential and is protected as one. It is long and random; it expires; the owner can revoke or regenerate it. It must not appear in analytics, server or access logs, error reports, or requests to third parties. The tracking page sends no referrer, loads no third-party scripts or embeds, is not cached or indexed, and shows only minimal, masked information. Lookups are rate-limited and failures return one generic message. *Founder rule K (A.9) applies these protections.* | F (was P) |
+| S-16 | The tracking link's lifetime, and what happens to it after delivery, cancellation or return, are to be defined. *Founder rule N (A.9): links expire 30 days after the order is closed; the Owner can revoke or regenerate them earlier.* | F (was Q) |
 | S-17 | **Public checkout is disabled until the founder has approved and published** the delivery, return/exchange and privacy policies, and any terms checkout depends on. Placeholder or "pending" text is not an acceptable public policy. Drafts may exist internally. | F |
 
 ## 4. Orders and fulfilment
@@ -145,40 +146,40 @@ Order data uses **separate** lifecycle dimensions. A change to one must not over
 
 | Dimension | Meaning | Values |
 |---|---|---|
-| Order status | Where the order stands as a commercial record | to be defined |
-| Fulfilment status | Physical preparation and delivery | to be defined |
-| Payment status | Money expected, collected and settled | to be defined |
-| Return / refund status | Returns, exchanges and refunds | to be defined |
+| Order status | Where the order stands as a commercial record | `pending_verification`, `verification_expired`, `confirmed`, `cancelled`, `closed` |
+| Fulfilment status | Physical preparation and delivery | `unfulfilled`, `packed`, `dispatched`, `delivered`, `rto`, `rto_received` |
+| Payment status | Money expected, collected and settled | `unpaid`, `partially_collected`, `collected`, `settled` (derived from recorded amounts) |
+| Return / refund status | Returns, exchanges and refunds | `none`, `requested`, `in_progress`, `resolved` |
 
 **Order source** (website, Messenger, WhatsApp, other) is an attribute of the order, **not** a lifecycle status.
 
 | ID | Requirement | Basis |
 |---|---|---|
-| O-1 | The four lifecycle dimensions above are stored and displayed separately. Their allowed values and transitions are written once the business rules below are approved. | F |
+| O-1 | The four lifecycle dimensions above are stored and displayed separately. Their allowed values and transitions are written once the business rules below are approved. *Values and transitions: [order-policy-decisions.md](order-policy-decisions.md), section 2 (A.9; Draft — Founder Review).* | F |
 | O-2 | Order source is a separate attribute. | F |
-| O-3 | Orders are submitted **idempotently**: repeating a submission with the same key creates one order. | P |
+| O-3 | Orders are submitted **idempotently**: repeating a submission with the same key creates one order. *Founder invariant (A.9).* | F (was P) |
 | O-4 | Stock is checked and held consistently under the reservation rules (O-9 to O-12). No order exists in a state that contradicts those rules, and no hold exists without a corresponding order. | P |
-| O-5 | Money is stored as integer minor units (paisa). Display uses BDT formatting. | P |
-| O-6 | Timestamps are stored unambiguously (UTC) and displayed in Asia/Dhaka. | P |
-| O-7 | Phone numbers and order identifiers are text, so leading zeros survive. Bangladesh mobile numbers are validated and normalised. | P |
-| O-8 | Delivery charges are configured by the owner, never hardcoded. How they depend on district or area is open. | Q |
-| O-9 | **Reservation timing:** when stock is held for an order (at submission, at verification, at dispatch, or otherwise). | Q |
-| O-10 | **Pending-verification orders:** what verification is, who performs it, whether such orders hold stock, and how long they may wait. | Q |
-| O-11 | **Cancellation:** who may cancel and when, and the effect on stock, payment and tracking. | Q |
-| O-12 | **Reservation release and expiry:** whether holds expire automatically or are released by hand, the time limits, and any notice to the customer. | Q |
-| O-13 | **Returns and exchanges:** eligibility, time window, condition requirements, refund method, and effect on stock. | Q |
-| O-14 | **RTO (undelivered or refused parcels returned to the shop):** handling, cost recording, inspection and restock. | Q |
-| O-15 | Each order item stores the unit price, SKU and product and variant names as they were when the order was placed. Later price or catalogue changes never alter past orders. | P |
-| O-16 | If cancellation affects stock, the stock reversal happens exactly once, even under repeated or concurrent requests, and the whole operation rolls back on partial failure. Whether, when and how stock is reversed is defined by O-9 to O-12 and is not decided here. Cancellation is not modelled as one combined status that restocks automatically (O-1). | P + Q |
+| O-5 | Money is stored as integer minor units (paisa). Display uses BDT formatting. *Founder invariant (A.9).* | F (was P) |
+| O-6 | Timestamps are stored unambiguously (UTC) and displayed in Asia/Dhaka. *Founder invariant (A.9).* | F (was P) |
+| O-7 | Phone numbers and order identifiers are text, so leading zeros survive. Bangladesh mobile numbers are validated and normalised. *Founder invariant (A.9).* | F (was P) |
+| O-8 | Delivery charges are configured by the owner, never hardcoded. How they depend on district or area is open. *Founder rule I (A.9): two Owner-configured zones, Dhaka City and Outside Dhaka; no amount approved; district-level rules still open.* | F + Q (was Q) |
+| O-9 | **Reservation timing:** when stock is held for an order (at submission, at verification, at dispatch, or otherwise). *Founder rule A (A.9): reserve everything at submission, atomically; no backorders.* | F (was Q) |
+| O-10 | **Pending-verification orders:** what verification is, who performs it, whether such orders hold stock, and how long they may wait. *Founder rule B (A.9): Owner verifies by hand; pending orders hold stock for 24 hours (rule D).* | F (was Q) |
+| O-11 | **Cancellation:** who may cancel and when, and the effect on stock, payment and tracking. *Founder rule C (A.9).* | F (was Q) |
+| O-12 | **Reservation release and expiry:** whether holds expire automatically or are released by hand, the time limits, and any notice to the customer. *Founder rule D (A.9): 24 elapsed hours, automatic release, Verification Expired — Owner Review, no auto-cancel.* | F (was Q) |
+| O-13 | **Returns and exchanges:** eligibility, time window, condition requirements, refund method, and effect on stock. *Founder rules E, F and M (A.9). Exchange execution (replacement delivery charge, price difference) is still open.* | F + Q (was Q) |
+| O-14 | **RTO (undelivered or refused parcels returned to the shop):** handling, cost recording, inspection and restock. *Founder rule G (A.9).* | F (was Q) |
+| O-15 | Each order item stores the unit price, SKU and product and variant names as they were when the order was placed. Later price or catalogue changes never alter past orders. *Founder invariant (A.9).* | F (was P) |
+| O-16 | If cancellation affects stock, the stock reversal happens exactly once, even under repeated or concurrent requests, and the whole operation rolls back on partial failure. Whether, when and how stock is reversed is defined by O-9 to O-12 and is not decided here. Cancellation is not modelled as one combined status that restocks automatically (O-1). *The Q part is decided by founder rules C and D (A.9).* | P (Q part decided) |
 
-O-9 to O-14 are **business rules the founder must define**. No order state transitions, reservation logic or database schema that depends on them are implemented until the founder has approved them in writing (gate G-10). This document does not propose specific policies or amounts.
+O-9 to O-14 were left to the founder. **Decided in Revision A.9** (founder instruction, Gate H.10–H.12, 15 Nov 2026): the rules are in [order-policy-decisions.md](order-policy-decisions.md), section 1; the states, transitions and engineering defaults derived from them are in sections 2 and 3 of that document (Draft — Founder Review). This document still proposes no amounts.
 
 ## 5. Catalogue and inventory
 
 | ID | Requirement | Basis |
 |---|---|---|
 | I-1 | Products have variants and SKUs (for example size and colour) with stock per SKU. | F |
-| I-2 | Stock is tracked as on hand, reserved and available, backed by an **append-only movement ledger**. The meaning of "reserved" follows O-9 to O-12. | P |
+| I-2 | Stock is tracked as on hand, reserved and available, backed by an **append-only movement ledger**. The meaning of "reserved" follows O-9 to O-12. *Reserved stock at submission and its release, and the dispatch deduction, are founder rules A, D and L (A.9).* | P |
 | I-3 | Every manual stock adjustment records a reason and who made it. | P |
 | I-4 | Overselling is not allowed, including when several customers order the last unit at once and for multi-item carts. | P |
 | I-5 | Product photos: how the owner adds and changes images depends on hosting (browser upload versus a local build and deploy step). Open. | Q |
@@ -198,12 +199,12 @@ A private area for the founder, with security boundaries that anticipate later s
 |---|---|---|
 | OF-1 | Manage products, pricing, stock, orders (website and assisted), expenses, fulfilment, configuration and reports. Phased delivery is acceptable. | F |
 | OF-2 | A practical dashboard, not an executive analytics page. No fictional KPIs. | P |
-| OF-3 | Cash-on-delivery money is shown in separate buckets: expected, collected by the courier, settled to the owner. Whether an order counts as *expected* depends on verification (O-10). | P |
+| OF-3 | Cash-on-delivery money is shown in separate buckets: expected, collected by the courier, settled to the owner. Whether an order counts as *expected* depends on verification (O-10). *Founder rule J (A.9).* | F (was P) |
 | OF-4 | Every Office page and API enforces authentication and authorisation. Each is covered by a negative test. | P |
 | OF-5 | Authentication uses an established solution, not a custom-designed protocol. It includes session expiry, CSRF protection and a recovery path for a lost device. Which solution is open. | P + Q |
 | OF-6 | Privileged and sensitive actions (exports, stock adjustments, status changes) are written to an audit log with actor and time. | P |
 | OF-7 | Staff roles are not built now. Permission checks are written so roles can be added without rewriting them. | F |
-| OF-8 | **COD courier settlement:** for each cash-on-delivery consignment the owner can record the amount expected, the amount the courier remitted, courier fees or deductions, the date received, and any unresolved difference. All amounts and fees are entered by the owner. None are assumed here. How courier statements are reconciled is to be defined. | P |
+| OF-8 | **COD courier settlement:** for each cash-on-delivery consignment the owner can record the amount expected, the amount the courier remitted, courier fees or deductions, the date received, and any unresolved difference. All amounts and fees are entered by the owner. None are assumed here. How courier statements are reconciled is to be defined. *Founder rule J (A.9): manual recording of collection and settlement. Statement reconciliation stays P.* | F + P (was P) |
 | OF-9 | Audit and ledger entries record the real acting identity (extends I-3 and OF-6). Before an authentication solution exists, entries carry an explicit non-user source label; the system never invents or reuses a person's identity. Truthful actor auditing: implementation approved by the founder (Gate G.3). | P |
 | OF-10 | The approved authentication solution (OF-5) handles passwords: no hand-written password hashing or session protocol. Admin and Staff permissions are enforced on the server for every privileged operation, and session or token lifetime suits the client type (API-10). Roles themselves are not built now (OF-7). | P |
 
@@ -276,7 +277,7 @@ These must be demonstrated before the matching feature is called ready. Evidence
 | G-7 | Delivery, return/exchange and privacy policies are **founder-approved and published** before public checkout is enabled. Placeholder text does not satisfy this gate (S-17). |
 | G-8 | The chosen production hosting is confirmed to permit commercial use, its limits and failure behaviour are tested, and its backup and restore capability is verified. |
 | G-9 | Usability: at least five informal testers including one first-time online buyer, on a mid-range Android phone. |
-| G-10 | The business rules O-9 to O-14 are approved in writing before the schema and logic that depend on them are implemented. |
+| G-10 | The business rules O-9 to O-14 are approved in writing before the schema and logic that depend on them are implemented. *Met in Revision A.9 ([order-policy-decisions.md](order-policy-decisions.md)).* |
 | G-11 | For every API endpoint: unauthenticated and unauthorised requests are rejected (G-3); invalid and unexpected input is handled as documented; errors follow API-6 and leak no internals or personal data; size limits, rate limits and CORS behave as specified (API-11). |
 | G-12 | The OpenAPI description matches actual endpoint behaviour, and the versioning policy (API-9) is followed whenever a contract changes. |
 | G-13 | Under the approved rules (O-11), repeated and concurrent cancellation requests reverse stock exactly once and leave no partial state. Blocked until O-9 to O-12 are approved. |
@@ -322,20 +323,20 @@ Also out of scope: a separate backend server, Express, microservices, a monorepo
 | 2 | ORM: Drizzle or Prisma | **Resolved:** Drizzle, approved by the founder in Gate G.3 (14 Nov 2026). See ADR-0002. |
 | 3 | Authentication solution | **Resolved:** Better Auth, email and password, database browser sessions, no public sign-up, local Owner bootstrap, Owner-first permissions; approved by the founder in Gate H.2 (15 Nov 2026). See ADR-0003. Still open: the lost-device recovery path OF-5 requires (not built), 2FA, and native-client credentials (API-10). |
 | 4 | Final UI design | Colours, typography, layout. Needs design research and approval (BR-6). |
-| 5 | Business rules O-9 to O-14 | Reservation timing, pending verification, cancellation, release and expiry, returns, RTO. Needed before schema work (G-10). |
+| 5 | Business rules O-9 to O-14 | Reservation timing, pending verification, cancellation, release and expiry, returns, RTO. Needed before schema work (G-10). **Resolved** (A.9, [order-policy-decisions.md](order-policy-decisions.md)), except exchange execution (replacement delivery charge, price difference). |
 | 6 | RPO and RTO | Founder approval (K-9). |
 | 7 | Policies: delivery, return/exchange, privacy | Founder-approved text required before public checkout (S-17, G-7). |
-| 8 | Delivery charges and zones | Owner to supply real values (O-8). |
-| 9 | Courier and COD settlement process, return inspection criteria, stock counting routine | Real processes not yet documented (OF-8, I-7, I-8). |
-| 10 | Tracking link lifetime | S-16. |
-| 11 | Lifecycle status values and transitions | Defined after item 5 (section 4). |
+| 8 | Delivery charges and zones | Owner to supply real values (O-8). Zones decided (A.9: Dhaka City and Outside Dhaka, Owner-configured); amounts and any district rules still open. |
+| 9 | Courier and COD settlement process, return inspection criteria, stock counting routine | Real processes not yet documented (OF-8, I-7, I-8). COD collection and settlement are recorded by hand (A.9, rule J); inspection is pass or fail with a note; the real courier process and inspection criteria are still open. |
+| 10 | Tracking link lifetime | S-16. **Resolved** (A.9, rule N): 30 days after closure; revocable. |
+| 11 | Lifecycle status values and transitions | Defined after item 5 (section 4). **Resolved** as Draft — Founder Review in [order-policy-decisions.md](order-policy-decisions.md), section 2. |
 | 12 | Launch scope of search, accounts, wishlist, reviews | Undecided (S-14). |
 | 13 | Repository visibility | Private first or public (R-1). |
 | 14 | Product photo workflow | Depends on hosting (I-5). |
 | 15 | Off-device backup location | Founder chooses (K-4). |
 | 16 | Approval to start local PostgreSQL development | **Resolved:** approved by the founder; the local PostgreSQL development and test foundation exists (README.md). |
 | 17 | API contract: endpoint structure, versioning policy, OpenAPI tooling, native-client credentials | Direction approved by the founder in Gate H.2 (15 Nov 2026): versioned REST under `/api/v1`, described in OpenAPI. Batch H.2a + H.3 built four read-only Owner endpoints, Bearer authentication (Better Auth's plugin, the session token as credential), OpenAPI 3.1 with contract tests and a draft compatibility policy (`docs/api/README.md`, ADR-0004). Batch H.4–H.6 added Owner-only writes for the draft catalogue and stock with idempotency keys, 64 KiB body limit, no CORS and per-user rate limits (version 1.1.0). Still open: native apps and their token handling (API-10), founder approval of the versioning policy (API-9), retention of idempotency records, a limit for unauthenticated traffic (hosting). |
-| 18 | Approval of the proposed technical defaults: Drizzle; Product → Variant with variant-level price (I-9); founder-entered unique SKU and its format (I-10); `on_hand` balance plus append-only ledger (I-2); integer paisa and UTC (O-5, O-6); truthful actor auditing (OF-9) | **Approved for implementation** in Gate G.3 (14 Nov 2026). Gate G.3a approved the SKU character set (ASCII letters, digits, hyphen, underscore), strictly positive prices and ASCII slugs; the SKU structure (I-10) is still to be agreed. "Reserved" and "available" stock (I-2) are not approved and wait for O-9 to O-12. O-9 to O-14 stay open independently (item 5). |
+| 18 | Approval of the proposed technical defaults: Drizzle; Product → Variant with variant-level price (I-9); founder-entered unique SKU and its format (I-10); `on_hand` balance plus append-only ledger (I-2); integer paisa and UTC (O-5, O-6); truthful actor auditing (OF-9) | **Approved for implementation** in Gate G.3 (14 Nov 2026). Gate G.3a approved the SKU character set (ASCII letters, digits, hyphen, underscore), strictly positive prices and ASCII slugs; the SKU structure (I-10) is still to be agreed. "Reserved" and "available" stock (I-2) followed from O-9 to O-12, decided in Revision A.9. O-9 to O-14 stay open independently (item 5). |
 | 19 | Reuse: configuration mechanism, licence review scope, terms of any handoff | RU-1 to RU-6. Commercial terms are a founder decision. |
 
 ## 13. Source materials
@@ -350,6 +351,7 @@ Also out of scope: a separate backend server, Express, microservices, a monorepo
 | Founder instruction, Gate G.2b (14 Nov 2026) | Long-term outcomes (B-8 to B-13), API and reuse direction, engineering expectations | Outcomes are founder-stated. API, reuse and engineering methods are advisor proposals. |
 | Founder instruction, Gate G.3 (14 Nov 2026) | Approval to implement Drizzle and the technical defaults in decision 18; closes decision 16 | Approves implementation only; basis labels unchanged. |
 | Founder instruction, Gate G.3a (14 Nov 2026) | SKU character set, strictly positive price, ASCII slugs, stock on inactive SKUs | Technical defaults; basis labels unchanged. |
+| Founder instruction, Gate H.10–H.12 (15 Nov 2026) | Order business rules A to N (O-9 to O-14 and related) | Founder statement; reproduced in order-policy-decisions.md, section 1. |
 | Founder instruction, Gate H.2 (15 Nov 2026) | Authentication solution and its scope (decision 3); REST and OpenAPI direction (decision 17) | Approves implementation of the named scope only; basis labels unchanged. |
 | Founder instruction, batch H.2a + H.3 (15 Nov 2026) | Authentication audit fixes; read-only `/api/v1` with Bearer and OpenAPI | Approves the named scope only; basis labels unchanged. |
 | Founder instruction, batch H.4–H.6 (15 Nov 2026) | Operation idempotency; stock and draft-catalogue write API; API limits, CORS policy and rate limits; a minimal functional Owner Office (not a UI design) | Approves the named scope only; basis labels unchanged. |

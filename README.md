@@ -190,6 +190,7 @@ Not built: changing a slug or SKU, reactivating a variant, un-archiving a produc
 | Document | Purpose | Status |
 |---|---|---|
 | [Product requirements](docs/product/requirements.md) | What the product must do, with open decisions | Draft — Founder Review |
+| [Order policy decisions](docs/product/order-policy-decisions.md) | Founder-approved order rules (O-9 to O-14), lifecycle states, transitions and engineering defaults | Rules approved (2026-11-15); derived design Draft — Founder Review |
 | [ADR-0001: Application stack](docs/adr/0001-application-stack.md) | Confirmed technology and unresolved choices | Draft — Founder Review |
 | [ADR-0002: Drizzle and inventory foundation](docs/adr/0002-drizzle-and-inventory-foundation.md) | ORM, catalogue, stock ledger and money decisions | Draft — Founder Review (decisions founder-approved) |
 | [ADR-0003: Authentication foundation](docs/adr/0003-authentication-foundation.md) | Better Auth, sessions, Owner bootstrap, permissions, user actors | Draft — Founder Review (decisions founder-approved) |
