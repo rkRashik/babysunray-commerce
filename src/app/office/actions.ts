@@ -2,7 +2,6 @@
 
 import { redirect } from "next/navigation";
 import { getDb } from "@/db/client";
-import { pgErrorCode } from "@/db/database";
 import {
   archiveProductOnce,
   createProductOnce,
@@ -14,6 +13,7 @@ import {
 import { DomainError } from "@/modules/domain-error";
 import { adjustStockOnce, receiveStockOnce } from "@/modules/inventory/operations";
 import { parseTakaToPaisa } from "@/modules/money";
+import { formError, type FormState, optional, text, wholeNumber } from "./_lib/form";
 import { requireOffice } from "./_lib/session";
 
 // Owner Office Server Actions. Each one is a public POST endpoint, so each verifies the session cookie and
@@ -24,66 +24,7 @@ import { requireOffice } from "./_lib/session";
 // double-click or a browser resubmission sends the same key, so the operation runs once; after success the
 // redirect renders a fresh form with a new key.
 
-/** An action's answer to its form: a safe message, and the submitted text so the form can show it again. */
-export type FormState = { error?: string; values?: Record<string, string> };
-
-const text = (form: FormData, name: string): string => {
-  const value = form.get(name);
-  return typeof value === "string" ? value : "";
-};
-const optional = (form: FormData, name: string): string | null => text(form, name).trim() || null;
-
-function wholeNumber(raw: string, field: string): number {
-  if (!/^[0-9]{1,10}$/.test(raw.trim())) {
-    throw new DomainError("INVALID_INPUT", `${field} must be a whole number.`);
-  }
-  return Number(raw.trim());
-}
-
-// Validation messages start with the service's field name ("pricePaisa must be ..."); the form shows the
-// label the Owner sees instead.
-const LABELS: Record<string, string> = {
-  slug: "Slug",
-  nameEn: "Name (English)",
-  nameBn: "Name (Bangla)",
-  descriptionEn: "Description (English)",
-  descriptionBn: "Description (Bangla)",
-  sku: "SKU",
-  size: "Size",
-  colour: "Colour",
-  price: "Price (BDT)",
-  pricePaisa: "Price (BDT)",
-  quantity: "Units received",
-  quantityDelta: "Change",
-  units: "Units",
-  reason: "Reason",
-};
-
-function readable(message: string): string {
-  const [field] = message.split(" ", 1);
-  return Object.hasOwn(LABELS, field) ? `${LABELS[field]}${message.slice(field.length)}` : message;
-}
-
-/** Safe text for the form: a DomainError message is written to be shown; anything else is generic. */
-function formError(error: unknown, form: FormData): FormState {
-  const values: Record<string, string> = {};
-  for (const [name, value] of form) if (typeof value === "string" && /^[a-zA-Z]+$/.test(name) && name !== "idempotencyKey") values[name] = value;
-  if (error instanceof DomainError) {
-    if (error.code === "IDEMPOTENCY_KEY_REUSED") {
-      return { error: "This form was already submitted with different values. Reload the page to make a new entry.", values };
-    }
-    return { error: readable(error.message), values };
-  }
-  console.error(
-    JSON.stringify({
-      level: "error",
-      event: "office_action_failed",
-      errorName: error instanceof Error ? error.name : typeof error,
-      sqlState: pgErrorCode(error) ?? null,
-    }),
-  );
-  return { error: "Something went wrong and nothing was saved. Please try again.", values };
-}
+export type { FormState } from "./_lib/form";
 
 export async function createProductAction(_: FormState, form: FormData): Promise<FormState> {
   const principal = await requireOffice("catalog:write");

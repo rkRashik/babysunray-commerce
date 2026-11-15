@@ -13,7 +13,7 @@ const Values = createContext<Record<string, string> | null>(null);
 
 function typedValues(form: FormData): Record<string, string> {
   const values: Record<string, string> = {};
-  for (const [name, value] of form) if (typeof value === "string" && /^[a-zA-Z]+$/.test(name) && name !== "idempotencyKey") values[name] = value;
+  for (const [name, value] of form) if (typeof value === "string" && /^[a-zA-Z][a-zA-Z0-9]*$/.test(name) && name !== "idempotencyKey") values[name] = value;
   return values;
 }
 
@@ -65,6 +65,7 @@ export function ActionForm({ action, idempotencyKey, hidden = {}, submitLabel, c
           {state.error}
         </p>
       ) : null}
+      {state.link ? <OneTimeLink link={state.link} /> : null}
       <Submit label={submitLabel} variant={variant} />
     </form>
   );
@@ -152,9 +153,36 @@ export function Field({ name, label, hint, required, multiline, inputMode, maxLe
   );
 }
 
+/** A link that exists only in this answer (a tracking link): shown once, never stored by the page. */
+function OneTimeLink({ link }: { link: string }) {
+  const id = useId();
+  return (
+    <div role="status" className="space-y-1 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+      <label htmlFor={id} className="block font-medium">
+        New tracking link. Send it to the customer now: it is shown only once and cannot be shown again.
+      </label>
+      <input id={id} readOnly value={link} className={`${INPUT} font-mono text-sm`} onFocus={(e) => e.currentTarget.select()} />
+    </div>
+  );
+}
+
+/** A labelled checkbox (sent as "on" when ticked). */
+export function Checkbox({ name, label, defaultChecked }: { name: string; label: string; defaultChecked?: boolean }) {
+  const typed = useContext(Values);
+  const id = useId();
+  return (
+    <div className="flex items-center gap-2">
+      <input id={id} type="checkbox" name={name} defaultChecked={typed ? typed[name] === "on" : defaultChecked} className="h-4 w-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900" />
+      <label htmlFor={id} className="text-base">
+        {label}
+      </label>
+    </div>
+  );
+}
+
 /** A required choice of one option, as labelled radio buttons in a fieldset. */
-export function Choice({ name, legend, options }: { name: string; legend: string; options: { value: string; label: string }[] }) {
-  const value = useValue(name, undefined);
+export function Choice({ name, legend, options, defaultValue }: { name: string; legend: string; options: { value: string; label: string }[]; defaultValue?: string }) {
+  const value = useValue(name, defaultValue);
   const id = useId();
   return (
     <fieldset>

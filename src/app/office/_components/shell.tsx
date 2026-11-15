@@ -21,7 +21,7 @@ export function OfficeShell({
   notice?: string;
   /** Where this page sits, from Products down; the page itself is the title. */
   breadcrumbs?: Crumb[];
-  current?: "products" | "new";
+  current?: "products" | "new" | "orders" | "delivery";
 }) {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
@@ -40,6 +40,12 @@ export function OfficeShell({
             </Link>
             <Link href="/office/products/new" aria-current={current === "new" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
               New product
+            </Link>
+            <Link href="/office/orders" aria-current={current === "orders" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
+              Orders
+            </Link>
+            <Link href="/office/settings/delivery" aria-current={current === "delivery" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
+              Delivery charges
             </Link>
           </nav>
           <SignOutButton />
@@ -107,5 +113,23 @@ const NOTICES: Record<string, string> = {
   deactivated: "Variant deactivated.",
   received: "Stock receipt recorded.",
   adjusted: "Stock adjustment recorded.",
+  "order-created": "Order created. It is Pending Verification and its stock is reserved.",
+  confirm: "Order confirmed.",
+  pack: "Order packed.",
+  dispatch: "Order dispatched. Stock was deducted.",
+  deliver: "Order marked delivered. Collection is recorded separately.",
+  mark_rto: "Order marked for return to sender.",
+  receive_rto: "Returned parcel received into inspection.",
+  cancel: "Order cancelled. Any reserved stock was released.",
+  close: "Order closed.",
+  "request-approved": "Cancellation request approved. The order is cancelled.",
+  "request-rejected": "Cancellation request rejected.",
+  payment: "Payment recorded.",
+  "rto-charge": "RTO charge recorded.",
+  "return-created": "Return request recorded.",
+  "return-step": "Return updated.",
+  inspected: "Inspection recorded.",
+  "link-revoked": "Tracking link revoked.",
+  "zone-saved": "Delivery charge saved.",
 };
 export const noticeFor = (done: string | string[] | undefined) => (typeof done === "string" ? NOTICES[done] : undefined);

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { clearSignInLimits, E2E_OWNER, ownerPassword, uniqueName } from "./support";
+import { clearSignInLimits, E2E_OWNER, ensureZones, ownerPassword, seedSku, uniqueName } from "./support";
 
 // Keyboard-only use and the essentials assistive technology relies on: labels, landmarks, headings, focus.
 
@@ -40,6 +40,36 @@ test("sign in and create a product with the keyboard only", async ({ page }) => 
   await page.keyboard.press("Enter");
   await expect(page.getByRole("status")).toHaveText("Draft product created.");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Keyboard Romper");
+});
+
+test("an assisted order can be created with the keyboard only", async ({ page }) => {
+  await ensureZones();
+  const sku = await seedSku(2);
+  await page.goto("/office/login");
+  await page.getByLabel("Email").fill(E2E_OWNER.email);
+  await page.getByLabel("Password").fill(ownerPassword());
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { level: 1, name: "Products" })).toBeVisible();
+  await page.goto("/office/orders/new");
+  // Radio groups: Tab enters the group, arrow keys and Space choose.
+  await page.getByLabel("Messenger").focus();
+  await page.keyboard.press("Space");
+  await expect(page.getByLabel("Messenger")).toBeChecked();
+  for (const [field, value] of [["Customer name", "Test Customer"], ["Phone", "01711000008"], ["Delivery address", "House 8, Test Road"]] as const) {
+    await page.keyboard.press("Tab");
+    await expect(page.getByLabel(field)).toBeFocused();
+    await page.keyboard.type(value);
+  }
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Space");
+  await expect(page.getByLabel(/^Dhaka City/)).toBeChecked();
+  await page.keyboard.press("Tab");
+  await expect(page.getByLabel("SKU, line 1")).toBeFocused();
+  await page.keyboard.type(sku);
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("1");
+  await page.keyboard.press("Enter");
+  await expect(page.locator('[data-dimension="order"]')).toHaveText("Pending verification");
 });
 
 test("pages have one main landmark, a level-1 heading, labelled fields and Bangla marked as Bangla", async ({ page }) => {

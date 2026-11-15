@@ -37,6 +37,7 @@ export default async function SkuPage({ params, searchParams }: Props) {
   const onHandNow = (
     <p className="text-sm text-gray-700">
       On hand now: <span className="font-semibold tabular-nums">{level.onHand}</span>
+      {level.reserved > 0 ? ` (${level.reserved} reserved for orders cannot be removed)` : ""}
     </p>
   );
 
@@ -52,6 +53,10 @@ export default async function SkuPage({ params, searchParams }: Props) {
       <Section title="Current stock">
         <p className="text-3xl font-semibold tabular-nums" data-testid="on-hand">
           {level.onHand}
+        </p>
+        <p className="text-sm" data-testid="reservation">
+          Reserved for orders: <span className="font-semibold tabular-nums">{level.reserved}</span> · Available for new orders:{" "}
+          <span className="font-semibold tabular-nums">{level.available}</span>
         </p>
         <p className="text-sm text-gray-700">
           Units on hand. {[variant.size, variant.colour].filter(Boolean).join(", ") || "No size or colour"} · ৳ {formatPaisa(variant.pricePaisa)} · variant{" "}

@@ -43,9 +43,9 @@ function normaliseItems(items: NewOrder["items"]): { sku: string; quantity: numb
   const merged = new Map<string, number>();
   for (const item of items) {
     const sku = normalizeSku(item.sku);
-    merged.set(sku, (merged.get(sku) ?? 0) + validateQuantity(item.quantity));
+    merged.set(sku, (merged.get(sku) ?? 0) + validateQuantity(item.quantity, "lineQuantity"));
   }
-  return [...merged].map(([sku, quantity]) => ({ sku, quantity: validateQuantity(quantity) }));
+  return [...merged].map(([sku, quantity]) => ({ sku, quantity: validateQuantity(quantity, "lineQuantity") }));
 }
 
 /**
