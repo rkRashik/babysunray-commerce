@@ -88,7 +88,7 @@ describe("allowedActions (the transition table in order-policy-decisions.md)", (
 
 describe("Bangladesh phone numbers", () => {
   it("normalises the accepted forms to 01XXXXXXXXX", () => {
-    for (const raw of ["01711000001", "+8801711000001", "8801711000001", "0171-100-0001", " 0171 1000001 ", "1711000001"]) {
+    for (const raw of ["01711000001", "+8801711000001", "8801711000001", "0171-100-0001", " 0171 1000001 ", "1711000001", "০১৭১১০০০০০১", "+৮৮০ ১৭১১-০০০০০১"]) {
       expect(normalizeBdPhone(raw)).toBe("01711000001");
     }
   });

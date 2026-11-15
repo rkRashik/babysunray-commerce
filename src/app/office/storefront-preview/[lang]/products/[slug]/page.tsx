@@ -3,12 +3,13 @@ import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
 import { formatCentimetres, MEASUREMENT_POINTS } from "@/modules/catalogue/content";
 import { dictionary, formatTaka, isLang, localised } from "@/modules/storefront/i18n";
-import { getPreviewProduct } from "@/modules/storefront/service";
+import { getPreviewProduct, listPreviewProducts } from "@/modules/storefront/service";
 import { requireOffice } from "../../../../_lib/session";
-import { base, Localised, Photo } from "../../../_components/parts";
+import { Gallery } from "../../../_components/gallery";
+import { base, listQuery, Localised, ProductGrid } from "../../../_components/parts";
 import { VariantPicker } from "../../../_components/variant-picker";
 
-type Props = { params: Promise<{ lang: string; slug: string }> };
+type Props = { params: Promise<{ lang: string; slug: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 const sizeOrder = (a: string, b: string) => a.localeCompare(b, "en", { numeric: true });
 
@@ -26,8 +27,9 @@ function Block({ title, children, id }: { title: string; children: React.ReactNo
 // Product page prototype: photos, the buying panel (size with measurements, colour, quantity, availability)
 // and the Owner's own content. A fabric statement appears only once the Owner confirmed it; until then the
 // preview says it would be hidden. Delivery charges are the configured ones; policy text does not exist yet.
-export default async function PreviewProduct({ params }: Props) {
+export default async function PreviewProduct({ params, searchParams }: Props) {
   const { lang, slug } = await params;
+  const from = listQuery(typeof (await searchParams).from === "string" ? ((await searchParams).from as string) : null);
   if (!isLang(lang)) notFound();
   const principal = await requireOffice("storefront:preview");
   const found = await getPreviewProduct(getDb(), principal, slug);
@@ -54,6 +56,10 @@ export default async function PreviewProduct({ params }: Props) {
   const care = localised(lang, product.careEn, product.careBn);
   const guidance = localised(lang, product.sizeGuidanceEn, product.sizeGuidanceBn);
   const photos = product.media.map((m) => ({ id: m.id, width: m.width, height: m.height, altEn: m.altEn, altBn: m.altBn }));
+  const category = product.category;
+  const categoryName = category ? (localised(lang, category.nameEn, category.nameBn) ?? localised(other, category.nameEn, category.nameBn) ?? category.slug) : null;
+  // Other products of the same category, from the catalogue as it is: no similarity is claimed.
+  const related = category ? (await listPreviewProducts(getDb(), principal, { category: category.slug })).items.filter((p) => p.id !== product.id).slice(0, 4) : [];
 
   return (
     <div className="space-y-10">
@@ -70,23 +76,26 @@ export default async function PreviewProduct({ params }: Props) {
               {t.shopAll}
             </Link>
           </li>
+          {category ? (
+            <>
+              <li aria-hidden="true">/</li>
+              <li>
+                <Link href={`${base(lang)}/products?category=${category.slug}`} className="underline underline-offset-4">
+                  {categoryName}
+                </Link>
+              </li>
+            </>
+          ) : null}
         </ol>
+        {from ? (
+          <Link href={`${base(lang)}/products?${from}`} className="mt-2 inline-flex min-h-11 items-center font-medium text-sf-tan underline underline-offset-4" data-testid="back-to-results">
+            {t.backToResults}
+          </Link>
+        ) : null}
       </nav>
 
       <div className="grid gap-8 md:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] md:gap-12">
-        <div>
-          {photos.length ? (
-            <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0" aria-label={name}>
-              {photos.map((p, i) => (
-                <li key={p.id} className={`aspect-[4/5] ${photos.length === 1 ? "w-full" : "w-4/5"} shrink-0 snap-start overflow-hidden rounded-sm bg-sf-sand md:w-auto ${i === 0 ? "md:col-span-2" : ""}`}>
-                  <Photo photo={p} lang={lang} name={name} sizes={i === 0 ? "(min-width: 768px) 55vw, 80vw" : "(min-width: 768px) 27vw, 80vw"} />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="flex aspect-[4/5] items-end rounded-sm bg-sf-sand p-4 text-sf-umber">{t.noPhoto}</div>
-          )}
-        </div>
+        <Gallery lang={lang} photos={photos} name={name} />
 
         <div className="space-y-6 md:sticky md:top-6 md:self-start">
           <h1 className="text-3xl font-semibold leading-tight">
@@ -174,6 +183,15 @@ export default async function PreviewProduct({ params }: Props) {
           <p className="text-sf-umber">{t.policiesPending}</p>
         </Block>
       </div>
+
+      {related.length && categoryName ? (
+        <section aria-labelledby="sf-related" className="space-y-5">
+          <h2 id="sf-related" className="text-2xl font-semibold">
+            {t.moreInCategory(categoryName)}
+          </h2>
+          <ProductGrid products={related} lang={lang} label={t.moreInCategory(categoryName)} />
+        </section>
+      ) : null}
     </div>
   );
 }

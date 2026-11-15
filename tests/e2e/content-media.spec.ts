@@ -140,4 +140,8 @@ test("fictional photos: upload, refuse a fake image, describe, reorder, replace 
   const response = await anonymous.request.get(`${baseURL}${src}`);
   expect(response.status()).toBe(401);
   await anonymous.close();
+
+  // The photo storage check agrees: every record has its file.
+  await page.goto("/office/media-health");
+  await expect(page.getByTestId("media-summary")).toContainText("No record is missing its file.");
 });

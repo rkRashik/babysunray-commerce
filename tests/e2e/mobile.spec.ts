@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { clearSignInLimits, ensureZones, seedSku, seedStorefrontProduct, signIn, uniqueName } from "./support";
+import { clearSignInLimits, ensureZones, seedSku, seedStorefrontProduct, signIn, testDatabase, uniqueName } from "./support";
 
 // The Office on a phone-sized screen (Pixel 7 profile: touch, 412 px wide).
 
@@ -148,4 +148,37 @@ test("storefront preview on a phone: the menu, size and colour by touch, the car
   await page.getByRole("link", { name: "Go to checkout" }).tap();
   await expect(page.getByTestId("simulation-note")).toBeVisible();
   await noSideScroll(page);
+});
+
+test("checkout simulation on a 360-pixel-wide phone: every step fits, nothing is recorded", async ({ page }) => {
+  await ensureZones();
+  await page.setViewportSize({ width: 360, height: 740 });
+  const product = await seedStorefrontProduct();
+  await page.goto(`/office/storefront-preview/bn/products/${product.slug}`);
+  await noSideScroll(page);
+  const chip = (text: string) => page.locator("label").filter({ has: page.getByRole("radio", { name: new RegExp(`^${text}`) }) });
+  await chip("0-3M").tap();
+  await chip("Ivory").tap();
+  await page.getByRole("button", { name: "কার্টে যোগ করুন" }).tap();
+  await expect(page.getByTestId("cart-count")).toHaveText("১");
+  await page.goto("/office/storefront-preview/bn/checkout");
+  await noSideScroll(page);
+  await page.getByLabel("পুরো নাম").fill("পরীক্ষামূলক গ্রাহক");
+  await page.getByLabel("মোবাইল নম্বর").fill("01711000053");
+  await page.getByLabel("ডেলিভারির ঠিকানা").fill("বাড়ি ৫৩, পরীক্ষা রোড");
+  await page.getByLabel(/^ঢাকা সিটি/).tap();
+  await page.getByRole("button", { name: "অর্ডার যাচাই করুন" }).tap();
+  await expect(page.getByTestId("checkout-review")).toBeVisible();
+  await noSideScroll(page);
+  const before = await page.evaluate(() => document.body.innerText.length);
+  expect(before).toBeGreaterThan(0);
+  await page.getByRole("button", { name: "অর্ডার দিন (সিমুলেশন)" }).tap();
+  await expect(page.getByTestId("simulation-result")).toContainText("এটি ছিল একটি সিমুলেশন");
+  await noSideScroll(page);
+  const db = await testDatabase();
+  try {
+    expect(Number((await db.query("select count(*) as n from orders where customer_phone = '01711000053'")).rows[0].n)).toBe(0);
+  } finally {
+    await db.end();
+  }
 });

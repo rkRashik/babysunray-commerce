@@ -57,7 +57,7 @@ describe("bilingual interface text", () => {
     expect(keys(DICTIONARIES.bn)).toEqual(keys(DICTIONARIES.en));
     expect(DICTIONARIES.bn.previewBanner).toMatch(/[ঀ-৿]/);
     expect(DICTIONARIES.bn.errors.phone_invalid).toMatch(/[ঀ-৿]/);
-    expect(DICTIONARIES.bn.cartCount(12)).toContain("১২");
+    expect(DICTIONARIES.bn.available(12)).toContain("১২");
   });
 
   it("never falls back to invented text: a missing language is null", () => {

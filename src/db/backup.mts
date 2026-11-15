@@ -352,8 +352,15 @@ export async function createBackupFile(conn: Connection, passphrase: string, fil
   try {
     try {
       const { archive, done, stop } = dumpDatabase(conn);
+      let dumped = 0;
+      const counted = (async function* () {
+        for await (const piece of archive) {
+          dumped += piece.length;
+          yield piece;
+        }
+      })();
       try {
-        for await (const chunk of encryptStream(archive, passphrase, { createdAt: new Date().toISOString(), database: conn.database, pgDumpVersion: meta.pgDumpVersion })) {
+        for await (const chunk of encryptStream(counted, passphrase, { createdAt: new Date().toISOString(), database: conn.database, pgDumpVersion: meta.pgDumpVersion })) {
           await handle.write(chunk);
           bytes += chunk.length;
         }
@@ -362,6 +369,8 @@ export async function createBackupFile(conn: Connection, passphrase: string, fil
         throw error;
       }
       await done;
+      // Never report an empty archive as a backup, whatever pg_dump's exit code said.
+      if (dumped === 0) throw new Error("pg_dump produced no data. Nothing was written. Try again.");
       await handle.sync();
     } finally {
       await handle.close();

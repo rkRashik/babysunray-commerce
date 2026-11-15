@@ -5,7 +5,7 @@ import { DomainError } from "@/modules/domain-error";
 import { dictionary, isLang, localised } from "@/modules/storefront/i18n";
 import { listPreviewProducts, type PreviewFilters, previewFacets } from "@/modules/storefront/service";
 import { requireOffice } from "../../../_lib/session";
-import { base, ProductGrid } from "../../_components/parts";
+import { base, listQuery, ProductGrid } from "../../_components/parts";
 
 type Props = { params: Promise<{ lang: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
@@ -116,7 +116,7 @@ export default async function PreviewProducts({ params, searchParams }: Props) {
       <p role="status" className="text-sf-umber" data-testid="result-count">
         {result.items.length === 0 ? (filtered ? t.noMatches : t.noProducts) : t.results(result.items.length, result.hasMore)}
       </p>
-      {result.items.length ? <ProductGrid products={result.items} lang={lang} label={title} /> : null}
+      {result.items.length ? <ProductGrid products={result.items} lang={lang} label={title} from={listQuery(pageHref(result.page).split("?")[1])} /> : null}
       {result.page > 1 || result.hasMore ? (
         <nav aria-label={t.pages} className="flex gap-6">
           {result.page > 1 ? (

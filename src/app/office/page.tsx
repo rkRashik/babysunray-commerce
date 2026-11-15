@@ -140,7 +140,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
           </div>
           <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
             <button type="submit" className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2">
-              Show products
+              Search
             </button>
             {filtered || rawQ ? (
               <Link href="/office" className="rounded border border-gray-400 bg-white px-4 py-2 text-sm hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900">

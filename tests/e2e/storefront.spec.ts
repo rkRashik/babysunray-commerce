@@ -1,3 +1,5 @@
+import { copyFileSync } from "node:fs";
+import path from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { clearSignInLimits, ensureZones, seedStorefrontProduct, signIn, testDatabase } from "./support";
@@ -25,9 +27,14 @@ async function counts() {
     const one = async (sql: string) => Number((await db.query(sql)).rows[0].n);
     return {
       orders: await one("select count(*) as n from orders"),
+      items: await one("select count(*) as n from order_items"),
+      events: await one("select count(*) as n from order_events"),
       reservations: await one("select count(*) as n from stock_reservations"),
       reserved: await one("select coalesce(sum(reserved), 0) as n from inventory_balances"),
+      trackingLinks: await one("select count(*) as n from order_tracking_tokens"),
+      payments: await one("select count(*) as n from payment_entries"),
       idempotency: await one("select count(*) as n from idempotency_records"),
+      movements: await one("select count(*) as n from stock_movements"),
     };
   } finally {
     await db.end();
@@ -172,10 +179,11 @@ test("cart: choose size and colour, add, change quantities, totals in paisa, inv
   await page.getByTestId(`cart-line-${skuB}`).getByRole("button", { name: /^Remove/ }).click();
   await expect(page.getByTestId(`cart-line-${skuB}`)).toHaveCount(0);
   await expect(page.getByTestId("cart-count")).toHaveText("1");
-  expect(await counts()).toEqual(before);
+  // The only new row is the test's own stock adjustment (setStock above); the cart created nothing.
+  expect(await counts()).toEqual({ ...before, movements: before.movements + 1 });
 });
 
-test("checkout simulation: validation in both languages, the COD total, and no order, hold or record created", async ({ page }) => {
+test("checkout simulation: details, review, summary in both languages, with the COD total, and nothing written anywhere", async ({ page }) => {
   const product = await seedStorefrontProduct();
   await signIn(page);
   await page.goto(`${PREVIEW}/en/products/${product.slug}`);
@@ -187,32 +195,107 @@ test("checkout simulation: validation in both languages, the COD total, and no o
 
   await page.goto(`${PREVIEW}/bn/checkout`);
   await expect(page.getByTestId("simulation-note")).toContainText("শুধু সিমুলেশন");
-  await page.getByRole("button", { name: "অর্ডার যাচাই করুন (সিমুলেশন)" }).click();
+  await page.getByRole("button", { name: "অর্ডার যাচাই করুন" }).click();
   const errors = page.getByTestId("checkout-errors");
   await expect(errors).toContainText("আপনার পুরো নাম লিখুন।");
   await expect(errors).toContainText("বাংলাদেশি মোবাইল নম্বর লিখুন");
   await expect(page.getByLabel("পুরো নাম")).toHaveAttribute("aria-invalid", "true");
   await expectNoAxeViolations(page);
+  // A number typed in Bangla digits is accepted (and shown in ASCII, as an order would store it).
+  await page.getByLabel("পুরো নাম").fill("পরীক্ষামূলক গ্রাহক");
+  await page.getByLabel("মোবাইল নম্বর").fill("০১৭১১-০০০০৫২");
+  await page.getByLabel("ডেলিভারির ঠিকানা").fill("বাড়ি ৫২, পরীক্ষা রোড");
+  await page.getByLabel(/^ঢাকা সিটি/).check();
+  await page.getByRole("button", { name: "অর্ডার যাচাই করুন" }).click();
+  await expect(page.getByTestId("checkout-review")).toContainText("01711000052");
+  await expect(page.getByTestId("simulated-total")).toHaveText("৳ ৯১০");
 
   await page.goto(`${PREVIEW}/en/checkout`);
   await page.getByLabel("Full name").fill("Test Customer");
   await page.getByLabel("Mobile number").fill("12345");
   await page.getByLabel("Delivery address").fill("House 51, Test Road, Test Area");
-  await page.getByRole("button", { name: "Check order (simulation)" }).click();
+  await page.getByRole("button", { name: "Review order" }).click();
   await expect(page.getByTestId("checkout-errors")).toContainText("Enter a Bangladesh mobile number");
   await expect(page.getByTestId("checkout-errors")).toContainText("Choose a delivery area.");
-  // What was typed is kept after a refusal.
   await expect(page.getByLabel("Full name")).toHaveValue("Test Customer");
   await page.getByLabel("Mobile number").fill("+880 1711-000051");
   await page.getByLabel(/^Outside Dhaka/).check();
   await expect(page.getByTestId("total")).toHaveText("৳ 970");
-  await page.getByRole("button", { name: "Check order (simulation)" }).click();
+  await page.getByRole("button", { name: "Review order" }).click();
+  const review = page.getByTestId("checkout-review");
+  await expect(review).toContainText("Check your order");
+  await expect(review).toContainText("House 51, Test Road, Test Area (Outside Dhaka)");
+  await expectNoAxeViolations(page);
+  // Edit and come back: the details are kept.
+  await review.getByRole("button", { name: "Edit details" }).click();
+  await expect(page.getByLabel("Full name")).toHaveValue("Test Customer");
+  await page.getByRole("button", { name: "Review order" }).click();
+  await page.getByRole("button", { name: "Place order (simulation)" }).click();
   const result = page.getByTestId("simulation-result");
+  await expect(result).toContainText("Simulated order: received, waiting for verification");
   await expect(result).toContainText("This was a simulation. No order was recorded and no stock was held.");
-  await expect(result).toContainText("01711000051");
+  await expect(result).toContainText("Pending Verification");
   await expect(page.getByTestId("simulated-total")).toHaveText("৳ 970");
   await expectNoAxeViolations(page);
+  // No order, line, event, hold, tracking link, payment, idempotency record or stock movement was created.
   expect(await counts()).toEqual(before);
+  await result.getByRole("link", { name: "Back to the cart" }).click();
+  await expect(page.getByTestId("cart-count")).toHaveText("1");
+});
+
+test("product page: gallery by keyboard, category link, more in the category, back to the same results, cart kept across language and reload", async ({ page }) => {
+  const product = await seedStorefrontProduct();
+  await signIn(page);
+  // A second photo for the gallery and a second product in the same category.
+  const db = await testDatabase();
+  let sibling = "";
+  const second = `${"9".repeat(28)}${String(Date.now()).slice(-4)}.png`;
+  try {
+    const { rows } = await db.query<{ category_id: string; storage_key: string }>("select p.category_id, m.storage_key from products p join product_media m on m.product_id = p.id where p.id = $1", [product.productId]);
+    copyFileSync(path.join(process.env.E2E_MEDIA_DIR!, rows[0].storage_key), path.join(process.env.E2E_MEDIA_DIR!, second));
+    await db.query(
+      "insert into product_media (product_id, storage_key, content_type, byte_size, width, height, sha256, alt_en, alt_bn, position, created_by_user_id) select product_id, $2, content_type, byte_size, width, height, sha256, 'Fictional romper, back', 'কাল্পনিক রম্পার, পেছন', 1, created_by_user_id from product_media where product_id = $1",
+      [product.productId, second],
+    );
+    const other = await seedStorefrontProduct();
+    await db.query("update products set category_id = $2 where id = $1", [other.productId, rows[0].category_id]);
+    sibling = other.nameEn;
+  } finally {
+    await db.end();
+  }
+
+  await page.goto(`${PREVIEW}/en/products?q=${encodeURIComponent(product.nameEn)}`);
+  await page.getByRole("link", { name: new RegExp(product.nameEn) }).click();
+  const thumbs = page.getByRole("group", { name: "Photos (2)" });
+  await expect(thumbs.getByRole("button")).toHaveCount(2);
+  await thumbs.getByRole("button", { name: "Show photo 1 of 2" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(thumbs.getByRole("button", { name: "Show photo 2 of 2" })).toBeFocused();
+  await expect(thumbs.getByRole("button", { name: "Show photo 2 of 2" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("gallery-main").getByRole("img")).toHaveAttribute("alt", "Fictional romper, back");
+  await expect(page.getByRole("list", { name: /^More in / })).toContainText(sibling);
+  // Size first: a colour that does not exist in that size cannot be chosen.
+  await chip(page, "0-3M").click();
+  await expect(page.getByRole("radio", { name: /^Sand/ })).toBeDisabled();
+  await expect(page.getByText("Size: 0-3M")).toBeVisible();
+  await chip(page, "Ivory").click();
+  await page.getByRole("button", { name: "Add to cart" }).click();
+  await expect(page.getByTestId("cart-count")).toHaveText("1");
+  await expectNoAxeViolations(page);
+  await page.getByTestId("back-to-results").click();
+  await expect(page).toHaveURL(/\/products\?q=/);
+  await expect(page.getByTestId("result-count")).toHaveText("1 product");
+
+  // The cart is the same in Bangla and after a reload; changes are announced.
+  await page.getByTestId("language-switch").click();
+  await expect(page.getByTestId("cart-count")).toHaveText("১");
+  await page.goto(`${PREVIEW}/en/cart`);
+  await page.reload();
+  const line = page.getByTestId(`cart-line-${product.skus[0]}`);
+  await line.getByRole("button", { name: /^One more/ }).click();
+  await expect(page.getByTestId("cart-announcement")).toHaveText(`Quantity updated: 2 × ${product.nameEn}.`);
+  await page.getByTestId(`cart-line-${product.skus[0]}`).getByRole("button", { name: /^Remove/ }).click();
+  await expect(page.getByRole("main").getByText("Your cart is empty.")).toBeVisible();
 });
 
 test("keyboard and motion: a skip link first, a visible focus ring on every control, no transitions when reduced motion is asked", async ({ page }) => {

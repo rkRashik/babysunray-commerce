@@ -19,11 +19,11 @@ export const MAX_DELIVERY_CHARGE_PAISA = 1_000_000;
 
 /**
  * Bangladesh mobile number → 01XXXXXXXXX (text, leading zero kept). Accepts +880 / 880 / 0 prefixes with
- * spaces, hyphens or dots; the operator digit after 01 is 3 to 9.
+ * spaces, hyphens or dots, in ASCII or Bangla digits (০-৯); the operator digit after 01 is 3 to 9.
  */
 export function normalizeBdPhone(raw: string): string {
   if (typeof raw !== "string") throw invalidInput("phone", "must be text");
-  const compact = raw.trim().replace(/[\s.-]/g, "");
+  const compact = raw.trim().replace(/[০-৯]/g, (d) => String("০১২৩৪৫৬৭৮৯".indexOf(d))).replace(/[\s.-]/g, "");
   const match = /^(?:\+?880|0)?(1[3-9][0-9]{8})$/.exec(compact);
   if (!match) throw invalidInput("phone", "must be a Bangladesh mobile number such as 01712345678");
   return `0${match[1]}`;

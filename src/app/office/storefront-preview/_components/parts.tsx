@@ -6,6 +6,18 @@ import type { PhotoRef, ProductCard } from "@/modules/storefront/service";
 
 export const base = (lang: Lang) => `/office/storefront-preview/${lang}`;
 
+const LIST_KEYS = ["q", "category", "size", "colour", "stock", "page"];
+/**
+ * A product list query carried to a product page ("Back to results"): only the list's own parameters, each at most
+ * 100 characters, rebuilt from scratch, so nothing else can travel in it. Empty when there is nothing to keep.
+ */
+export function listQuery(raw: string | undefined | null): string {
+  if (!raw || raw.length > 600) return "";
+  const kept = new URLSearchParams();
+  for (const [k, v] of new URLSearchParams(raw)) if (LIST_KEYS.includes(k) && v.length <= 100 && !kept.has(k)) kept.set(k, v);
+  return kept.toString();
+}
+
 const WIDTHS = [320, 640, 1280];
 
 /**
@@ -49,13 +61,13 @@ export function Localised({ lang, en, bn, missing }: { lang: Lang; en: string | 
 
 const STOCK = { in: "inStock", partial: "someSizesOut", out: "soldOut" } as const;
 
-export function ProductTile({ product, lang }: { product: ProductCard; lang: Lang }) {
+export function ProductTile({ product, lang, from }: { product: ProductCard; lang: Lang; from?: string }) {
   const t = dictionary(lang);
   const name = localised(lang, product.nameEn, product.nameBn) ?? localised(lang === "en" ? "bn" : "en", product.nameEn, product.nameBn) ?? product.slug;
   const price = product.minPricePaisa === product.maxPricePaisa ? formatTaka(product.minPricePaisa, lang) : t.from(formatTaka(product.minPricePaisa, lang));
   return (
     <li>
-      <Link href={`${base(lang)}/products/${product.slug}`} className="group block rounded-sm">
+      <Link href={`${base(lang)}/products/${product.slug}${from ? `?from=${encodeURIComponent(from)}` : ""}`} className="group block rounded-sm">
         <div className="aspect-[4/5] overflow-hidden rounded-sm bg-sf-sand">
           {product.photo ? (
             <Photo photo={product.photo} lang={lang} name={name} sizes="(min-width: 1024px) 22vw, (min-width: 640px) 30vw, 46vw" />
@@ -73,11 +85,11 @@ export function ProductTile({ product, lang }: { product: ProductCard; lang: Lan
   );
 }
 
-export function ProductGrid({ products, lang, label }: { products: ProductCard[]; lang: Lang; label: string }) {
+export function ProductGrid({ products, lang, label, from }: { products: ProductCard[]; lang: Lang; label: string; from?: string }) {
   return (
     <ul aria-label={label} className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
       {products.map((p) => (
-        <ProductTile key={p.id} product={p} lang={lang} />
+        <ProductTile key={p.id} product={p} lang={lang} from={from} />
       ))}
     </ul>
   );

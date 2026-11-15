@@ -55,7 +55,7 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
       </p>
       {sizes.length ? (
         <fieldset>
-          <legend className="mb-2 font-medium">{t.chooseSize}</legend>
+          <legend className="mb-2 font-medium">{size ? t.chosen(t.size, size) : t.chooseSize}</legend>
           <div className="flex flex-wrap gap-2">
             {sizes.map((s) => (
               <label key={s} className={`${CHIP} ${soldOutSize(s) ? "border-dashed border-sf-umber text-sf-umber" : "border-sf-line bg-sf-ivory"}`}>
@@ -70,15 +70,19 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
       ) : null}
       {colours.length ? (
         <fieldset>
-          <legend className="mb-2 font-medium">{t.chooseColour}</legend>
+          <legend className="mb-2 font-medium">{colour ? t.chosen(t.colour, colour) : t.chooseColour}</legend>
           <div className="flex flex-wrap gap-2">
-            {colours.map((c) => (
-              <label key={c} className={`${CHIP} ${soldOutColour(c) ? "border-dashed border-sf-umber text-sf-umber" : "border-sf-line bg-sf-ivory"}`}>
-                <input type="radio" name={`${id}-colour`} value={c} checked={colour === c} onChange={() => setColour(c)} className="sr-only" />
-                <span className="font-medium">{c}</span>
-                {soldOutColour(c) ? <span className="text-xs">{t.unavailableOption}</span> : null}
-              </label>
-            ))}
+            {colours.map((c) => {
+              // A colour that does not exist in the chosen size cannot be chosen with it.
+              const absent = size !== null && sizes.length > 0 && !variants.some((v) => v.size === size && v.colour === c);
+              return (
+                <label key={c} className={`${CHIP} ${absent ? "cursor-not-allowed border-dashed border-sf-line text-sf-umber opacity-70" : soldOutColour(c) ? "border-dashed border-sf-umber text-sf-umber" : "border-sf-line bg-sf-ivory"}`}>
+                  <input type="radio" name={`${id}-colour`} value={c} checked={colour === c && !absent} disabled={absent} onChange={() => setColour(c)} className="sr-only" />
+                  <span className="font-medium">{c}</span>
+                  {absent ? <span className="text-xs">{t.notInThisSize}</span> : soldOutColour(c) ? <span className="text-xs">{t.unavailableOption}</span> : null}
+                </label>
+              );
+            })}
           </div>
         </fieldset>
       ) : null}

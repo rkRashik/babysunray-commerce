@@ -1,32 +1,54 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { dictionary, formatTaka, type Lang, toBnDigits } from "@/modules/storefront/i18n";
 import type { CheckoutResult } from "@/modules/storefront/service";
 import { simulateCheckoutAction } from "../actions";
 import { lineName, Totals, useQuote } from "./cart-view";
 
-// The guest checkout form, as a simulation. The server validates it exactly as an order would be validated
-// (simulateCheckoutAction) and answers with errors or a summary; it never records an order. The typed details
-// stay in this form only: they are not stored in the browser and not sent anywhere else.
+// The guest checkout as a three-step simulation: details, review, summary. Each step asks the server to validate the
+// details and re-check every line's price and stock exactly as an order would be checked (simulateCheckoutAction),
+// and nothing more: no order, reservation, tracking link, payment or idempotency record is ever created, and nothing
+// is sent anywhere. The typed details stay in this page's memory only.
 
 type Field = "name" | "phone" | "address";
+type Stage = "details" | "review" | "done";
 
 export function CheckoutForm({ lang }: { lang: Lang }) {
   const t = dictionary(lang);
   const id = useId();
-  const count = (n: number) => (lang === "bn" ? toBnDigits(n) : String(n));
+  const heading = useRef<HTMLHeadingElement>(null);
   const [zone, setZone] = useState("");
-  const { lines, quote, state: quoteState } = useQuote(zone);
-  const [result, formAction, pending] = useActionState(simulateCheckoutAction, null);
-  const [editing, setEditing] = useState(false);
-  // Controlled, so a refused simulation keeps what was typed (React resets uncontrolled fields after an action).
+  const { lines, quote, state: quoteState, retry } = useQuote(zone);
   const [values, setValues] = useState<Record<Field, string>>({ name: "", phone: "", address: "" });
-  const errors = result && !editing ? result.errors : {};
+  const [stage, setStage] = useState<Stage>("details");
+  const [result, setResult] = useState<CheckoutResult | null>(null);
+  const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const count = (n: number) => (lang === "bn" ? toBnDigits(n) : String(n));
+  const errors = stage === "details" && result ? result.errors : {};
   const errorFor = (field: keyof CheckoutResult["errors"]) => (errors[field] ? t.errors[errors[field]] : null);
 
-  if (lines.length === 0 && !result) {
+  async function check(next: Stage) {
+    setPending(true);
+    setFailed(false);
+    try {
+      const form = new FormData();
+      for (const [k, v] of Object.entries(values)) form.append(k, v);
+      form.append("zone", zone);
+      form.append("lines", JSON.stringify(lines));
+      const answer = await simulateCheckoutAction(null, form);
+      setResult(answer);
+      setStage(answer.ok ? next : "details");
+      requestAnimationFrame(() => heading.current?.focus());
+    } catch {
+      setFailed(true);
+    }
+    setPending(false);
+  }
+
+  if (lines.length === 0 && stage !== "done") {
     return (
       <div className="space-y-4" role="status">
         <p className="text-lg">{t.cartEmpty}</p>
@@ -37,32 +59,48 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
     );
   }
 
-  if (result?.ok && result.quote && result.customer && !editing) {
-    const q = result.quote;
-    return (
-      <section aria-labelledby={`${id}-done`} className="max-w-2xl space-y-5 rounded-sm bg-white p-6" data-testid="simulation-result">
-        <h2 id={`${id}-done`} className="text-2xl font-semibold" tabIndex={-1} ref={(el) => el?.focus()}>
-          {t.simulatedTitle}
-        </h2>
-        <p role="status" className="rounded-sm bg-sf-amber px-4 py-3 font-semibold">
-          {t.simulatedNote}
-        </p>
-        <p>{t.wouldBeReceived}</p>
+  const steps: [Stage, string][] = [["details", t.stepDetails], ["review", t.stepReview], ["done", t.stepDone]];
+  const position = steps.findIndex(([s]) => s === stage);
+  const progress = (
+    <ol className="flex flex-wrap gap-x-6 gap-y-1 text-sm" aria-label={t.stepOf(count(position + 1), count(steps.length))}>
+      {steps.map(([s, label], i) => (
+        <li key={s} aria-current={s === stage ? "step" : undefined} className={s === stage ? "font-semibold" : "text-sf-umber"}>
+          {count(i + 1)}. {label}
+        </li>
+      ))}
+    </ol>
+  );
+  const notice = (
+    <p className="rounded-sm border-2 border-sf-amber bg-white px-4 py-3 font-medium" data-testid="simulation-note">
+      {t.simulateOnly}
+    </p>
+  );
+  const failure = failed ? (
+    <p role="alert" className="font-medium text-sf-danger">
+      {t.cartCheckFailed}
+    </p>
+  ) : null;
+  const q = result?.quote;
+  const summary =
+    q && result?.customer ? (
+      <>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
           <dt className="text-sf-umber">{t.name}</dt>
           <dd>{result.customer.name}</dd>
           <dt className="text-sf-umber">{t.phone}</dt>
           <dd className="tabular-nums">{result.customer.phone}</dd>
-          <dt className="text-sf-umber">{t.address}</dt>
-          <dd className="whitespace-pre-line">{result.customer.address}</dd>
-          <dt className="text-sf-umber">{t.zone}</dt>
-          <dd>{q.zone ? t.deliveryZone[q.zone] : "—"}</dd>
+          <dt className="text-sf-umber">{t.deliverTo}</dt>
+          <dd className="whitespace-pre-line">
+            {result.customer.address}
+            {q.zone ? ` (${t.deliveryZone[q.zone]})` : ""}
+          </dd>
         </dl>
         <ul className="divide-y divide-sf-line border-y border-sf-line">
           {q.lines.map((l) => (
             <li key={l.sku} className="flex justify-between gap-4 py-2 tabular-nums">
               <span>
-                {lineName(lang, l, l.sku)} × {count(l.quantity)}
+                {lineName(lang, l, l.sku)}
+                {[l.size, l.colour].filter(Boolean).length ? ` (${[l.size, l.colour].filter(Boolean).join(", ")})` : ""} × {count(l.quantity)}
               </span>
               <span>{l.lineTotalPaisa !== null ? formatTaka(l.lineTotalPaisa, lang) : "—"}</span>
             </li>
@@ -78,10 +116,56 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
             {q.totalPaisa !== null ? formatTaka(q.totalPaisa, lang) : "—"}
           </dd>
         </dl>
-        <p className="text-sm text-sf-umber">{t.receivedNotConfirmed}</p>
-        <button type="button" onClick={() => setEditing(true)} className="min-h-11 rounded-sm border border-sf-cocoa px-5 font-medium">
-          {t.editOrder}
-        </button>
+        <p className="font-medium">{t.payment}</p>
+      </>
+    ) : null;
+
+  if (stage === "done" && summary) {
+    return (
+      <section aria-labelledby={`${id}-done`} className="max-w-2xl space-y-5" data-testid="simulation-result">
+        {progress}
+        <h2 id={`${id}-done`} ref={heading} tabIndex={-1} className="text-2xl font-semibold focus:outline-none">
+          {t.pendingTitle}
+        </h2>
+        <p role="status" className="rounded-sm bg-sf-amber px-4 py-3 font-semibold">
+          {t.simulatedNote}
+        </p>
+        <p>{t.pendingBody}</p>
+        <div className="space-y-4 rounded-sm bg-white p-5">{summary}</div>
+        <div className="flex flex-wrap gap-4">
+          <button type="button" onClick={() => setStage("details")} className="min-h-11 rounded-sm border border-sf-cocoa px-5 font-medium">
+            {t.editDetails}
+          </button>
+          <Link href={`/office/storefront-preview/${lang}/cart`} className="inline-flex min-h-11 items-center font-medium underline underline-offset-4">
+            {t.backToCart}
+          </Link>
+        </div>
+      </section>
+    );
+  }
+
+  if (stage === "review" && summary) {
+    return (
+      <section aria-labelledby={`${id}-review`} className="max-w-2xl space-y-5" data-testid="checkout-review">
+        {progress}
+        {notice}
+        <h2 id={`${id}-review`} ref={heading} tabIndex={-1} className="text-2xl font-semibold focus:outline-none">
+          {t.reviewTitle}
+        </h2>
+        <div className="space-y-4 rounded-sm bg-white p-5">{summary}</div>
+        <p className="text-sm">{t.receivedNotConfirmed}</p>
+        {failure}
+        <div className="flex flex-wrap items-center gap-4">
+          <button type="button" onClick={() => check("done")} disabled={pending} className="min-h-12 rounded-sm bg-sf-cocoa px-6 text-lg font-semibold text-sf-ivory disabled:opacity-70">
+            {pending ? t.checking : t.placeOrderSimulated}
+          </button>
+          <button type="button" onClick={() => setStage("details")} className="min-h-11 rounded-sm border border-sf-cocoa px-5 font-medium">
+            {t.editDetails}
+          </button>
+          <Link href={`/office/storefront-preview/${lang}/cart`} className="inline-flex min-h-11 items-center font-medium underline underline-offset-4">
+            {t.backToCart}
+          </Link>
+        </div>
       </section>
     );
   }
@@ -123,15 +207,22 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
   const summaryErrors = (Object.keys(errors) as (keyof CheckoutResult["errors"])[]).map((k) => errorFor(k)).filter(Boolean);
 
   return (
-    <form action={(form) => { setEditing(false); formAction(form); }} className="grid gap-10 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" noValidate>
-      <input type="hidden" name="lines" value={JSON.stringify(lines)} />
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void check("review");
+      }}
+      className="grid gap-10 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
+      noValidate
+    >
       <div className="space-y-5">
-        <p className="rounded-sm border-2 border-sf-amber bg-white px-4 py-3 font-medium" data-testid="simulation-note">
-          {t.simulateOnly}
-        </p>
+        {progress}
+        {notice}
         {summaryErrors.length ? (
           <div role="alert" className="rounded-sm border-2 border-sf-danger bg-white px-4 py-3" data-testid="checkout-errors">
-            <p className="font-semibold">{t.fixErrors}</p>
+            <h2 ref={heading} tabIndex={-1} className="font-semibold focus:outline-none">
+              {t.fixErrors}
+            </h2>
             <ul className="mt-1 list-disc pl-5">
               {summaryErrors.map((e) => (
                 <li key={e}>{e}</li>
@@ -152,6 +243,11 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
         <p role="status" aria-live="polite" className="text-sm text-sf-umber">
           {quoteState === "loading" ? t.checkingCart : quoteState === "error" ? t.cartCheckFailed : ""}
         </p>
+        {quoteState === "error" ? (
+          <button type="button" onClick={retry} className="min-h-11 rounded-sm border border-sf-cocoa px-4 font-medium">
+            {t.retry}
+          </button>
+        ) : null}
         <ul className="divide-y divide-sf-line border-y border-sf-line">
           {(quote?.lines ?? []).map((l) => (
             <li key={l.sku} className="flex justify-between gap-4 py-2 tabular-nums">
@@ -168,14 +264,14 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
           <p className="font-medium text-sf-danger">
             {errorFor("cart")}{" "}
             <Link href={`/office/storefront-preview/${lang}/cart`} className="underline underline-offset-4">
-              {t.cartTitle}
+              {t.backToCart}
             </Link>
           </p>
         ) : null}
         <p className="text-sm">{t.receivedNotConfirmed}</p>
-        <p className="text-sm font-medium">{t.payment}</p>
+        {failure}
         <button type="submit" disabled={pending} className="min-h-12 w-full rounded-sm bg-sf-cocoa px-5 text-lg font-semibold text-sf-ivory disabled:opacity-70">
-          {pending ? t.checking : t.placeOrder}
+          {pending ? t.checking : t.reviewOrder}
         </button>
       </aside>
     </form>

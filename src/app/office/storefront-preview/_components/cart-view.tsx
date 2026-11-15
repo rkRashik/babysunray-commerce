@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 import { parseQuantity, removeLine, setQuantity } from "@/modules/storefront/cart";
-import { dictionary, formatTaka, type Lang, localised } from "@/modules/storefront/i18n";
+import { dictionary, formatTaka, type Lang, localised, toBnDigits } from "@/modules/storefront/i18n";
 import type { Quote, QuotedLine } from "@/modules/storefront/service";
 import { quoteCartAction } from "../actions";
 import { useCart } from "./cart-store";
@@ -20,6 +20,7 @@ function useQuote(zone: string) {
   const [lines, setLines] = useCart();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- shows that a new check started
@@ -34,8 +35,8 @@ function useQuote(zone: string) {
     return () => {
       live = false;
     };
-  }, [lines, zone]);
-  return { lines, setLines, quote, state };
+  }, [lines, zone, attempt]);
+  return { lines, setLines, quote, state, retry: () => setAttempt((a) => a + 1) };
 }
 
 export { useQuote };
@@ -160,12 +161,24 @@ export function Totals({ quote, lang, zone, onZone }: { quote: Quote | null; lan
 export function CartView({ lang }: { lang: Lang }) {
   const t = dictionary(lang);
   const [zone, setZone] = useState("");
-  const { lines, setLines, quote, state } = useQuote(zone);
+  const { lines, setLines, quote, state, retry } = useQuote(zone);
+  // What just changed, read out by screen readers (polite) and shown under the heading.
+  const [announcement, setAnnouncement] = useState("");
   const blocked = !quote || quote.lines.some((l) => l.status !== "ok");
+  const count = (n: number) => (lang === "bn" ? toBnDigits(n) : String(n));
+  const changeQuantity = (line: QuotedLine, n: number) => {
+    setLines(setQuantity(lines, line.sku, n));
+    setAnnouncement(t.quantityUpdated(lineName(lang, line, line.sku), count(n)));
+  };
+  const remove = (line: QuotedLine) => {
+    const next = removeLine(lines, line.sku);
+    setLines(next);
+    setAnnouncement(next.length ? t.removedFromCart(lineName(lang, line, line.sku)) : t.cartEmptied);
+  };
   if (lines.length === 0) {
     return (
       <div className="space-y-4" role="status">
-        <p className="text-lg">{t.cartEmpty}</p>
+        <p className="text-lg">{announcement && announcement !== t.cartEmptied ? announcement : t.cartEmpty}</p>
         <Link href={`/office/storefront-preview/${lang}/products`} className="inline-flex min-h-11 items-center rounded-sm bg-sf-cocoa px-5 font-semibold text-sf-ivory">
           {t.continueShopping}
         </Link>
@@ -175,15 +188,30 @@ export function CartView({ lang }: { lang: Lang }) {
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <div>
-        <p role="status" aria-live="polite" className="text-sm text-sf-umber" data-testid="cart-state">
+        <p role="status" aria-live="polite" className="min-h-6 font-medium" data-testid="cart-announcement">
+          {announcement}
+        </p>
+        <p className="text-sm text-sf-umber" data-testid="cart-state">
           {state === "loading" ? t.checkingCart : state === "error" ? t.cartCheckFailed : ""}
         </p>
+        {state === "error" ? (
+          <button type="button" onClick={retry} className="mb-3 min-h-11 rounded-sm border border-sf-cocoa px-4 font-medium">
+            {t.retry}
+          </button>
+        ) : null}
         <ul aria-label={t.cartTitle} className="border-t border-sf-line">
           {(quote?.lines ?? []).map((line) => (
-            <LineRow key={`${line.sku}-${line.quantity}`} line={line} lang={lang} onQuantity={(n) => setLines(setQuantity(lines, line.sku, n))} onRemove={() => setLines(removeLine(lines, line.sku))} />
+            <LineRow key={`${line.sku}-${line.quantity}`} line={line} lang={lang} onQuantity={(n) => changeQuantity(line, n)} onRemove={() => remove(line)} />
           ))}
         </ul>
-        <button type="button" onClick={() => setLines([])} className="mt-4 min-h-11 font-medium text-sf-tan underline underline-offset-4">
+        <button
+          type="button"
+          onClick={() => {
+            setLines([]);
+            setAnnouncement(t.cartEmptied);
+          }}
+          className="mt-4 min-h-11 font-medium text-sf-tan underline underline-offset-4"
+        >
           {t.clearCart}
         </button>
       </div>
