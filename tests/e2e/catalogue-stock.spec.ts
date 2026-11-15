@@ -67,7 +67,7 @@ test("create a draft product with a Bangla name, add a SKU, receive and adjust s
   await expect(row).toContainText("850.50");
   await expect(row).toContainText("0-3M");
 
-  await row.getByRole("link", { name: sku }).click();
+  await row.getByRole("link", { name: sku, exact: true }).click();
   await expect(page.getByRole("heading", { level: 1 })).toContainText(sku);
   expect(await onHand(page)).toBe("0");
 
@@ -79,7 +79,8 @@ test("create a draft product with a Bangla name, add a SKU, receive and adjust s
   expect(await onHand(page)).toBe("12");
 
   const adjust = page.getByRole("region", { name: "Adjust stock" });
-  await adjust.getByLabel("Change").fill("-2");
+  await adjust.getByLabel("Remove units").check();
+  await adjust.getByRole("textbox", { name: /^Units/ }).fill("2");
   await adjust.getByLabel("Reason").fill("Two damaged in storage");
   await adjust.getByRole("button", { name: "Record adjustment" }).click();
   await expect(page.getByRole("status")).toHaveText("Stock adjustment recorded.");
@@ -134,7 +135,8 @@ test("a retry after a lost response does not record the movement twice", async (
     await route.continue();
   });
   const adjust = page.getByRole("region", { name: "Adjust stock" });
-  await adjust.getByLabel("Change").fill("7");
+  await adjust.getByLabel("Add units").check();
+  await adjust.getByRole("textbox", { name: /^Units/ }).fill("7");
   await adjust.getByLabel("Reason").fill("Found in back room");
   await adjust.getByRole("button", { name: "Record adjustment" }).click();
   await expect(adjust.getByRole("alert")).toContainText("could not be reached");
@@ -192,7 +194,8 @@ test("wrong inputs get understandable errors and keep what was typed", async ({ 
     await expect(receive.getByRole("alert")).toBeVisible();
   }
   const adjust = page.getByRole("region", { name: "Adjust stock" });
-  await adjust.getByLabel("Change").fill("-1");
+  await adjust.getByLabel("Remove units").check();
+  await adjust.getByRole("textbox", { name: /^Units/ }).fill("1");
   await adjust.getByLabel("Reason").fill("Counting error");
   await adjust.getByRole("button", { name: "Record adjustment" }).click();
   await expect(adjust.getByRole("alert")).toContainText("Not enough stock");

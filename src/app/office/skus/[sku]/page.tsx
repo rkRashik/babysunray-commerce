@@ -3,12 +3,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { movementCursorCodec } from "@/api/v1/schemas";
 import { getDb } from "@/db/client";
+import { getProductWithVariants, getVariant } from "@/modules/catalogue/service";
 import { DomainError } from "@/modules/domain-error";
 import { getStockLevel, listStockMovementsPage } from "@/modules/inventory/service";
-import { getVariant } from "@/modules/catalogue/service";
+import { formatPaisa } from "@/modules/money";
 import { adjustStockAction, receiveStockAction } from "../../actions";
-import { ActionForm, Field } from "../../_components/action-form";
-import { OfficeShell, Section, formatTime, noticeFor } from "../../_components/shell";
+import { ActionForm, Choice, Field } from "../../_components/action-form";
+import { OfficeShell, Section, formatTime, noticeFor, productTitle } from "../../_components/shell";
 import { requireOffice } from "../../_lib/session";
 
 export const metadata = { title: "Stock · Owner Office" };
@@ -29,41 +30,63 @@ export default async function SkuPage({ params, searchParams }: Props) {
   });
   const [level, page] = loaded;
   const variant = await getVariant(db, level.variantId);
+  const product = await getProductWithVariants(db, variant.productId);
+  const { title, lang } = productTitle(product);
   const last = page.items.at(-1);
   const actor = (type: string, ref: string) => (type === "user" ? (ref === principal.userId ? "You" : `User ${ref.slice(0, 8)}`) : `System: ${ref}`);
+  const onHandNow = (
+    <p className="text-sm text-gray-700">
+      On hand now: <span className="font-semibold tabular-nums">{level.onHand}</span>
+    </p>
+  );
 
   return (
-    <OfficeShell title={`Stock · ${variant.sku}`} notice={noticeFor(done)}>
+    <OfficeShell
+      title={`Stock · ${variant.sku}`}
+      notice={noticeFor(done)}
+      breadcrumbs={[
+        { href: "/office", label: "Products" },
+        { href: `/office/products/${product.id}`, label: title, lang },
+      ]}
+    >
       <Section title="Current stock">
         <p className="text-3xl font-semibold tabular-nums" data-testid="on-hand">
           {level.onHand}
         </p>
         <p className="text-sm text-gray-700">
-          Units on hand. Variant status: {variant.status}.{" "}
-          <Link href={`/office/products/${variant.productId}`} className="underline">
-            Back to product
-          </Link>
+          Units on hand. {[variant.size, variant.colour].filter(Boolean).join(", ") || "No size or colour"} · ৳ {formatPaisa(variant.pricePaisa)} · variant{" "}
+          {variant.status}.
         </p>
       </Section>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Section title="Receive stock">
+          {onHandNow}
           <ActionForm action={receiveStockAction} idempotencyKey={randomUUID()} hidden={{ sku: variant.sku }} submitLabel="Record receipt">
-            <Field name="quantity" label="Units received" required inputMode="numeric" />
+            <Field name="quantity" label="Units received" required inputMode="numeric" hint="A whole number of units, added to stock." />
             <Field name="reason" label="Note" maxLength={500} hint="Optional, for example a delivery reference." />
           </ActionForm>
         </Section>
         <Section title="Adjust stock">
+          {onHandNow}
           <ActionForm action={adjustStockAction} idempotencyKey={randomUUID()} hidden={{ sku: variant.sku }} submitLabel="Record adjustment">
-            <Field name="quantityDelta" label="Change" required inputMode="text" hint="Positive adds units, negative removes them (e.g. -2). Stock cannot go below zero." />
-            <Field name="reason" label="Reason" required maxLength={500} />
+            <Choice
+              name="direction"
+              legend="Change"
+              options={[
+                { value: "add", label: "Add units" },
+                { value: "remove", label: "Remove units" },
+              ]}
+            />
+            <Field name="units" label="Units" required inputMode="numeric" hint="A whole number. Stock cannot go below zero." />
+            <Field name="reason" label="Reason" required maxLength={500} hint="Recorded with your name, for example a recount or damage." />
           </ActionForm>
         </Section>
       </div>
 
       <Section title="Movement history (oldest first)">
         {page.items.length === 0 ? (
-          <p className="text-sm text-gray-700">No movements yet.</p>
+          <p className="text-sm text-gray-700">No movements yet. Receipts and adjustments appear here with who made them.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -81,8 +104,11 @@ export default async function SkuPage({ params, searchParams }: Props) {
                   <tr key={m.id}>
                     <td className="py-2 pr-3 whitespace-nowrap">{formatTime(m.createdAt)}</td>
                     <td className="py-2 pr-3">{m.movementType}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{m.quantityDelta > 0 ? `+${m.quantityDelta}` : m.quantityDelta}</td>
-                    <td className="py-2 pr-3">{m.reason ?? "—"}</td>
+                    <td className={`py-2 pr-3 text-right font-medium tabular-nums ${m.quantityDelta > 0 ? "text-green-800" : "text-red-800"}`}>
+                      {m.quantityDelta > 0 ? `+${m.quantityDelta}` : m.quantityDelta}
+                      <span className="sr-only">{m.quantityDelta > 0 ? " added" : " removed"}</span>
+                    </td>
+                    <td className="py-2 pr-3 break-words">{m.reason ?? "—"}</td>
                     <td className="py-2">{actor(m.actorType, m.actorRef)}</td>
                   </tr>
                 ))}
@@ -93,6 +119,11 @@ export default async function SkuPage({ params, searchParams }: Props) {
         {page.hasMore && last ? (
           <Link href={`?cursor=${movementCursorCodec.encode(last.id)}`} className="inline-block text-sm underline">
             Next page
+          </Link>
+        ) : null}
+        {afterId !== undefined ? (
+          <Link href={`/office/skus/${encodeURIComponent(variant.sku)}`} className="ml-4 inline-block text-sm underline">
+            First page
           </Link>
         ) : null}
       </Section>

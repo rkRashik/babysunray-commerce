@@ -96,6 +96,8 @@ Implemented as server-only services in `src/modules/catalogue` and `src/modules/
 |---|---|
 | Create a draft product; archive it | Products are `draft` or `archived` only. Nothing is publishable until publication rules are approved. Never deleted. |
 | Create a variant (SKU) with its zero stock balance; deactivate it | SKU stored as 1–64 ASCII uppercase letters, digits, hyphens and underscores (input is trimmed and a–z uppercased first), unique in PostgreSQL. Price in integer paisa, strictly positive. Never deleted. |
+| Edit a draft product's names and descriptions; edit an active variant's size, colour and price | `updateProduct`, `updateVariant`. Each row has a `version` (migration `0007`) that every update raises; an edit names the version it was based on and is refused with `VERSION_CONFLICT` if the row changed, under a row lock, so concurrent edits never silently overwrite each other. Slug, SKU, ids, status and stock never change here; archived products and their variants, and inactive variants, are not edited. |
+| Search products | `listProducts` with `q`: slug, English or Bangla name, or any SKU, case-insensitive, NFC-normalised, `%` `_` `\` escaped, bound parameter, at most 100 characters. No index: it reads every product row, fine for a small catalogue. |
 | Receive stock; adjust stock with a reason | One transaction per change: conditional balance update plus ledger row. Stock never goes below zero. |
 | Read a SKU's balance and movement history | For internal use and tests. |
 
@@ -154,11 +156,11 @@ Owner-only endpoints under `/api/v1`, authenticated with a Bearer token only (br
 | Endpoint | Permission |
 |---|---|
 | `GET /api/v1/products`, `GET /api/v1/products/{productId}` | `catalog:read` |
-| `POST /api/v1/products`, `POST .../products/{productId}/variants`, `.../archive`, `POST .../variants/{variantId}/deactivate` | `catalog:write` |
+| `POST /api/v1/products`, `POST .../products/{productId}/variants`, `.../archive`, `POST .../variants/{variantId}/deactivate`, `PATCH /api/v1/products/{productId}`, `PATCH /api/v1/variants/{variantId}` | `catalog:write` |
 | `POST /api/v1/stock-receipts` / `POST /api/v1/stock-adjustments` | `stock:receive` / `stock:adjust` |
 | `GET /api/v1/skus/{sku}/stock`, `GET /api/v1/skus/{sku}/movements` | `stock:read` |
 
-Every write needs an `Idempotency-Key` and a JSON body of at most 64 KiB. Requests are rate limited per signed-in user (defaults 300 reads and 60 writes per minute; `API_RATE_LIMIT_READS_PER_MINUTE`, `API_RATE_LIMIT_WRITES_PER_MINUTE`). No CORS access is granted. Not built: public catalogue, orders, reservations, selling, and a limit for unauthenticated traffic (needs the hosting decision). Unsupported methods answer 405 and unknown paths 404, both as problem responses.
+`GET /api/v1/products` also searches (`q`: slug, English or Bangla name, SKU). Edits carry the `version` last read, so a stale client gets `409 VERSION_CONFLICT` instead of overwriting a newer change. Every write needs an `Idempotency-Key` and a JSON body of at most 64 KiB. Requests are rate limited per signed-in user (defaults 300 reads and 60 writes per minute; `API_RATE_LIMIT_READS_PER_MINUTE`, `API_RATE_LIMIT_WRITES_PER_MINUTE`). No CORS access is granted. Not built: public catalogue, orders, reservations, selling, and a limit for unauthenticated traffic (needs the hosting decision). Unsupported methods answer 405 and unknown paths 404, both as problem responses.
 
 ## Owner Office
 
@@ -167,10 +169,12 @@ A minimal, functional internal area at `/office` (`src/app/office`), built with 
 | Screen | Does | Permission |
 |---|---|---|
 | `/office/login` | Email and password sign-in | none |
-| `/office` | Products (draft, archived), oldest first, 25 per page, status filter | `catalog:read` |
+| `/office` | Products (draft, archived), oldest first, 25 per page; search by English or Bangla name, slug or SKU, status filter, next and first page, all kept in the URL | `catalog:read` |
 | `/office/products/new` | Create a draft product (English and Bangla fields) | `catalog:write` |
-| `/office/products/{id}` | Details, variants with price (BDT) and on-hand stock; add a variant, deactivate one, archive the product | `catalog:read`, `stock:read`; changes `catalog:write` |
-| `/office/skus/{sku}` | Current stock, receive stock, adjust with a reason, movement history with who made each change (times in Asia/Dhaka) | `stock:read`; changes `stock:receive` / `stock:adjust` |
+| `/office/products/{id}` | Details, variants with price (BDT) and on-hand stock; edit links, add a variant, deactivate one, archive the product (both ask for confirmation first) | `catalog:read`, `stock:read`; changes `catalog:write` |
+| `/office/products/{id}/edit` | Edit a draft product's English and Bangla names and descriptions (prefilled) | `catalog:read`, `catalog:write` |
+| `/office/variants/{id}/edit` | Edit an active variant's size, colour and price in Taka (prefilled); shows its stock, which the edit never changes | `catalog:read`, `catalog:write`, `stock:read` |
+| `/office/skus/{sku}` | Current stock, receive stock, adjust with an explicit Add or Remove choice, a number of units and a reason, with the current stock beside each form; movement history with who made each change (times in Asia/Dhaka) | `stock:read`; changes `stock:receive` / `stock:adjust` |
 
 How it works:
 
@@ -179,7 +183,7 @@ How it works:
 - Each form carries a server-generated idempotency key, so a double-click or resubmission records one change; the submit button is disabled while saving. Prices are typed in Taka (up to two decimals) and stored exactly as integer paisa (`src/modules/money.ts`).
 - Errors shown are the services' safe messages or a generic one; raw errors and SQL never reach the page.
 
-Not built: search, editing product text or prices after creation, reactivation, images, publication, orders, dashboards or reports. There is no account yet in `babysunray_dev`; create the first Owner with `npm run auth:bootstrap-owner`. Tested with fictional accounts against `babysunray_test`: integration tests of every Server Action, and real-browser tests (`npm run test:e2e`) of sign-in, sign-out, access control, the catalogue and stock flows, double submission, a lost response and its retry, error messages, keyboard use and a phone-sized screen.
+Not built: changing a slug or SKU, reactivating a variant, un-archiving a product, images, publication, orders, dashboards or reports. Edit forms carry the version they were loaded from; saving after another tab or client changed the record shows a "reload" message and keeps what was typed. While a form saves, its fields and button are disabled. There is no account yet in `babysunray_dev`; create the first Owner with `npm run auth:bootstrap-owner`. Tested with fictional accounts against `babysunray_test`: integration tests of every Server Action, and real-browser tests (`npm run test:e2e`) of sign-in, sign-out, access control, the catalogue and stock flows, editing (including a stale second tab), search, filter and paging, the archive and deactivate confirmations, double submission, a lost response and its retry, error messages, keyboard use and a phone-sized screen.
 
 ## Documentation
 

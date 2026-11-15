@@ -34,7 +34,7 @@ test("navigation and the main screens work without sideways scrolling", async ({
   await expect(page.getByRole("status")).toHaveText("Variant added.");
   await noSideScroll(page);
 
-  await page.getByRole("link", { name: sku }).tap();
+  await page.getByRole("link", { name: sku, exact: true }).tap();
   await expect(page.getByRole("heading", { level: 1 })).toContainText(sku);
   await noSideScroll(page);
   const receive = page.getByRole("region", { name: "Receive stock" });
@@ -42,8 +42,24 @@ test("navigation and the main screens work without sideways scrolling", async ({
   await receive.getByRole("button", { name: "Record receipt" }).tap();
   await expect(page.getByRole("status")).toHaveText("Stock receipt recorded.");
 
+  const adjust = page.getByRole("region", { name: "Adjust stock" });
+  await adjust.getByLabel("Remove units").tap();
+  await adjust.getByRole("textbox", { name: /^Units/ }).fill("1");
+  await adjust.getByLabel("Reason").fill("Mobile recount");
+  await adjust.getByRole("button", { name: "Record adjustment" }).tap();
+  await expect(page.getByRole("status")).toHaveText("Stock adjustment recorded.");
+  await expect(page.getByTestId("on-hand")).toHaveText("2");
+  await noSideScroll(page);
+
   await nav.getByRole("link", { name: "Products" }).tap();
-  await expect(page.getByRole("heading", { level: 1, name: "Products" })).toBeVisible();
+  const search = page.getByRole("search", { name: "Search products" });
+  await search.getByLabel("Search").fill(sku);
+  await search.getByRole("button", { name: "Search" }).tap();
+  await expect(page.getByRole("list", { name: "Products" }).getByRole("listitem")).toHaveCount(1);
+  await noSideScroll(page);
+  await page.getByRole("link", { name: /Mobile Romper/ }).tap();
+  await page.getByRole("link", { name: "Edit details" }).tap();
+  await expect(page.getByLabel("Name (English)")).toHaveValue("Mobile Romper");
   await noSideScroll(page);
   await page.getByRole("button", { name: "Sign out" }).tap();
   await expect(page).toHaveURL(/\/office\/login$/);

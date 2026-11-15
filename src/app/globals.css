@@ -1,1 +1,8 @@
 @import "tailwindcss";
+
+/* Bangla text: installed system fonts that cover the script, and room for its taller glyphs. A fallback for
+   legibility only, not a brand typeface (open decision 4). */
+:lang(bn) {
+  font-family: "Noto Sans Bengali", "Nirmala UI", "Vrinda", "Shonar Bangla", system-ui, sans-serif;
+  line-height: 1.7;
+}

@@ -8,12 +8,15 @@ import { getStockLevel } from "@/modules/inventory/service";
 import { formatPaisa } from "@/modules/money";
 import { archiveProductAction, createVariantAction, deactivateVariantAction } from "../../actions";
 import { ActionForm, Field } from "../../_components/action-form";
-import { OfficeShell, Section, formatTime, noticeFor } from "../../_components/shell";
+import { OfficeShell, Section, formatTime, noticeFor, productTitle } from "../../_components/shell";
 import { requireOffice } from "../../_lib/session";
 
 export const metadata = { title: "Product · Owner Office" };
 
 type Props = { params: Promise<{ productId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
+
+const BUTTON_LINK =
+  "inline-block rounded border border-gray-400 bg-white px-3 py-1 text-sm hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900";
 
 export default async function ProductPage({ params, searchParams }: Props) {
   await requireOffice("catalog:read", "stock:read");
@@ -25,15 +28,17 @@ export default async function ProductPage({ params, searchParams }: Props) {
   });
   const stock = await Promise.all(product.variants.map((v) => getStockLevel(db, v.sku)));
   const { done } = await searchParams;
+  const draft = product.status === "draft";
+  const { title, lang } = productTitle(product);
 
   return (
-    <OfficeShell title={product.nameEn ?? product.nameBn ?? product.slug} notice={noticeFor(done)}>
+    <OfficeShell title={title} titleLang={lang} notice={noticeFor(done)} breadcrumbs={[{ href: "/office", label: "Products" }]}>
       <Section title="Details">
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-[10rem_1fr]">
           <dt className="text-gray-600">Status</dt>
-          <dd>{product.status}</dd>
+          <dd>{draft ? "draft (not shown to customers)" : "archived (cannot be edited)"}</dd>
           <dt className="text-gray-600">Slug</dt>
-          <dd>{product.slug}</dd>
+          <dd className="break-all">{product.slug}</dd>
           <dt className="text-gray-600">Name (English)</dt>
           <dd>{product.nameEn ?? "—"}</dd>
           <dt className="text-gray-600">Name (Bangla)</dt>
@@ -44,12 +49,19 @@ export default async function ProductPage({ params, searchParams }: Props) {
           <dd lang="bn" className="whitespace-pre-line">{product.descriptionBn ?? "—"}</dd>
           <dt className="text-gray-600">Created</dt>
           <dd>{formatTime(product.createdAt)}</dd>
+          <dt className="text-gray-600">Last changed</dt>
+          <dd>{formatTime(product.updatedAt)}</dd>
         </dl>
+        {draft ? (
+          <Link href={`/office/products/${product.id}/edit`} className={BUTTON_LINK}>
+            Edit details
+          </Link>
+        ) : null}
       </Section>
 
       <Section title="Variants and stock">
         {product.variants.length === 0 ? (
-          <p className="text-sm text-gray-700">No variants yet.</p>
+          <p className="text-sm text-gray-700">No variants yet. Add one below; each variant is a SKU with its own price and stock.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -67,19 +79,33 @@ export default async function ProductPage({ params, searchParams }: Props) {
               <tbody className="divide-y divide-gray-200">
                 {product.variants.map((v, i) => (
                   <tr key={v.id}>
-                    <td className="py-2 pr-3">
+                    <th scope="row" className="py-2 pr-3 font-normal">
                       <Link href={`/office/skus/${encodeURIComponent(v.sku)}`} className="font-medium underline">
                         {v.sku}
                       </Link>
-                    </td>
+                    </th>
                     <td className="py-2 pr-3">{v.size ?? "—"}</td>
                     <td className="py-2 pr-3">{v.colour ?? "—"}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{formatPaisa(v.pricePaisa)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">৳ {formatPaisa(v.pricePaisa)}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{stock[i].onHand}</td>
                     <td className="py-2 pr-3">{v.status}</td>
                     <td className="py-2">
                       {v.status === "active" ? (
-                        <ActionForm action={deactivateVariantAction} idempotencyKey={randomUUID()} hidden={{ variantId: v.id }} submitLabel="Deactivate" variant="secondary" />
+                        <div className="flex flex-wrap items-start gap-2">
+                          {draft ? (
+                            <Link href={`/office/variants/${v.id}/edit`} className={BUTTON_LINK} aria-label={`Edit ${v.sku}`}>
+                              Edit
+                            </Link>
+                          ) : null}
+                          <ActionForm
+                            action={deactivateVariantAction}
+                            idempotencyKey={randomUUID()}
+                            hidden={{ variantId: v.id }}
+                            submitLabel="Deactivate"
+                            variant="secondary"
+                            confirm={`Deactivate ${v.sku}? It keeps its stock and history, but there is no way to reactivate it here.`}
+                          />
+                        </div>
                       ) : null}
                     </td>
                   </tr>
@@ -92,17 +118,27 @@ export default async function ProductPage({ params, searchParams }: Props) {
 
       <Section title="Add a variant">
         <ActionForm action={createVariantAction} idempotencyKey={randomUUID()} hidden={{ productId: product.id }} submitLabel="Add variant">
-          <Field name="sku" label="SKU" required maxLength={64} hint="Letters A-Z, digits, hyphen and underscore; stored in capitals; must be unique." />
+          <Field name="sku" label="SKU" required maxLength={64} hint="Letters A-Z, digits, hyphen and underscore; stored in capitals; must be unique. Cannot be changed later." />
           <Field name="size" label="Size" maxLength={64} />
           <Field name="colour" label="Colour" maxLength={64} />
-          <Field name="priceTaka" label="Price (BDT)" required inputMode="decimal" hint="For example 850 or 850.50. Stored exactly in paisa." />
+          <Field name="priceTaka" label="Price (BDT)" required inputMode="decimal" hint="In Taka, for example 850 or 850.50. Stored exactly in paisa." />
         </ActionForm>
       </Section>
 
-      {product.status === "draft" ? (
+      {draft ? (
         <Section title="Archive">
-          <p className="text-sm text-gray-700">Archiving keeps the product, its variants and their stock history. Nothing is deleted.</p>
-          <ActionForm action={archiveProductAction} idempotencyKey={randomUUID()} hidden={{ productId: product.id }} submitLabel="Archive product" variant="secondary" />
+          <p className="text-sm text-gray-700">
+            Archiving keeps the product, its variants and their stock history. Nothing is deleted, but an archived product can no longer be edited and there is no way to
+            undo archiving here.
+          </p>
+          <ActionForm
+            action={archiveProductAction}
+            idempotencyKey={randomUUID()}
+            hidden={{ productId: product.id }}
+            submitLabel="Archive product"
+            variant="secondary"
+            confirm="Archive this product? It can no longer be edited afterwards, and archiving cannot be undone here."
+          />
         </Section>
       ) : null}
     </OfficeShell>

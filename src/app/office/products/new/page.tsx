@@ -9,7 +9,7 @@ export const metadata = { title: "New product · Owner Office" };
 export default async function NewProductPage() {
   await requireOffice("catalog:write");
   return (
-    <OfficeShell title="New draft product">
+    <OfficeShell title="New draft product" current="new" breadcrumbs={[{ href: "/office", label: "Products" }]}>
       <Section title="Product details">
         <p className="text-sm text-gray-700">A new product is a draft. Drafts are never shown to customers.</p>
         <ActionForm action={createProductAction} idempotencyKey={randomUUID()} submitLabel="Create draft">

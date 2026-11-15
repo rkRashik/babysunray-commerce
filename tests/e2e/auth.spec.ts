@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { clearSignInLimits, E2E_OWNER, signIn } from "./support";
+import { clearSignInLimits, E2E_OWNER, signIn, testDatabase, uniqueName } from "./support";
 
 // Sign-in, sign-out and access control in a real browser, against the real Better Auth handler and PostgreSQL.
 
@@ -73,4 +73,22 @@ test("repeated wrong passwords hit the sign-in rate limit with a clear message",
   }
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(alert).toHaveText("Too many attempts. Wait a few seconds and try again.");
+});
+
+test("a session that expires while a form is open sends the Owner to sign-in and saves nothing", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/office/products/new");
+  const { slug } = uniqueName("e2e-expired");
+  await page.getByLabel("Slug").fill(slug);
+  await page.getByLabel("Name (English)").fill("Never Saved");
+  const db = await testDatabase();
+  try {
+    await db.query("update auth_sessions set expires_at = now() - interval '1 minute'");
+    await page.getByRole("button", { name: "Create draft" }).click();
+    await expect(page).toHaveURL(/\/office\/login$/);
+    const { rows } = await db.query("select count(*)::int as n from products where slug = $1", [slug]);
+    expect(rows[0].n).toBe(0);
+  } finally {
+    await db.end();
+  }
 });

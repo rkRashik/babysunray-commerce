@@ -110,7 +110,9 @@ describe("Office access", () => {
       [actions.archiveProductAction, { idempotencyKey: key, productId: product.id }],
       [actions.deactivateVariantAction, { idempotencyKey: key, variantId: variant.id }],
       [actions.receiveStockAction, { idempotencyKey: key, sku: variant.sku, quantity: "1" }],
-      [actions.adjustStockAction, { idempotencyKey: key, sku: variant.sku, quantityDelta: "1", reason: "x" }],
+      [actions.adjustStockAction, { idempotencyKey: key, sku: variant.sku, direction: "add", units: "1", reason: "x" }],
+      [actions.updateProductAction, { idempotencyKey: key, productId: product.id, version: "1", nameEn: "Anonymous edit" }],
+      [actions.updateVariantAction, { idempotencyKey: key, variantId: variant.id, version: "1", priceTaka: "1" }],
     ];
     for (const [action, fields] of attempts) expect(await submit(action, fields)).toEqual({ redirect: "/office/login" });
     expect(await movementsOf(variant.id)).toBe(0);
@@ -157,9 +159,9 @@ describe("stock forms", () => {
       [actions.receiveStockAction, { sku: variant.sku, quantity: "1.5" }, /whole number/],
       [actions.receiveStockAction, { sku: "bad sku!", quantity: "1" }, /SKU must be/],
       [actions.receiveStockAction, { sku: "OFFSTK-NOPE", quantity: "1" }, /No variant has this SKU/],
-      [actions.adjustStockAction, { sku: variant.sku, quantityDelta: "-1", reason: "" }, /Reason is required/],
-      [actions.adjustStockAction, { sku: variant.sku, quantityDelta: "-1", reason: "Recount" }, /Not enough stock/],
-      [actions.adjustStockAction, { sku: variant.sku, quantityDelta: "0", reason: "Recount" }, /non-zero/],
+      [actions.adjustStockAction, { sku: variant.sku, direction: "remove", units: "1", reason: "" }, /Reason is required/],
+      [actions.adjustStockAction, { sku: variant.sku, direction: "remove", units: "1", reason: "Recount" }, /Not enough stock/],
+      [actions.adjustStockAction, { sku: variant.sku, direction: "remove", units: "0", reason: "Recount" }, /Units must be at least 1/],
       [actions.receiveStockAction, { sku: variant.sku, quantity: "1", idempotencyKey: "short" }, /Idempotency-Key/],
     ];
     for (const [action, fields, message] of cases) {
@@ -168,21 +170,21 @@ describe("stock forms", () => {
       expect(answer?.error).not.toMatch(/select|insert|update|constraint|stock_movements|SQL/i);
       expect(answer?.values).not.toHaveProperty("idempotencyKey");
     }
-    const { state: kept } = await submit(actions.adjustStockAction, { idempotencyKey: randomUUID(), sku: variant.sku, quantityDelta: "-9", reason: "Typed reason" });
-    expect(kept?.values).toMatchObject({ quantityDelta: "-9", reason: "Typed reason" });
+    const { state: kept } = await submit(actions.adjustStockAction, { idempotencyKey: randomUUID(), sku: variant.sku, direction: "remove", units: "9", reason: "Typed reason" });
+    expect(kept?.values).toMatchObject({ direction: "remove", units: "9", reason: "Typed reason" });
     expect(await movementsOf(variant.id)).toBe(0);
   });
 
   it("adjusts with a reason, and hides unexpected errors behind a generic message", async () => {
     const { variant } = await createTestVariant(db, "offstk");
     await submit(actions.receiveStockAction, { idempotencyKey: randomUUID(), sku: variant.sku, quantity: "5" });
-    expect(await submit(actions.adjustStockAction, { idempotencyKey: randomUUID(), sku: variant.sku, quantityDelta: "-2", reason: "Damaged" })).toEqual({
+    expect(await submit(actions.adjustStockAction, { idempotencyKey: randomUUID(), sku: variant.sku, direction: "remove", units: "2", reason: "Damaged" })).toEqual({
       redirect: `/office/skus/${variant.sku}?done=adjusted`,
     });
     const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     try {
       const { state: answer } = await withFailingInserts(pool, "stock_movements", () =>
-        submit(actions.adjustStockAction, { idempotencyKey: randomUUID(), sku: variant.sku, quantityDelta: "-1", reason: "Recount" }),
+        submit(actions.adjustStockAction, { idempotencyKey: randomUUID(), sku: variant.sku, direction: "remove", units: "1", reason: "Recount" }),
       );
       expect(answer?.error).toBe("Something went wrong and nothing was saved. Please try again.");
     } finally {
@@ -225,5 +227,58 @@ describe("catalogue forms", () => {
     const { rows } = await pool.query("select p.status as product, v.status as variant from products p join variants v on v.product_id = p.id where p.id = $1", [product.id]);
     expect(rows).toEqual([{ product: "archived", variant: "inactive" }]);
     expect((await submit(actions.archiveProductAction, { idempotencyKey: randomUUID(), productId: "not-a-uuid" })).state?.error).toMatch(/productId must be a UUID/);
+  });
+});
+
+describe("edit forms", () => {
+  it("saves a draft product's text, keeps Bangla exactly, clears emptied fields, and runs once per form key", async () => {
+    const { product } = await createTestVariant(db, "offedit");
+    const fields = { idempotencyKey: randomUUID(), productId: product.id, version: "1", nameEn: "  Edited Romper ", nameBn: "নতুন রম্পার", descriptionEn: "", descriptionBn: "নরম সুতি" };
+    expect(await submit(actions.updateProductAction, fields)).toEqual({ redirect: `/office/products/${product.id}?done=updated` });
+    expect(await submit(actions.updateProductAction, fields)).toEqual({ redirect: `/office/products/${product.id}?done=updated` });
+    const { rows } = await pool.query("select slug, name_en, name_bn, description_en, description_bn, version from products where id = $1", [product.id]);
+    expect(rows).toEqual([{ slug: product.slug, name_en: "Edited Romper", name_bn: "নতুন রম্পার", description_en: null, description_bn: "নরম সুতি", version: 2 }]);
+  });
+
+  it("refuses a stale form with a reload message and keeps what was typed", async () => {
+    const { product } = await createTestVariant(db, "offstale");
+    await submit(actions.updateProductAction, { idempotencyKey: randomUUID(), productId: product.id, version: "1", nameEn: "First tab" });
+    const { state: answer } = await submit(actions.updateProductAction, { idempotencyKey: randomUUID(), productId: product.id, version: "1", nameEn: "Second tab", nameBn: "দ্বিতীয়" });
+    expect(answer?.error).toMatch(/changed after you loaded it\. Reload it/);
+    expect(answer?.values).toMatchObject({ nameEn: "Second tab", nameBn: "দ্বিতীয়" });
+    expect((await pool.query("select name_en from products where id = $1", [product.id])).rows[0].name_en).toBe("First tab");
+  });
+
+  it("refuses removing both names and editing an archived product", async () => {
+    const { product } = await createTestVariant(db, "offnoname");
+    const both = await submit(actions.updateProductAction, { idempotencyKey: randomUUID(), productId: product.id, version: "1", nameEn: " ", nameBn: "" });
+    expect(both.state?.error).toBe("A product needs a name in English or Bangla.");
+    await submit(actions.archiveProductAction, { idempotencyKey: randomUUID(), productId: product.id });
+    const archived = await submit(actions.updateProductAction, { idempotencyKey: randomUUID(), productId: product.id, version: "2", nameEn: "Revived" });
+    expect(archived.state?.error).toBe("An archived product cannot be edited.");
+  });
+
+  it("saves a variant's size, colour and exact price without touching SKU or stock", async () => {
+    const { product, variant } = await createTestVariant(db, "offvedit");
+    await submit(actions.receiveStockAction, { idempotencyKey: randomUUID(), sku: variant.sku, quantity: "4" });
+    const fields = { idempotencyKey: randomUUID(), variantId: variant.id, version: "1", size: "6-12M", colour: "", priceTaka: "1234.05", sku: "HACKED-SKU" };
+    expect(await submit(actions.updateVariantAction, fields)).toEqual({ redirect: `/office/products/${product.id}?done=variant-updated` });
+    const { rows } = await pool.query("select v.sku, v.size, v.colour, v.price_paisa, v.version, b.on_hand from variants v join inventory_balances b on b.variant_id = v.id where v.id = $1", [variant.id]);
+    expect(rows).toEqual([{ sku: variant.sku, size: "6-12M", colour: null, price_paisa: "123405", version: 2, on_hand: 4 }]);
+    for (const priceTaka of ["", "0", "12.345", "1,000"]) {
+      const { state: answer } = await submit(actions.updateVariantAction, { ...fields, idempotencyKey: randomUUID(), version: "2", priceTaka });
+      expect(answer?.error).toMatch(/^Price \(BDT\) /);
+    }
+  });
+
+  it("adjusts up or down only with an explicit choice", async () => {
+    const { variant } = await createTestVariant(db, "offdir");
+    expect((await submit(actions.adjustStockAction, { idempotencyKey: randomUUID(), sku: variant.sku, direction: "add", units: "3", reason: "Found" })).redirect).toMatch(/done=adjusted/);
+    const missing = await submit(actions.adjustStockAction, { idempotencyKey: randomUUID(), sku: variant.sku, units: "1", reason: "Recount" });
+    expect(missing.state?.error).toBe("Choose whether to add or remove units.");
+    const signed = await submit(actions.adjustStockAction, { idempotencyKey: randomUUID(), sku: variant.sku, direction: "remove", units: "-1", reason: "Recount" });
+    expect(signed.state?.error).toBe("Units must be a whole number.");
+    const { rows } = await pool.query("select quantity_delta from stock_movements where variant_id = $1", [variant.id]);
+    expect(rows).toEqual([{ quantity_delta: 3 }]);
   });
 });

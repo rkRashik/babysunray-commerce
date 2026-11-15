@@ -8,6 +8,8 @@ import {
   createProductOnce,
   createVariantOnce,
   deactivateVariantOnce,
+  updateProductOnce,
+  updateVariantOnce,
 } from "@/modules/catalogue/operations";
 import { DomainError } from "@/modules/domain-error";
 import { adjustStockOnce, receiveStockOnce } from "@/modules/inventory/operations";
@@ -31,8 +33,8 @@ const text = (form: FormData, name: string): string => {
 };
 const optional = (form: FormData, name: string): string | null => text(form, name).trim() || null;
 
-function wholeNumber(raw: string, field: string, signed = false): number {
-  if (!(signed ? /^-?[0-9]{1,10}$/ : /^[0-9]{1,10}$/).test(raw.trim())) {
+function wholeNumber(raw: string, field: string): number {
+  if (!/^[0-9]{1,10}$/.test(raw.trim())) {
     throw new DomainError("INVALID_INPUT", `${field} must be a whole number.`);
   }
   return Number(raw.trim());
@@ -53,6 +55,7 @@ const LABELS: Record<string, string> = {
   pricePaisa: "Price (BDT)",
   quantity: "Units received",
   quantityDelta: "Change",
+  units: "Units",
   reason: "Reason",
 };
 
@@ -117,6 +120,44 @@ export async function createVariantAction(_: FormState, form: FormData): Promise
   redirect(`/office/products/${productId}?done=variant`);
 }
 
+// Edits send every field of the form: an emptied field clears that value. `version` is the version the form
+// was rendered from; it only detects a stale form (VERSION_CONFLICT) and grants nothing.
+export async function updateProductAction(_: FormState, form: FormData): Promise<FormState> {
+  const principal = await requireOffice("catalog:write");
+  const productId = text(form, "productId");
+  try {
+    await updateProductOnce(getDb(), principal, text(form, "idempotencyKey"), {
+      productId,
+      expectedVersion: wholeNumber(text(form, "version"), "Version"),
+      changes: {
+        nameEn: optional(form, "nameEn"),
+        nameBn: optional(form, "nameBn"),
+        descriptionEn: optional(form, "descriptionEn"),
+        descriptionBn: optional(form, "descriptionBn"),
+      },
+    });
+  } catch (error) {
+    return formError(error, form);
+  }
+  redirect(`/office/products/${productId}?done=updated`);
+}
+
+export async function updateVariantAction(_: FormState, form: FormData): Promise<FormState> {
+  const principal = await requireOffice("catalog:write");
+  let productId: string;
+  try {
+    const { value } = await updateVariantOnce(getDb(), principal, text(form, "idempotencyKey"), {
+      variantId: text(form, "variantId"),
+      expectedVersion: wholeNumber(text(form, "version"), "Version"),
+      changes: { size: optional(form, "size"), colour: optional(form, "colour"), pricePaisa: parseTakaToPaisa(text(form, "priceTaka")) },
+    });
+    productId = value.productId;
+  } catch (error) {
+    return formError(error, form);
+  }
+  redirect(`/office/products/${productId}?done=variant-updated`);
+}
+
 export async function archiveProductAction(_: FormState, form: FormData): Promise<FormState> {
   const principal = await requireOffice("catalog:write");
   const productId = text(form, "productId");
@@ -156,13 +197,22 @@ export async function receiveStockAction(_: FormState, form: FormData): Promise<
   redirect(`/office/skus/${encodeURIComponent(sku)}?done=received`);
 }
 
+/** Add or remove, chosen explicitly, and a positive number of units: the sign is never typed. */
+function signedChange(form: FormData): number {
+  const direction = text(form, "direction");
+  if (direction !== "add" && direction !== "remove") throw new DomainError("INVALID_INPUT", "Choose whether to add or remove units.");
+  const units = wholeNumber(text(form, "units"), "Units");
+  if (units < 1) throw new DomainError("INVALID_INPUT", "Units must be at least 1.");
+  return direction === "remove" ? -units : units;
+}
+
 export async function adjustStockAction(_: FormState, form: FormData): Promise<FormState> {
   const principal = await requireOffice("stock:adjust");
   let sku: string;
   try {
     const { value } = await adjustStockOnce(getDb(), principal, text(form, "idempotencyKey"), {
       sku: text(form, "sku"),
-      quantityDelta: wholeNumber(text(form, "quantityDelta"), "Change", true),
+      quantityDelta: signedChange(form),
       reason: text(form, "reason"),
     });
     sku = value.sku;
