@@ -48,7 +48,12 @@ test("the dashboard shows real queues and links to the matching order list; repo
   const orderUrl = await createOrder(page, sku);
   await step(page, "Confirm order (verified with the customer)");
 
-  await nav(page).getByRole("link", { name: "Dashboard" }).click();
+  const response = await page.goto("/office/dashboard");
+  const headers = response?.headers() ?? {};
+  expect(headers["cache-control"]).toContain("no-store");
+  expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+  expect(headers["x-frame-options"]).toBe("DENY");
+  expect(headers["x-robots-tag"]).toContain("noindex");
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
   await expect(page.getByTestId("generated-at")).toContainText("(Dhaka)");
   expect(Number(await page.getByTestId("count-to_pack").textContent())).toBeGreaterThanOrEqual(1);

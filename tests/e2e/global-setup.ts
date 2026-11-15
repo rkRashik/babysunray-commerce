@@ -26,7 +26,7 @@ const ROOT = process.cwd();
 const DIST_DIR = ".next/e2e";
 const NEXT_ENV = path.join(ROOT, "next-env.d.ts");
 
-async function freePort(): Promise<number> {
+export async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
     server.once("error", reject);
@@ -37,14 +37,14 @@ async function freePort(): Promise<number> {
   });
 }
 
-function stop(child: ChildProcess): void {
+export function stop(child: ChildProcess): void {
   if (child.exitCode !== null || child.pid === undefined) return;
   // Only this process tree: the server started below and its workers.
   if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
   else process.kill(-child.pid, "SIGTERM");
 }
 
-async function waitForServer(baseURL: string, child: ChildProcess, output: () => string): Promise<void> {
+export async function waitForServer(baseURL: string, child: ChildProcess, output: () => string): Promise<void> {
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
     if (child.exitCode !== null) throw new Error(`The E2E server exited early.\n${output()}`);
@@ -59,7 +59,7 @@ async function waitForServer(baseURL: string, child: ChildProcess, output: () =>
   throw new Error(`The E2E server did not start within 3 minutes.\n${output()}`);
 }
 
-async function seedOwner(client: Client, password: string): Promise<void> {
+export async function seedOwner(client: Client, password: string): Promise<void> {
   const hash = await hashPassword(password);
   const { rows } = await client.query<{ id: string }>(
     "insert into auth_users (name, email, created_at, updated_at) values ($1, $2, now(), now()) returning id",
@@ -75,10 +75,10 @@ async function seedOwner(client: Client, password: string): Promise<void> {
 }
 
 /** Signs in once over HTTP and checks that the session landed in babysunray_test, then removes it. */
-async function proveServerUsesTestDatabase(client: Client, baseURL: string, password: string): Promise<void> {
+export async function proveServerUsesTestDatabase(client: Client, baseURL: string, password: string, origin = baseURL): Promise<void> {
   const response = await fetch(`${baseURL}/api/auth/sign-in/email`, {
     method: "POST",
-    headers: { "content-type": "application/json", origin: baseURL },
+    headers: { "content-type": "application/json", origin },
     body: JSON.stringify({ email: E2E_OWNER.email, password }),
   });
   const { rows } = await client.query<{ n: number }>(
