@@ -18,6 +18,7 @@ vi.mock("@/db/client", () => ({ getDb: () => state.db }));
 vi.mock("@/modules/auth/server", () => ({ getAuth: () => state.auth }));
 const previewRoute = await import("../../src/app/office/import/preview/route");
 const confirmRoute = await import("../../src/app/office/import/confirm/route");
+const templateRoute = await import("../../src/app/office/import/template/route");
 
 let db: Db;
 let pool: Pool;
@@ -231,5 +232,14 @@ describe("Office import routes", () => {
     const broken = await (await post(previewRoute, "/office/import/preview", { file: new Blob(['product_slug,sku,price_bdt\n"open,X,1']) })).json();
     expect(broken).toMatchObject({ ok: false, fingerprint: null });
     expect(broken.errorReport).toContain("malformed_csv");
+  });
+
+  it("serves the template only to a signed-in Owner", async () => {
+    const get = (headers: Record<string, string>) => templateRoute.GET(new Request(`${BASE_URL}/office/import/template?format=csv`, { headers }));
+    const anonymous = await get({});
+    expect([anonymous.status, anonymous.headers.get("location")]).toEqual([303, "/office/login"]);
+    const owner = await get({ cookie });
+    expect([owner.status, owner.headers.get("cache-control")]).toEqual([200, "no-store"]);
+    expect(await owner.text()).toMatch(/^﻿?product_slug,/);
   });
 });
