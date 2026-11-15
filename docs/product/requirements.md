@@ -318,6 +318,15 @@ The founder wants a production-minded inventory and order API. The outcome is fo
 | EN-5 | The README records setup, test and API-usage instructions that have been run and verified. Features that do not exist yet are not described as available. | F + P |
 | EN-6 | Tests cover unit logic, PostgreSQL integration, API security (negative authorisation, validation, error and data leakage), concurrency (parallel requests for the last unit) and failure paths (rollback, retry, timeout). | F + P |
 
+### 9.2 Implementation status (Gate H.17–H.20)
+
+What batch H.17–H.20 built, as of 15 Nov 2026. Basis labels are unchanged: implementing a **P** item does not approve it, and nothing here publishes a product or opens checkout.
+
+| ID | Status | Notes |
+|---|---|---|
+| O-13 | Return window protected | A delivered order can be closed only after its 7-day return window, enforced by the rules and a database check, so closing or settlement never ends the customer's right to ask for a return. Engineering default, Draft — Founder Review ([order-policy-decisions.md](order-policy-decisions.md), section 3). |
+| S-15, G-4 | Hardened, not complete | The tracking page removes the token from the address bar and the tab's history and keeps it in memory only. Limits per live link and a global limit for unknown tokens that never blocks a live link. A per-client limit and flood protection still need a trusted proxy (decision 1). |
+
 ## 10. Phasing (proposed)
 
 | Phase | Outcome | Basis |
@@ -378,4 +387,5 @@ Also out of scope: a separate backend server, Express, microservices, a monorepo
 | Founder instruction, batch H.2a + H.3 (15 Nov 2026) | Authentication audit fixes; read-only `/api/v1` with Bearer and OpenAPI | Approves the named scope only; basis labels unchanged. |
 | Founder instruction, batch H.4–H.6 (15 Nov 2026) | Operation idempotency; stock and draft-catalogue write API; API limits, CORS policy and rate limits; a minimal functional Owner Office (not a UI design) | Approves the named scope only; basis labels unchanged. |
 | Founder instruction, batch H.13–H.16 (15 Nov 2026) | Dashboard, reports, exports, stock reconciliation, print, local backup and recovery tooling | Approves the named engineering scope only; basis labels unchanged; no schedule, retention, off-device copy or RPO/RTO decided. |
+| Founder instruction, batch H.17–H.20 (15 Nov 2026) | Order and tracking fixes, product content and readiness, local development media, an Owner-only storefront preview with cart and checkout simulation, test and readiness work | Approves the named engineering scope only; basis labels unchanged; no publication, public checkout, customer accounts, hosting or final design approved. |
 | Original BabySunray brand and business documents on the G: drive | Not read for this draft | Should be checked against sections 1 and 8 during review. |

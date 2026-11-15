@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { GuestView } from "@/modules/orders/tracking";
 
 // The customer's private order page. The token is read from the URL fragment (#t=...), which browsers never
-// send to a server, and posted to /api/track in a same-origin JSON body. It is kept in memory only: never in
-// storage, a URL, a log or a third-party request (this page loads no third-party code).
+// send to a server, and posted to /api/track in a same-origin JSON body. Right after reading it, the page
+// replaces its own history entry with plain /track, so the token leaves the address bar, the back and forward
+// history of this tab and anything copied from the address bar. It is then kept in memory only: never in
+// storage, a URL, a log or a third-party request (this page loads no third-party code). Reloading therefore
+// needs the original link again (docs/operations/runbook.md, Guest tracking).
 
 const STATUS: Record<string, string> = {
   pending_verification: "Received, waiting for the shop to confirm with you",
@@ -22,12 +25,14 @@ const STATUS: Record<string, string> = {
 };
 const taka = (paisa: number) => `৳ ${Math.floor(paisa / 100)}.${String(paisa % 100).padStart(2, "0")}`;
 
-type Load = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; view: GuestView };
+type Load = { kind: "idle" } | { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; view: GuestView };
 
-const subscribe = (onChange: () => void) => {
-  window.addEventListener("hashchange", onChange);
-  return () => window.removeEventListener("hashchange", onChange);
-};
+/** The token in the fragment (null without one), after removing the fragment from this history entry. */
+function takeToken(): string | null {
+  const token = new URLSearchParams(window.location.hash.slice(1)).get("t");
+  if (window.location.hash) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+  return token;
+}
 
 async function post(path: string, body: unknown): Promise<{ ok: boolean; data?: GuestView; message?: string }> {
   const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), cache: "no-store", credentials: "omit" });
@@ -36,31 +41,47 @@ async function post(path: string, body: unknown): Promise<{ ok: boolean; data?: 
 }
 
 export function TrackView() {
-  // null while rendering on the server (no fragment there); then the fragment, read in the browser only.
-  const hash = useSyncExternalStore(subscribe, () => window.location.hash, () => null);
-  const token = hash === null ? null : (new URLSearchParams(hash.slice(1)).get("t") ?? "");
+  const token = useRef<string | null>(null);
   const [state, setState] = useState<Load>({ kind: "loading" });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!token) return;
     let live = true;
-    post("/api/track", { token })
-      .then((r) => live && setState(r.ok && r.data ? { kind: "ready", view: r.data } : { kind: "error", message: r.message! }))
-      .catch(() => live && setState({ kind: "error", message: "The order could not be loaded. Please check your connection and try again." }));
+    const show = (t: string | null) => {
+      if (!t) {
+        setState({ kind: "idle" });
+        return;
+      }
+      setState({ kind: "loading" });
+      post("/api/track", { token: t })
+        .then((r) => live && setState(r.ok && r.data ? { kind: "ready", view: r.data } : { kind: "error", message: r.message! }))
+        .catch(() => live && setState({ kind: "error", message: "The order could not be loaded. Please check your connection and try again." }));
+    };
+    // The ref keeps a token already taken when the effect runs again (React's development double run).
+    token.current = takeToken() ?? token.current;
+    show(token.current);
+    // Opening another link in this tab changes only the fragment.
+    const onHashChange = () => {
+      const taken = takeToken();
+      if (taken === null) return;
+      token.current = taken;
+      show(taken);
+    };
+    window.addEventListener("hashchange", onHashChange);
     return () => {
       live = false;
+      window.removeEventListener("hashchange", onHashChange);
     };
-  }, [token]);
+  }, []);
 
   async function act(action: "cancel" | "request") {
     const question = action === "cancel" ? "Cancel this order?" : "Ask the shop to cancel this order?";
-    if (!token || !window.confirm(question)) return;
+    if (!token.current || !window.confirm(question)) return;
     setBusy(true);
     setNotice(null);
     try {
-      const r = await post("/api/track/cancel", { token, action });
+      const r = await post("/api/track/cancel", { token: token.current, action });
       if (r.ok && r.data) {
         setState({ kind: "ready", view: r.data });
         setNotice(action === "cancel" ? "Your order is cancelled." : "Your request was sent. The shop will contact you.");
@@ -73,7 +94,16 @@ export function TrackView() {
     setBusy(false);
   }
 
-  if (token === "") return <p role="alert">Open the tracking link from the shop&apos;s message to see your order.</p>;
+  if (state.kind === "idle") {
+    return (
+      <div role="alert" className="space-y-2">
+        <p>Open the tracking link from the shop&apos;s message to see your order.</p>
+        <p className="text-sm text-gray-700">
+          For your privacy this page removes the link from the address bar once it has opened your order, so reloading the page or coming back to it later needs the link again.
+        </p>
+      </div>
+    );
+  }
   if (state.kind === "loading") return <p role="status">Loading your order…</p>;
   if (state.kind === "error") return <p role="alert">{state.message}</p>;
   const v = state.view;

@@ -141,6 +141,10 @@ describe("order API", () => {
     };
     expect(await pay("collected", order.totalPaisa)).toMatchObject({ paymentStatus: "collected" });
     expect(await pay("settled", order.totalPaisa)).toMatchObject({ paymentStatus: "settled" });
+    // Settled, but the 7-day return window is still open: closing is refused until it has ended.
+    const early = await transition(order.id, "close", version);
+    expect([early.status, early.body.code]).toEqual([409, "INVALID_TRANSITION"]);
+    await pool.query("update orders set delivered_at = now() - interval '7 days 1 minute' where id = $1", [order.id]);
     const closed = await transition(order.id, "close", version);
     expect(closed.body.data).toMatchObject({ orderStatus: "closed", fulfilmentStatus: "delivered" });
     const after = await call({ method: "GET", path: `/skus/${s}/stock`, template: "/skus/{sku}/stock", params: { sku: s } });

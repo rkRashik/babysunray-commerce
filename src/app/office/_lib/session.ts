@@ -5,6 +5,7 @@ import { getDb } from "@/db/client";
 import type { Permission } from "@/modules/auth/permissions";
 import { assertPermission, getPrincipal, type Principal } from "@/modules/auth/principal";
 import { getAuth } from "@/modules/auth/server";
+import { AuthConfigError } from "@/modules/auth/settings";
 
 // Owner Office access. Every page and Server Action calls one of these itself (a layout check alone is not
 // access control). Only the HttpOnly session cookie is used (getPrincipal); an Authorization header is
@@ -17,9 +18,15 @@ export async function currentPrincipal(): Promise<Principal | null> {
   return getPrincipal(getAuth(), getDb(), requestHeaders);
 }
 
-/** Redirects to the sign-in page without a session; FORBIDDEN (error page) without every permission. */
+/**
+ * Redirects to the sign-in page without a session (or while sign-in is not configured, where that page says
+ * why); FORBIDDEN (error page) without every permission.
+ */
 export async function requireOffice(...permissions: Permission[]): Promise<Principal> {
-  const principal = await currentPrincipal();
+  const principal = await currentPrincipal().catch((error: unknown) => {
+    if (error instanceof AuthConfigError) redirect("/office/login");
+    throw error;
+  });
   if (!principal) redirect("/office/login");
   for (const permission of permissions) assertPermission(principal, permission);
   return principal;

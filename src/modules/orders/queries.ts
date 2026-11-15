@@ -32,32 +32,44 @@ export type OrderDetail = Order & {
   trackingLink: { createdAt: Date } | null;
 };
 
+/**
+ * One order with everything that belongs to it, read from one snapshot: a read-only REPEATABLE READ
+ * transaction (a savepoint when `db` is already a transaction), with the queries run one after another, never
+ * concurrently on one connection (node-postgres queues them today and pg@9 will refuse it). So the version,
+ * the child rows and the totals always describe the same moment.
+ */
 export async function getOrderDetail(db: Db, orderId: string): Promise<OrderDetail> {
   const id = validateId(orderId, "orderId");
-  const [order] = await db.select().from(orders).where(eq(orders.id, id));
-  if (!order) throw new DomainError("ORDER_NOT_FOUND", "Order not found.");
-  const [items, reservations, events, requests, rets, quarantine, payments, links] = await Promise.all([
-    db.select().from(orderItems).where(eq(orderItems.orderId, id)).orderBy(asc(orderItems.sku)),
-    db.select().from(stockReservations).where(eq(stockReservations.orderId, id)).orderBy(asc(stockReservations.createdAt)),
-    db.select().from(orderEvents).where(eq(orderEvents.orderId, id)).orderBy(asc(orderEvents.id)),
-    db.select().from(cancellationRequests).where(eq(cancellationRequests.orderId, id)).orderBy(asc(cancellationRequests.createdAt)),
-    db.select().from(returns).where(eq(returns.orderId, id)).orderBy(asc(returns.createdAt)),
-    db.select().from(quarantineItems).where(eq(quarantineItems.orderId, id)).orderBy(asc(quarantineItems.receivedAt)),
-    db.select().from(paymentEntries).where(eq(paymentEntries.orderId, id)).orderBy(asc(paymentEntries.id)),
-    db.select({ createdAt: orderTrackingTokens.createdAt }).from(orderTrackingTokens).where(and(eq(orderTrackingTokens.orderId, id), sql`${orderTrackingTokens.revokedAt} is null`)),
-  ]);
-  const lines = rets.length ? await db.select().from(returnItems).where(inArray(returnItems.returnId, rets.map((r) => r.id))) : [];
-  return {
-    ...order,
-    items,
-    reservations,
-    events,
-    cancellationRequests: requests,
-    returns: rets.map((r) => ({ ...r, items: lines.filter((l) => l.returnId === r.id) })),
-    quarantine,
-    payments,
-    trackingLink: links[0] ?? null,
-  };
+  return db.transaction(
+    async (tx) => {
+      const [order] = await tx.select().from(orders).where(eq(orders.id, id));
+      if (!order) throw new DomainError("ORDER_NOT_FOUND", "Order not found.");
+      const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, id)).orderBy(asc(orderItems.sku));
+      const reservations = await tx.select().from(stockReservations).where(eq(stockReservations.orderId, id)).orderBy(asc(stockReservations.createdAt));
+      const events = await tx.select().from(orderEvents).where(eq(orderEvents.orderId, id)).orderBy(asc(orderEvents.id));
+      const requests = await tx.select().from(cancellationRequests).where(eq(cancellationRequests.orderId, id)).orderBy(asc(cancellationRequests.createdAt));
+      const rets = await tx.select().from(returns).where(eq(returns.orderId, id)).orderBy(asc(returns.createdAt));
+      const lines = rets.length ? await tx.select().from(returnItems).where(inArray(returnItems.returnId, rets.map((r) => r.id))) : [];
+      const quarantine = await tx.select().from(quarantineItems).where(eq(quarantineItems.orderId, id)).orderBy(asc(quarantineItems.receivedAt));
+      const payments = await tx.select().from(paymentEntries).where(eq(paymentEntries.orderId, id)).orderBy(asc(paymentEntries.id));
+      const [link] = await tx
+        .select({ createdAt: orderTrackingTokens.createdAt })
+        .from(orderTrackingTokens)
+        .where(and(eq(orderTrackingTokens.orderId, id), sql`${orderTrackingTokens.revokedAt} is null`));
+      return {
+        ...order,
+        items,
+        reservations,
+        events,
+        cancellationRequests: requests,
+        returns: rets.map((r) => ({ ...r, items: lines.filter((l) => l.returnId === r.id) })),
+        quarantine,
+        payments,
+        trackingLink: link ?? null,
+      };
+    },
+    { isolationLevel: "repeatable read", accessMode: "read only" },
+  );
 }
 
 /**

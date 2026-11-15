@@ -201,14 +201,35 @@ describe("guest tracking endpoints", () => {
     }
   });
 
-  it("limits failed lookups globally, then refuses even valid tokens for the rest of the minute", async () => {
+  it("limits unknown tokens globally without ever blocking a live link; malformed ones cost no lookup", async () => {
     const { orderId } = await newOrder();
     const token = await linkFor(orderId);
-    for (let i = 0; i < 31; i += 1) await post(trackRoute, "/api/track", { token: `${"y".repeat(42)}${i % 10}` });
-    const limited = await post(trackRoute, "/api/track", { token });
-    expect(limited.status).toBe(429);
-    await pool.query("delete from tracking_rate_limits");
+    const failures = () => count(pool, "select coalesce(sum(count), 0) from tracking_rate_limits where bucket = 'failure'");
+    for (const bad of ["x", "", "y".repeat(44), "not a token at all"]) expect((await post(trackRoute, "/api/track", { token: bad })).status).toBe(404);
+    expect(await failures()).toBe(0);
+    const unknown = [];
+    for (let i = 0; i < 31; i += 1) unknown.push((await post(trackRoute, "/api/track", { token: `${"y".repeat(42)}${i % 10}` })).status);
+    expect(unknown.slice(0, 30).every((st) => st === 404)).toBe(true);
+    expect(unknown[30]).toBe(429);
+    // Someone else's failed guesses never lock the customer out of a live link, nor its cancellation.
     expect((await post(trackRoute, "/api/track", { token })).status).toBe(200);
+    expect((await post(cancelRoute, "/api/track/cancel", { token: `${"z".repeat(42)}1`, action: "cancel" })).status).toBe(429);
+  });
+
+  it("gives every live link its own per-minute limit, so one link's traffic never affects another", async () => {
+    const first = await linkFor((await newOrder()).orderId);
+    const second = await linkFor((await newOrder()).orderId);
+    const statuses = [];
+    for (let i = 0; i < 31; i += 1) statuses.push((await post(trackRoute, "/api/track", { token: first })).status);
+    expect(statuses.slice(0, 30).every((st) => st === 200)).toBe(true);
+    expect(statuses[30]).toBe(429);
+    expect((await post(trackRoute, "/api/track", { token: second })).status).toBe(200);
+    // Buckets are keyed by the link's id, never by the token or its digest.
+    const buckets = (await pool.query<{ bucket: string }>("select bucket from tracking_rate_limits")).rows.map((r) => r.bucket);
+    for (const bucket of buckets) for (const t of [first, second]) expect(bucket).not.toContain(t.slice(0, 12));
+    expect(buckets.filter((b) => b.startsWith("link:"))).toHaveLength(2);
+    await pool.query("delete from tracking_rate_limits");
+    expect((await post(trackRoute, "/api/track", { token: first })).status).toBe(200);
   });
 
   it("lets the customer cancel while pending, request when confirmed, and nothing after dispatch", async () => {

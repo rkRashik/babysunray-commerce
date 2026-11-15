@@ -391,6 +391,12 @@ export const orders = pgTable(
     ),
     check("orders_closed_at_consistent", sql`(${t.closedAt} is not null) = (${t.orderStatus} in ('cancelled', 'closed'))`),
     check("orders_delivered_at_consistent", sql`${t.deliveredAt} is null or ${t.fulfilmentStatus} = 'delivered' or ${t.orderStatus} = 'closed'`),
+    // A delivered order is closed only after its 7 × 24-hour return window (migration 0010), so closing never
+    // ends the customer's right to ask for a return (founder rule E).
+    check(
+      "orders_closed_after_return_window",
+      sql`${t.orderStatus} <> 'closed' or ${t.fulfilmentStatus} <> 'delivered' or (${t.deliveredAt} is not null and ${t.closedAt} > ${t.deliveredAt} + interval '7 days')`,
+    ),
     check("orders_version_positive", sql`${t.version} >= 1`),
   ],
 );
@@ -659,8 +665,9 @@ export const orderTrackingTokens = pgTable(
   ],
 );
 
-// Public tracking request counters. No client address is trusted, so the keys are global buckets
-// ('lookup', 'failure'); a per-client limit waits for the hosting and proxy decision.
+// Public tracking request counters (src/modules/orders/tracking.ts, TRACKING_LIMITS). No client address is
+// trusted, so the keys are 'failure' (unknown, revoked or expired tokens, all clients) and 'link:<link id>'
+// (one per live link, migration 0010); a per-client limit waits for the hosting and proxy decision.
 export const trackingRateLimits = pgTable(
   "tracking_rate_limits",
   {
@@ -669,7 +676,10 @@ export const trackingRateLimits = pgTable(
     count: integer("count").notNull(),
   },
   (t) => [
-    check("tracking_rate_limits_bucket_valid", sql`${t.bucket} in ('lookup', 'failure')`),
+    check(
+      "tracking_rate_limits_bucket_valid",
+      sql`${t.bucket} = 'failure' or ${t.bucket} ~ '^link:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'`,
+    ),
     check("tracking_rate_limits_count_positive", sql`${t.count} >= 1`),
   ],
 );

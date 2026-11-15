@@ -97,6 +97,16 @@ test("delivery charges, an assisted order, reservation, verification, packing, d
   await cod.getByLabel("Amount (BDT)").fill("60");
   await save(page, () => cod.getByRole("button", { name: "Record amount" }).click());
   await expect(dimension(page, "payment")).toHaveText("Settled");
+  // Settled, but delivered today: the order stays open until the 7-day return window has ended.
+  await expect(page.getByRole("region", { name: "Actions" })).not.toContainText("Close order");
+  await expect(page.getByTestId("close-hint")).toContainText("Can be closed after");
+  const db = await testDatabase();
+  try {
+    await db.query("update orders set delivered_at = now() - interval '7 days 1 minute' where id = $1", [orderUrl.split("/").at(-1)]);
+  } finally {
+    await db.end();
+  }
+  await page.reload();
   await step(page, "Close order");
   await expect(dimension(page, "order")).toHaveText("Closed");
   await expect(page.getByRole("list", { name: "Order history" })).toContainText("cod settled");
@@ -203,10 +213,49 @@ test("guest tracking: masked view, direct cancellation while pending, a request 
 
   // A revoked link shows the same generic message as any invalid one.
   await page.goto(confirmedUrl);
-  await page.getByRole("region", { name: "Customer tracking link" }).getByRole("button", { name: "Revoke link" }).click();
+  await submitAndWait(page, page.getByRole("region", { name: "Customer tracking link" }).getByRole("button", { name: "Revoke link" }));
   await guestPage.goto(link2);
-  await guestPage.reload();
   await expect(guestPage.getByRole("main").getByRole("alert")).toHaveText("This tracking link is not valid or has expired. Please contact the shop.");
+  await guest.close();
+});
+
+test("guest tracking: the link leaves the address bar and the tab's history once opened; reloading needs the link again", async ({ page, browser, baseURL }) => {
+  const sku = await seedSku(2);
+  await createOrder(page, sku, 1);
+  const tracking = page.getByRole("region", { name: "Customer tracking link" });
+  await tracking.getByRole("button", { name: "Create link" }).click();
+  const link = await tracking.getByRole("textbox").inputValue();
+  const token = link.split("#t=")[1];
+
+  const guest = await browser.newContext();
+  const g = await guest.newPage();
+  const requests: string[] = [];
+  g.on("request", (r) => requests.push(r.url()));
+  await g.goto(link);
+  await expect(g.getByRole("heading", { level: 1 })).toContainText("Order ORD-");
+  expect(g.url()).toBe(`${baseURL}/track`);
+  expect(await g.evaluate(() => [window.location.hash, window.history.state === null || !JSON.stringify(window.history.state).includes("#t=")])).toEqual(["", true]);
+  // Nothing is kept in the browser: no storage entry and no cookie.
+  expect(await g.evaluate(() => JSON.stringify({ ...window.localStorage }) + JSON.stringify({ ...window.sessionStorage }))).not.toContain(token);
+  expect(await guest.cookies()).toEqual([]);
+
+  // Back to this entry from another page, or a reload: the token is gone, so the page asks for the link.
+  await g.goto(`${baseURL}/`);
+  await expect(g).toHaveURL(`${baseURL}/`);
+  await g.goBack();
+  await expect(g).toHaveURL(`${baseURL}/track`);
+  await expect(g.getByRole("main").getByRole("alert")).toContainText("Open the tracking link from the shop's message");
+  await g.reload();
+  await expect(g.getByRole("main").getByRole("alert")).toContainText("needs the link again");
+
+  // Opening the original link again works, and is cleaned up again.
+  await g.goto(link);
+  await expect(g.getByRole("heading", { level: 1 })).toContainText("Order ORD-");
+  expect(g.url()).toBe(`${baseURL}/track`);
+  for (const url of requests) {
+    expect(url.startsWith(baseURL!), `third-party request: ${url}`).toBe(true);
+    expect(url).not.toContain(token);
+  }
   await guest.close();
 });
 

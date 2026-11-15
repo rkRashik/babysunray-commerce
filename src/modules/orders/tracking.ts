@@ -46,15 +46,27 @@ export async function revokeTrackingLink(tx: Db, orderId: string, actor: Actor):
   return revoked.length > 0;
 }
 
-/** The order a live token belongs to, or null for any malformed, unknown, revoked or expired token. */
-async function orderIdForToken(db: Db, token: unknown): Promise<string | null> {
-  if (typeof token !== "string" || !TOKEN.test(token)) return null;
+/** A live tracking link: the order it opens and the link's own id (never the token or its digest). */
+export type TrackingLink = { orderId: string; tokenId: string };
+
+/** True for text shaped like a token (43 base64url characters); anything else is refused without a lookup. */
+export const wellFormedToken = (token: unknown): token is string => typeof token === "string" && TOKEN.test(token);
+
+/** The link a token belongs to, or null for any malformed, unknown, revoked or expired token. */
+export async function findLiveLink(db: Db, token: unknown): Promise<TrackingLink | null> {
+  if (!wellFormedToken(token)) return null;
   const [row] = await db
-    .select({ orderId: orderTrackingTokens.orderId, revokedAt: orderTrackingTokens.revokedAt, closedAt: orders.closedAt, now: sql<Date>`now()`.mapWith((v: string | Date) => new Date(v)) })
+    .select({
+      orderId: orderTrackingTokens.orderId,
+      tokenId: orderTrackingTokens.id,
+      revokedAt: orderTrackingTokens.revokedAt,
+      closedAt: orders.closedAt,
+      now: sql<Date>`now()`.mapWith((v: string | Date) => new Date(v)),
+    })
     .from(orderTrackingTokens)
     .innerJoin(orders, eq(orders.id, orderTrackingTokens.orderId))
     .where(eq(orderTrackingTokens.tokenHash, digest(token)));
-  return row && trackingLinkLive(row.closedAt, row.revokedAt, row.now) ? row.orderId : null;
+  return row && trackingLinkLive(row.closedAt, row.revokedAt, row.now) ? { orderId: row.orderId, tokenId: row.tokenId } : null;
 }
 
 export type GuestView = {
@@ -76,8 +88,12 @@ export type GuestView = {
 
 /** The minimal, masked view a tracking link shows: no address, phone or name in full, no notes, no ids. */
 export async function guestView(db: Db, token: unknown): Promise<GuestView | null> {
-  const orderId = await orderIdForToken(db, token);
-  if (!orderId) return null;
+  const link = await findLiveLink(db, token);
+  return link ? viewOf(db, link.orderId) : null;
+}
+
+/** The guest view of the order a live link opens (the link was checked by the caller). */
+export function viewOf(db: Db, orderId: string): Promise<GuestView | null> {
   return db.transaction(async (tx) => {
     const locked = await lockOrder(tx, orderId);
     if (!locked) return null;
@@ -109,27 +125,36 @@ export async function guestView(db: Db, token: unknown): Promise<GuestView | nul
  * action is harmless: the order is already cancelled or already has its open request.
  */
 export async function guestCancel(db: Db, token: unknown, action: "cancel" | "request", reason?: string | null): Promise<GuestView | null> {
-  const orderId = await orderIdForToken(db, token);
-  if (!orderId) return null;
+  const link = await findLiveLink(db, token);
+  return link ? cancelFor(db, link.orderId, action, reason) : null;
+}
+
+/** guestCancel for the order of a link the caller already checked. */
+export async function cancelFor(db: Db, orderId: string, action: "cancel" | "request", reason?: string | null): Promise<GuestView | null> {
   try {
     await db.transaction(async (tx) => (action === "cancel" ? customerCancel(tx, orderId) : requestCancellation(tx, orderId, reason)));
   } catch (error) {
     if (!(error instanceof DomainError && error.code === "INVALID_TRANSITION")) throw error;
-    const view = await guestView(db, token);
+    const view = await viewOf(db, orderId);
     const repeated = view && (action === "cancel" ? view.orderStatus === "cancelled" : view.cancellationRequested);
     if (!repeated) throw error;
   }
-  return guestView(db, token);
+  return viewOf(db, orderId);
 }
 
-export const TRACKING_LIMITS = { lookup: 600, failure: 30 } as const;
-
 /**
- * Global fixed-window counters for the public tracking endpoint (no client address is trusted). Every lookup
- * counts in 'lookup'; a failed one also in 'failure'. Over either limit, lookups are refused for the rest of
- * the minute.
+ * Public tracking limits, per minute (S-15). No client address is trusted before a hosting and proxy decision,
+ * so the layers are: a malformed token is refused without touching the database; a live link has its own
+ * bucket (`link:<link id>`), so nobody else's traffic can use it up; unknown, revoked and expired tokens share
+ * one global `failure` bucket, which slows guessing without ever blocking a live link. Guessing itself is
+ * defeated by the token's 256 random bits, not by this limit. What this cannot stop without a trusted proxy or
+ * CDN: a flood that overloads the server or database, and anyone who holds a link using up that link's bucket.
  */
-export async function consumeTrackingLimit(db: Db, bucket: keyof typeof TRACKING_LIMITS): Promise<boolean> {
+export const TRACKING_LIMITS = { failure: 30, link: 30 } as const;
+export type TrackingBucket = "failure" | `link:${string}`;
+
+/** Counts one request in a fixed one-minute window; false once the bucket is over its limit this minute. */
+export async function consumeTrackingLimit(db: Db, bucket: TrackingBucket): Promise<boolean> {
   const { rows } = await db.execute<{ count: number }>(sql`
     insert into tracking_rate_limits as r (bucket, window_start, count)
     values (${bucket}, date_trunc('minute', now()), 1)
@@ -137,13 +162,5 @@ export async function consumeTrackingLimit(db: Db, bucket: keyof typeof TRACKING
       count = case when r.window_start = excluded.window_start then r.count + 1 else 1 end,
       window_start = excluded.window_start
     returning count`);
-  return rows[0].count <= TRACKING_LIMITS[bucket];
-}
-
-/** True while the failure bucket is over its limit this minute (checked before a lookup is attempted). */
-export async function trackingLocked(db: Db): Promise<boolean> {
-  const { rows } = await db.execute<{ count: number }>(
-    sql`select count from tracking_rate_limits where bucket = 'failure' and window_start = date_trunc('minute', now())`,
-  );
-  return (rows[0]?.count ?? 0) > TRACKING_LIMITS.failure;
+  return rows[0].count <= (bucket === "failure" ? TRACKING_LIMITS.failure : TRACKING_LIMITS.link);
 }

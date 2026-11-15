@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
 import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Db } from "../../src/db/database";
@@ -32,7 +34,7 @@ import { expireOverdueVerifications } from "../../src/modules/orders/service";
 import { guestCancel, guestView } from "../../src/modules/orders/tracking";
 import { clearAuthState, count, createTestAuth, createVerifiedOwner } from "../support/auth";
 import { createTestVariant, errorCodeOf, TEST_ACTOR, withFailingInserts } from "../support/fixtures";
-import { createTestDb } from "../support/test-database";
+import { connectTestClient, createTestDb } from "../support/test-database";
 
 // The order domain against PostgreSQL: atomic reservations, the lifecycle rules, expiry, cancellation, COD,
 // returns, RTO and guest tracking (docs/product/order-policy-decisions.md). Concurrency tests hold the
@@ -452,6 +454,9 @@ describe("fulfilment and stock", () => {
     await recordPaymentOnce(db, owner, key(), { orderId: id, expectedVersion: await v(id), kind: "collected", amountPaisa: order.totalPaisa, occurredOn: today });
     expect(await errorCodeOf(step(closeOrderOnce, id))).toBe("INVALID_TRANSITION");
     await recordPaymentOnce(db, owner, key(), { orderId: id, expectedVersion: await v(id), kind: "settled", amountPaisa: order.totalPaisa, occurredOn: today });
+    // Fully settled on delivery day: still open, because the return window has not ended.
+    expect(await errorCodeOf(step(closeOrderOnce, id))).toBe("INVALID_TRANSITION");
+    await pool.query("update orders set delivered_at = now() - interval '7 days 1 minute' where id = $1", [id]);
     const { value: closed } = await step(closeOrderOnce, id);
     expect(closed).toMatchObject({ orderStatus: "closed", paymentStatus: "settled" });
     expect(closed.closedAt).not.toBeNull();
@@ -586,6 +591,141 @@ describe("returns, RTO and inspection", () => {
     const { value: closed } = await step(closeOrderOnce, id);
     expect(closed).toMatchObject({ orderStatus: "closed", rtoChargePaisa: 5_000, totalPaisa: closed.subtotalPaisa + closed.deliveryChargePaisa });
   });
+});
+
+describe("return window and closing (founder rule E; engineering default in order-policy-decisions.md, section 3)", () => {
+  const deliveredAgo = (id: string, interval: string) => pool.query(`update orders set delivered_at = now() - interval '${interval}' where id = $1`, [id]);
+  const settleAll = async (id: string) => {
+    const { totalPaisa } = await getOrderDetail(db, id);
+    for (const kind of ["collected", "settled"] as const) await recordPaymentOnce(db, owner, key(), { orderId: id, expectedVersion: await v(id), kind, amountPaisa: totalPaisa, occurredOn: today });
+  };
+  const requestReturn = async (id: string, onDb: Db = db, expectedVersion?: number) => {
+    const order = await getOrderDetail(onDb, id);
+    return createReturnOnce(onDb, owner, key(), { orderId: id, expectedVersion: expectedVersion ?? order.version, kind: "return", reason: "size_or_preference", items: [{ orderItemId: order.items[0].id, quantity: 1 }] });
+  };
+
+  it("a settled order cannot be closed on its delivery day or on day six, and its return stays possible", async () => {
+    const a = await newSku(2);
+    const today0 = await delivered(a.sku);
+    await settleAll(today0);
+    expect(await errorCodeOf(step(closeOrderOnce, today0))).toBe("INVALID_TRANSITION");
+    const day6 = await delivered(a.sku);
+    await settleAll(day6);
+    await deliveredAgo(day6, "6 days");
+    expect(await errorCodeOf(step(closeOrderOnce, day6))).toBe("INVALID_TRANSITION");
+    // Settlement changed nothing about the customer's right: the return is still accepted.
+    const { value } = await requestReturn(day6);
+    expect(value).toMatchObject({ orderStatus: "confirmed", paymentStatus: "settled", returnStatus: "requested" });
+  });
+
+  it("at the exact end of the window a return is accepted and closing is refused; after it, the reverse", async () => {
+    const a = await newSku(2);
+    const id = await delivered(a.sku);
+    await settleAll(id);
+    // One transaction, so the database clock is the same instant for the update and both operations.
+    const atBoundary = await db.transaction(async (tx) => {
+      await tx.execute(sql`update orders set delivered_at = now() - interval '7 days' where id = ${id}`);
+      const closing = await errorCodeOf(closeOrderOnce(tx, owner, key(), { orderId: id, expectedVersion: (await getOrderDetail(tx, id)).version }));
+      const { value } = await requestReturn(id, tx);
+      return { closing, returnStatus: value.returnStatus };
+    });
+    expect(atBoundary).toEqual({ closing: "INVALID_TRANSITION", returnStatus: "requested" });
+
+    const late = await delivered(a.sku);
+    await settleAll(late);
+    await deliveredAgo(late, "7 days 1 second");
+    expect(await errorCodeOf(requestReturn(late))).toBe("INVALID_TRANSITION");
+    const { value: closed } = await step(closeOrderOnce, late);
+    expect(closed.orderStatus).toBe("closed");
+  });
+
+  it("a closed order takes no return and cannot be closed again; the database refuses an early close", async () => {
+    const a = await newSku(2);
+    const id = await delivered(a.sku);
+    await settleAll(id);
+    await deliveredAgo(id, "8 days");
+    await step(closeOrderOnce, id);
+    expect(await errorCodeOf(requestReturn(id))).toBe("INVALID_TRANSITION");
+    expect(await errorCodeOf(step(closeOrderOnce, id))).toBe("INVALID_TRANSITION");
+
+    const open = await delivered(a.sku);
+    await settleAll(open);
+    // Even a direct write cannot close a delivered order inside its window (CHECK orders_closed_after_return_window).
+    await expect(pool.query("update orders set order_status = 'closed', closed_at = now() where id = $1", [open])).rejects.toMatchObject({ code: "23514" });
+    expect((await getOrderDetail(db, open)).orderStatus).toBe("confirmed");
+  });
+
+  it("an open return blocks closing even after the window has ended", async () => {
+    const a = await newSku(2);
+    const id = await delivered(a.sku);
+    await settleAll(id);
+    await requestReturn(id);
+    await deliveredAgo(id, "8 days");
+    expect(await errorCodeOf(step(closeOrderOnce, id))).toBe("INVALID_TRANSITION");
+  });
+
+  it("closing and a return request at the same time: inside the window the return wins, after it the close", async () => {
+    const lockOrderRow = "select id from orders where id = $1 for update";
+    const a = await newSku(4);
+    const inside = await delivered(a.sku);
+    await settleAll(inside);
+    const version = await v(inside);
+    const [close, ret] = await race(lockOrderRow, inside, (racing) => [
+      closeOrderOnce(racing, owner, key(), { orderId: inside, expectedVersion: version }),
+      requestReturn(inside, racing, version),
+    ]);
+    expect(close.ok).toBe(false);
+    expect(ret.ok).toBe(true);
+    expect(await getOrderDetail(db, inside)).toMatchObject({ orderStatus: "confirmed", returnStatus: "requested" });
+
+    const after = await delivered(a.sku);
+    await settleAll(after);
+    await deliveredAgo(after, "8 days");
+    const later = await v(after);
+    const [close2, ret2] = await race(lockOrderRow, after, (racing) => [
+      closeOrderOnce(racing, owner, key(), { orderId: after, expectedVersion: later }),
+      requestReturn(after, racing, later),
+    ]);
+    expect([close2.ok, ret2.ok]).toEqual([true, false]);
+    expect(await getOrderDetail(db, after)).toMatchObject({ orderStatus: "closed", returnStatus: "none" });
+  });
+});
+
+describe("order detail", () => {
+  it("reads one order with every child collection, one query at a time on one connection", async () => {
+    const a = await newSku(2);
+    const id = await delivered(a.sku);
+    await settleAll(id);
+    // A client of its own (not from the pool), so the counting wrapper never reaches another test.
+    const client = await connectTestClient();
+    let inFlight = 0;
+    let most = 0;
+    const query = client.query.bind(client) as (...args: unknown[]) => Promise<unknown>;
+    (client as unknown as { query: (...args: unknown[]) => Promise<unknown> }).query = (...args: unknown[]) => {
+      inFlight += 1;
+      most = Math.max(most, inFlight);
+      return query(...args).finally(() => {
+        inFlight -= 1;
+      });
+    };
+    try {
+      const single = drizzle({ client });
+      const direct = await getOrderDetail(single, id);
+      const nested = await single.transaction((tx) => getOrderDetail(tx, id));
+      expect(most).toBe(1);
+      expect(nested).toEqual(direct);
+      expect(direct.items).toHaveLength(1);
+      expect(direct.payments.map((p) => p.kind)).toEqual(["collected", "settled"]);
+      expect(direct.events.at(-1)?.event).toBe("cod_settled");
+    } finally {
+      await client.end();
+    }
+  });
+
+  async function settleAll(id: string) {
+    const { totalPaisa } = await getOrderDetail(db, id);
+    for (const kind of ["collected", "settled"] as const) await recordPaymentOnce(db, owner, key(), { orderId: id, expectedVersion: await v(id), kind, amountPaisa: totalPaisa, occurredOn: today });
+  }
 });
 
 describe("guest tracking", () => {

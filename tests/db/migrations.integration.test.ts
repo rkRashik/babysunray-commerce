@@ -121,6 +121,7 @@ describe("migrations", () => {
       "order_tracking_tokens_token_hash_key",
       "orders_address_valid",
       "orders_amounts_valid",
+      "orders_closed_after_return_window",
       "orders_closed_at_consistent",
       "orders_cod_amounts_valid",
       "orders_created_by_user_id_auth_users_id_fk",

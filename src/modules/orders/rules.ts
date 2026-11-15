@@ -120,6 +120,9 @@ export type OrderAction = (typeof ORDER_ACTIONS)[number];
 
 const HOUR = 3_600_000;
 
+/** The last moment a return can be requested (founder rule E): 7 × 24 hours after the recorded delivery. */
+export const returnWindowEnd = (deliveredAt: Date) => new Date(deliveredAt.getTime() + RETURN_WINDOW_DAYS * 24 * HOUR);
+
 /** True once 24 elapsed hours have passed since submission, whether or not the expiry has been recorded. */
 export const verificationOverdue = (s: Pick<OrderState, "orderStatus" | "verificationExpiresAt">, now: Date) =>
   s.orderStatus === "verification_expired" || (s.orderStatus === "pending_verification" && now.getTime() >= s.verificationExpiresAt.getTime());
@@ -144,22 +147,12 @@ export function allowedActions(s: OrderState, now: Date): Set<OrderAction> {
     if (s.fulfilmentStatus === "rto") allowed.add("receive_rto");
     if (s.fulfilmentStatus === "rto" || s.fulfilmentStatus === "rto_received") allowed.add("record_rto_charge");
     if ((s.fulfilmentStatus === "dispatched" || s.fulfilmentStatus === "delivered") && s.codCollectedPaisa < s.totalPaisa) allowed.add("record_collection");
-    if (
-      s.fulfilmentStatus === "delivered" &&
-      !s.openReturn &&
-      s.deliveredAt !== null &&
-      now.getTime() <= s.deliveredAt.getTime() + RETURN_WINDOW_DAYS * 24 * HOUR
-    ) {
-      allowed.add("create_return");
-    }
-    if (
-      (s.fulfilmentStatus === "delivered" || s.fulfilmentStatus === "rto_received") &&
-      s.codSettledPaisa === s.codCollectedPaisa &&
-      !s.openReturn &&
-      !s.awaitingInspection
-    ) {
-      allowed.add("close");
-    }
+    const windowOpen = s.deliveredAt !== null && now.getTime() <= returnWindowEnd(s.deliveredAt).getTime();
+    if (s.fulfilmentStatus === "delivered" && !s.openReturn && windowOpen) allowed.add("create_return");
+    // A delivered order is closed only after its return window, so closing (or settling) never ends the
+    // customer's right to ask for a return (engineering default, order-policy-decisions.md section 3).
+    const closable = s.fulfilmentStatus === "rto_received" || (s.fulfilmentStatus === "delivered" && s.deliveredAt !== null && !windowOpen);
+    if (closable && s.codSettledPaisa === s.codCollectedPaisa && !s.openReturn && !s.awaitingInspection) allowed.add("close");
   }
   if (s.codSettledPaisa < s.codCollectedPaisa && s.orderStatus !== "cancelled") allowed.add("record_settlement");
   return allowed;

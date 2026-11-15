@@ -5,7 +5,7 @@ import { getDb } from "@/db/client";
 import { DomainError } from "@/modules/domain-error";
 import { formatPaisa } from "@/modules/money";
 import { getOrderDetail, type OrderDetail } from "@/modules/orders/queries";
-import { allowedActions, dhakaToday, formatOrderNumber, type OrderAction, RETURN_WINDOW_DAYS, verificationOverdue, ZONE_LABELS } from "@/modules/orders/rules";
+import { allowedActions, dhakaToday, formatOrderNumber, type OrderAction, returnWindowEnd, verificationOverdue, ZONE_LABELS } from "@/modules/orders/rules";
 import { ActionForm, Choice, Field } from "../../_components/action-form";
 import { OfficeShell, Section, formatTime, noticeFor } from "../../_components/shell";
 import { requireOffice } from "../../_lib/session";
@@ -65,6 +65,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
   const unsettled = order.codCollectedPaisa - order.codSettledPaisa;
   const receivable = order.totalPaisa - order.codCollectedPaisa;
   const today = dhakaToday(now);
+  const windowEnd = order.deliveredAt ? returnWindowEnd(order.deliveredAt) : null;
 
   return (
     <OfficeShell title={`Order ${formatOrderNumber(order.number)}`} current="orders" notice={noticeFor(done)} breadcrumbs={[{ href: "/office/orders", label: "Orders" }]}>
@@ -118,7 +119,10 @@ export default async function OrderPage({ params, searchParams }: Props) {
         )}
         {order.fulfilmentStatus === "packed" && request ? <p className="text-sm text-gray-700">Dispatch is blocked until the cancellation request is decided.</p> : null}
         {(order.fulfilmentStatus === "delivered" || order.fulfilmentStatus === "rto_received") && order.orderStatus === "confirmed" && !allowed.has("close") ? (
-          <p className="text-sm text-gray-700">Closing needs every collected amount settled, no open return and nothing awaiting inspection.</p>
+          <p className="text-sm text-gray-700" data-testid="close-hint">
+            {windowEnd && now.getTime() <= windowEnd.getTime() ? `Can be closed after ${formatTime(windowEnd)}, when the 7-day return window has ended. ` : null}
+            Closing needs every collected amount settled, no open return and nothing awaiting inspection.
+          </p>
         ) : null}
       </Section>
 
@@ -248,7 +252,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
       {allowed.has("create_return") ? (
         <Section title="New return or exchange">
           <p className="text-sm text-gray-700">
-            Accepted until {order.deliveredAt ? formatTime(new Date(order.deliveredAt.getTime() + RETURN_WINDOW_DAYS * 24 * 3_600_000)) : "—"} (7 days after delivery). Size or preference
+            Accepted until {windowEnd ? formatTime(windowEnd) : "—"} (7 days after delivery). Size or preference
             changes need unused, unwashed goods with tags; wrong or defective goods do not. Who pays return shipping follows the reason.
           </p>
           <ActionForm action={createReturnAction} idempotencyKey={randomUUID()} hidden={{ ...ref, ...Object.fromEntries(order.items.map((i, n) => [`itemId${n}`, i.id])) }} submitLabel="Record request">

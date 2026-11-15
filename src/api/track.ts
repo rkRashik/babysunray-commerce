@@ -1,10 +1,10 @@
 import "server-only";
 import * as z from "zod";
 import { getDb } from "@/db/client";
-import { pgErrorCode } from "@/db/database";
+import { type Db, pgErrorCode } from "@/db/database";
 import { getAuth } from "@/modules/auth/server";
 import { DomainError } from "@/modules/domain-error";
-import { consumeTrackingLimit, type GuestView, trackingLocked } from "@/modules/orders/tracking";
+import { consumeTrackingLimit, findLiveLink, type GuestView, wellFormedToken } from "@/modules/orders/tracking";
 
 // Transport for the public guest-tracking endpoints (/api/track, /api/track/cancel; founder rule K, S-15).
 // The token travels only in a same-origin POST body, never in a URL, so it cannot reach access logs, history
@@ -23,11 +23,18 @@ const MAX_BODY = 2048;
 const answer = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: HEADERS });
 export const NOT_FOUND = () => answer(404, { error: "not_found", message: "This tracking link is not valid or has expired. Please contact the shop." });
 
+const LIMITED = () => answer(429, { error: "rate_limited", message: "Too many requests. Please wait a minute and try again." });
+
 /**
- * Checks origin, media type and size, applies the global limits, parses the body with `schema`, and runs
- * `run`. `run` answers null for any unusable token; that counts as a failure.
+ * Checks origin, media type and size, parses the body with `schema` (which has a `token`), applies the
+ * layered limits of TRACKING_LIMITS and runs `run` for the order of a live link. A malformed token is answered
+ * without any database work; an unknown, revoked or expired one counts as a failure.
  */
-export async function trackingRequest<S extends z.ZodType>(request: Request, schema: S, run: (body: z.output<S>) => Promise<GuestView | null>): Promise<Response> {
+export async function trackingRequest<S extends z.ZodType<{ token: string }>>(
+  request: Request,
+  schema: S,
+  run: (db: Db, orderId: string, body: z.output<S>) => Promise<GuestView | null>,
+): Promise<Response> {
   try {
     if (request.headers.get("origin") !== getAuth().options.baseURL) return answer(403, { error: "forbidden" });
     if (!/^application\/json\s*(;\s*charset\s*=\s*"?utf-8"?\s*)?$/i.test(request.headers.get("content-type") ?? "")) return answer(415, { error: "unsupported_media_type" });
@@ -41,16 +48,13 @@ export async function trackingRequest<S extends z.ZodType>(request: Request, sch
     }
     const parsed = schema.safeParse(json);
     if (!parsed.success) return answer(400, { error: "bad_request" });
+    if (!wellFormedToken(parsed.data.token)) return NOT_FOUND();
     const db = getDb();
-    if ((await trackingLocked(db)) || !(await consumeTrackingLimit(db, "lookup"))) {
-      return answer(429, { error: "rate_limited", message: "Too many requests. Please wait a minute and try again." });
-    }
-    const view = await run(parsed.data);
-    if (!view) {
-      await consumeTrackingLimit(db, "failure");
-      return NOT_FOUND();
-    }
-    return answer(200, { data: view });
+    const link = await findLiveLink(db, parsed.data.token);
+    if (!link) return (await consumeTrackingLimit(db, "failure")) ? NOT_FOUND() : LIMITED();
+    if (!(await consumeTrackingLimit(db, `link:${link.tokenId}`))) return LIMITED();
+    const view = await run(db, link.orderId, parsed.data);
+    return view ? answer(200, { data: view }) : NOT_FOUND();
   } catch (error) {
     if (error instanceof DomainError && error.code === "INVALID_TRANSITION") {
       return answer(409, { error: "not_allowed", message: "This order can no longer be cancelled here. Please contact the shop." });

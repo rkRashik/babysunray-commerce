@@ -18,6 +18,7 @@
     "db:migrate": "node scripts/migrate-dev.mts",
     "auth:bootstrap-owner": "node scripts/bootstrap-owner.mts",
     "auth:reset-owner-password": "node scripts/reset-owner-password.mts",
+    "config:check": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/config-check.mts",
     "orders:expire-verification": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/expire-verification.mts",
     "backup:create": "node scripts/backup-create.mts",
     "backup:verify": "node scripts/backup-verify.mts",

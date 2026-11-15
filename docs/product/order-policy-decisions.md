@@ -54,7 +54,7 @@ Allowed transitions (anything else is refused with `INVALID_TRANSITION`):
 | Deliver | dispatched | delivered | None |
 | Mark RTO | dispatched | rto | None |
 | Receive RTO | rto | rto_received | Every line enters quarantine; nothing becomes sellable |
-| Close | confirmed, fulfilment delivered or rto_received, everything collected is settled, no open return and nothing awaiting inspection | closed | None |
+| Close | confirmed; fulfilment rto_received, or delivered **and its 7-day return window has ended**; everything collected is settled, no open return and nothing awaiting inspection | closed | None |
 
 Cancellation and closing set `closed_at`; the tracking link stops working 30 days later.
 
@@ -70,10 +70,11 @@ Chosen to implement section 1 where it leaves a technical detail open. They make
 | Payment collection | Recorded only after dispatch, at most the expected COD in total; settlement at most what was collected; partial amounts allowed. |
 | Refunds | Only for an approved return, at most the money collected minus earlier refunds, and at most the returned items' value. Method is bKash, Nagad or bank transfer. The 7-working-day deadline is shown, not computed, because the working-day calendar (weekends, public holidays) is not defined. |
 | Exchanges | Request, receipt, inspection and Owner decision are recorded. **Executing** an exchange (sending the replacement) is not automated: the Owner creates a new assisted order for the replacement, which reserves stock normally. Who pays for the replacement's delivery and how a price difference is handled are **not decided** (section 4). |
-| Return window | Up to 7 × 24 hours after the recorded delivery time. |
+| Return window | Up to 7 × 24 hours after the recorded delivery time, that moment included. |
+| Closing a delivered order (Gate H.17) | Allowed only after the return window has ended (more than 7 × 24 hours after delivery), in addition to the conditions in section 2. Before that the Office shows when the order can be closed; a database check (`orders_closed_after_return_window`) refuses an earlier close even from a direct write. Chosen so that neither closing nor COD settlement can end the customer's right to ask for a return (rule E). It adds no return condition and no refund rule. RTO orders, which were never delivered, are unaffected. The tracking link, which expires 30 days after closing, therefore works for the whole return window. |
 | Closing an order | An explicit Owner action, allowed only under the conditions in section 2. Delivered is not Closed. |
-| Tracking credential | 32 random bytes (base64url); only its SHA-256 digest is stored; one active link per order; the link carries it in the URL fragment, which browsers never send to the server, and the page redeems it with a same-origin POST. The link is shown once, when created. |
-| Public tracking rate limit | No client header is trusted, so limits are global: lookups per minute and failed lookups per minute across all clients (`tracking_rate_limits`). Repeated failures can slow tracking for everyone; a per-client limit needs the hosting and proxy decision. |
+| Tracking credential | 32 random bytes (base64url); only its SHA-256 digest is stored; one active link per order; the link carries it in the URL fragment, which browsers never send to the server, and the page redeems it with a same-origin POST. The link is shown once, when created. Once the page has read the token it replaces its own history entry with plain `/track` and keeps the token in memory only, so reloading, or returning to the page later, needs the link again (Gate H.17). |
+| Public tracking rate limit | No client header is trusted (Gate H.17): a malformed token is refused without a database lookup; each live link has its own limit of 30 requests per minute; unknown, revoked and expired tokens share one global limit of 30 per minute, which never blocks a live link. Guessing is defeated by the token's 256 random bits, not by the limit. Still possible without a trusted proxy or CDN (hosting decision): a flood that overloads the server or database, and someone who holds a link using up that link's minute. |
 | Phone numbers | Bangladesh mobile numbers only: `01` followed by an operator digit 3–9 and 8 digits; `+880` / `880` prefixes, spaces and hyphens are accepted on input and stored as `01XXXXXXXXX`. |
 | Technical bounds (not policy) | Delivery charge 0 to BDT 10,000; order line quantity 1 to 1,000; up to 20 lines per order. |
 
@@ -84,4 +85,4 @@ Chosen to implement section 1 where it leaves a technical detail open. They make
 - Return inspection criteria (open decision 9) beyond pass or fail with a note.
 - Delivery charge amounts, and any district-level zones (O-8).
 - Public delivery, return/exchange and privacy policy text (S-17, G-7).
-- Whether an order may be closed before its 7-day return window has passed. Today closing is allowed once delivered and settled; a closed order cannot get a return request, so an early close ends the customer's return window in the system.
+- Whether a delivered order may ever be closed before its 7-day return window has passed (for example when the customer says they will not return anything). The engineering default since Gate H.17 refuses it (section 3).

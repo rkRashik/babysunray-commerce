@@ -1,7 +1,6 @@
 import * as z from "zod";
 import { tokenField, trackingRequest } from "@/api/track";
-import { getDb } from "@/db/client";
-import { guestCancel } from "@/modules/orders/tracking";
+import { cancelFor } from "@/modules/orders/tracking";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,5 +10,5 @@ export const dynamic = "force-dynamic";
 const body = z.strictObject({ token: tokenField, action: z.enum(["cancel", "request"]), reason: z.string().max(500).nullable().optional() });
 
 export async function POST(request: Request): Promise<Response> {
-  return trackingRequest(request, body, (b) => guestCancel(getDb(), b.token, b.action, b.reason ?? null));
+  return trackingRequest(request, body, (db, orderId, b) => cancelFor(db, orderId, b.action, b.reason ?? null));
 }

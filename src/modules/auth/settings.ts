@@ -4,44 +4,72 @@
 
 export type AuthSettings = { secret: string; baseURL: string };
 
+/** The environment cannot run sign-in. The message names the variable and the rule, never a value. */
+export class AuthConfigError extends Error {
+  override name = "AuthConfigError";
+}
+
 type Env = Record<string, string | undefined>;
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 // Better Auth reads these itself and would widen the configuration behind this validation: extra trusted
 // origins, an unvalidated rotated secret list, or telemetry. They are refused until a gate approves them.
-const UNSUPPORTED = ["BETTER_AUTH_TRUSTED_ORIGINS", "BETTER_AUTH_SECRETS", "BETTER_AUTH_TELEMETRY"];
+export const UNSUPPORTED = ["BETTER_AUTH_TRUSTED_ORIGINS", "BETTER_AUTH_SECRETS", "BETTER_AUTH_TELEMETRY"];
 
 export function readAuthSettings(env: Env): AuthSettings {
   for (const name of UNSUPPORTED) {
-    if (env[name] !== undefined && env[name] !== "") throw new Error(`${name} is not supported in this project.`);
+    if (env[name] !== undefined && env[name] !== "") throw new AuthConfigError(`${name} is not supported in this project.`);
   }
   return { secret: validateSecret(env.BETTER_AUTH_SECRET), baseURL: validateBaseURL(env.BETTER_AUTH_URL, env.NODE_ENV) };
 }
 
-function validateSecret(secret: string | undefined): string {
-  if (!secret) throw new Error("BETTER_AUTH_SECRET is not set.");
-  if (/change_me/i.test(secret)) throw new Error("BETTER_AUTH_SECRET is still the placeholder.");
+export function validateSecret(secret: string | undefined): string {
+  if (!secret) throw new AuthConfigError("BETTER_AUTH_SECRET is not set.");
+  if (/change_me/i.test(secret)) throw new AuthConfigError("BETTER_AUTH_SECRET is still the placeholder.");
   // Same estimate Better Auth uses for its warning (length x log2 of distinct characters), enforced here.
   const bits = secret.length * Math.log2(new Set(secret).size);
   if (secret.length < 32 || bits < 120) {
-    throw new Error("BETTER_AUTH_SECRET must be at least 32 random characters (for example `openssl rand -base64 32`).");
+    throw new AuthConfigError("BETTER_AUTH_SECRET must be at least 32 random characters (for example `openssl rand -base64 32`).");
   }
   return secret;
 }
 
-function validateBaseURL(raw: string | undefined, nodeEnv: string | undefined): string {
-  if (!raw) throw new Error("BETTER_AUTH_URL is not set.");
+export function validateBaseURL(raw: string | undefined, nodeEnv: string | undefined): string {
+  if (!raw) throw new AuthConfigError("BETTER_AUTH_URL is not set.");
   let url: URL;
   try {
     url = new URL(raw);
   } catch {
-    throw new Error("BETTER_AUTH_URL is not a valid URL.");
+    throw new AuthConfigError("BETTER_AUTH_URL is not a valid URL.");
   }
   if (url.username || url.password || url.search || url.hash || (url.pathname !== "/" && url.pathname !== "")) {
-    throw new Error("BETTER_AUTH_URL must be an origin only, such as https://shop.example.");
+    throw new AuthConfigError("BETTER_AUTH_URL must be an origin only, such as https://shop.example.");
   }
   if (url.protocol === "https:") return url.origin;
   if (url.protocol === "http:" && LOCAL_HOSTS.has(url.hostname) && nodeEnv !== "production") return url.origin;
-  throw new Error("BETTER_AUTH_URL must use https (plain http is allowed only for localhost outside production).");
+  throw new AuthConfigError("BETTER_AUTH_URL must use https (plain http is allowed only for localhost outside production).");
+}
+
+/**
+ * Why sign-in cannot work with this environment, one entry per variable, or [] when it can. For the Office
+ * sign-in page and `npm run config:check`: names and rules only, never a value.
+ */
+export function authSettingProblems(env: Env): { name: string; problem: string }[] {
+  const problems: { name: string; problem: string }[] = [];
+  for (const name of UNSUPPORTED) {
+    if (env[name] !== undefined && env[name] !== "") problems.push({ name, problem: `${name} is not supported in this project; remove it.` });
+  }
+  const attempts: [string, () => unknown][] = [
+    ["BETTER_AUTH_SECRET", () => validateSecret(env.BETTER_AUTH_SECRET)],
+    ["BETTER_AUTH_URL", () => validateBaseURL(env.BETTER_AUTH_URL, env.NODE_ENV)],
+  ];
+  for (const [name, attempt] of attempts) {
+    try {
+      attempt();
+    } catch (error) {
+      problems.push({ name, problem: error instanceof Error ? error.message : `${name} is not valid.` });
+    }
+  }
+  return problems;
 }

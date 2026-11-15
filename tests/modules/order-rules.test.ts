@@ -8,6 +8,7 @@ import {
   type OrderState,
   parseOrderNumber,
   paymentStatusFor,
+  returnWindowEnd,
   trackingLinkLive,
   validatePastDate,
   verificationOverdue,
@@ -49,12 +50,28 @@ describe("allowedActions (the transition table in order-policy-decisions.md)", (
 
   it("returns are possible for 7 × 24 hours after delivery; closing needs settlement and no open aftercare", () => {
     const deliveredAt = new Date(NOW.getTime() - 2 * HOUR);
-    expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "delivered", deliveredAt })).toEqual(["close", "create_return", "record_collection"]);
+    expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "delivered", deliveredAt })).toEqual(["create_return", "record_collection"]);
     expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "delivered", deliveredAt: new Date(NOW.getTime() - 7 * 24 * HOUR - 1) })).not.toContain("create_return");
     expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "delivered", deliveredAt, codCollectedPaisa: 10_000, codSettledPaisa: 5_000 })).toEqual(["create_return", "record_settlement"]);
     expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "delivered", deliveredAt, openReturn: true })).not.toContain("close");
     expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "rto_received", awaitingInspection: true })).toEqual(["record_rto_charge"]);
     expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "rto_received" })).toEqual(["close", "record_rto_charge"]);
+  });
+
+  it("a delivered order cannot be closed until its return window has ended, even when fully settled", () => {
+    const settled = { orderStatus: "confirmed", fulfilmentStatus: "delivered", codCollectedPaisa: 10_000, codSettledPaisa: 10_000 } as const;
+    const deliveredAgo = (ms: number) => actions({ ...settled, deliveredAt: new Date(NOW.getTime() - ms) });
+    const WINDOW = 7 * 24 * HOUR;
+    expect(returnWindowEnd(new Date("2026-11-01T10:00:00Z")).toISOString()).toBe("2026-11-08T10:00:00.000Z");
+    // Delivered today, on day six, and at the exact last moment: returns allowed, closing not.
+    for (const ago of [0, 6 * 24 * HOUR, WINDOW]) expect(deliveredAgo(ago)).toEqual(["create_return"]);
+    // One millisecond later the window is over: closing is allowed and a return is not.
+    expect(deliveredAgo(WINDOW + 1)).toEqual(["close"]);
+    // An open return or goods awaiting inspection still block closing after the window.
+    expect(actions({ ...settled, deliveredAt: new Date(NOW.getTime() - WINDOW - 1), openReturn: true })).toEqual([]);
+    expect(actions({ ...settled, deliveredAt: new Date(NOW.getTime() - WINDOW - 1), awaitingInspection: true })).toEqual([]);
+    // Without a recorded delivery time there is no window to wait for, so nothing can be closed.
+    expect(actions({ ...settled, deliveredAt: null })).toEqual([]);
   });
 
   it("cancelled and closed orders allow nothing", () => {

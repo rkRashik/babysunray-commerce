@@ -14,11 +14,13 @@ Commands run from the project folder. Never paste passwords, passphrases, databa
 
 ## 2. Environment variables (without showing values)
 
-The application reads `.env.local` (copied from `.env.example`). To check what is set without printing secrets, list the names only:
+The application reads `.env.local` (copied from `.env.example`). To check it without printing secrets:
 
 ```
-node -e "const {parseEnv}=require('node:util');const e=parseEnv(require('fs').readFileSync('.env.local','utf8'));for(const k of Object.keys(e))console.log(k, e[k]?'set':'EMPTY')"
+npm run config:check
 ```
+
+It lists every variable as set, missing or invalid with the rule it breaks (never the value), then connects to `babysunray_dev` and reports whether it is reachable, how many migrations are applied and whether an active Owner exists. It changes nothing, and exits with an error until everything required is ready.
 
 | Variable | Needed for | Checked by |
 |---|---|---|
@@ -33,7 +35,7 @@ node -e "const {parseEnv}=require('node:util');const e=parseEnv(require('fs').re
 
 | Symptom | Cause and fix |
 |---|---|
-| Office pages show "This page could not be shown" right after start, server log says `BETTER_AUTH_SECRET is not set.` | The secret is missing from `.env.local`. Generate one (`openssl rand -base64 32`), add it, restart `npm run dev`. Changing the secret signs everyone out. |
+| The sign-in page says "Sign-in is not set up on this server yet" and names `BETTER_AUTH_SECRET` (development), or "Sign-in is not available right now" (production) | The secret is missing or invalid in `.env.local`. Generate one (`openssl rand -base64 32`), add it, restart `npm run dev`, run `npm run config:check`. Changing the secret signs everyone out; it does not change or delete any account. |
 | `BETTER_AUTH_SECRET is still the placeholder.` | Replace `CHANGE_ME` with a generated value. |
 | `BETTER_AUTH_URL must use https ...` | In production mode the site must be served over https. For local work use `npm run dev` with `http://localhost:3000`. |
 | "Too many attempts" on sign-in | Better Auth's sign-in rate limit (3 attempts per 10 seconds per address). Wait, then try again. |
@@ -56,6 +58,13 @@ Only apply migrations with `npm run db:migrate`. Take a backup first (section 8)
 
 - `npm run orders:expire-verification` releases the stock of orders still Pending Verification 24 hours after submission and marks them Verification Expired. It is safe to run any number of times, also while the app runs: each order is handled in its own short transaction and skipped if another operation holds it. Correctness never depends on it (submissions, adjustments and confirmations release overdue holds themselves). No scheduler runs it.
 - A failed or interrupted action can be retried safely: every Office form and API write carries an idempotency key, so pressing the button again after a lost answer records the change once. A form refused with "changed after you loaded it" must be reloaded and checked, not forced.
+
+## 5a. Guest tracking links
+
+- The Owner creates a link on the order page; it is shown once. Send it to the customer as it is.
+- When the customer opens it, the page reads the token, removes it from the address bar and from the tab's back and forward history, and keeps it only in memory. Reloading the page, going back to it later or opening `/track` alone shows "Open the tracking link from the shop's message"; opening the link from the message again works. The browser's own list of visited pages may still hold the link the customer opened, as for any link opened from a message.
+- Revoking or regenerating the link stops the old one at once. A link stops working 30 days after the order is closed, and a delivered order can be closed only after its 7-day return window.
+- Limits: 30 requests a minute per link; unknown, revoked or expired links from everyone together 30 a minute ("Too many requests", then wait a minute). Someone else's failed attempts never block a customer's live link. A deliberate flood can still slow or stop the whole site until hosting with a trusted proxy is chosen.
 
 ## 6. Exports
 
