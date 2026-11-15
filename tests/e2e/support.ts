@@ -1,4 +1,8 @@
+import { createHash, randomBytes } from "node:crypto";
+import { writeFileSync } from "node:fs";
+import path from "node:path";
 import { expect, type Locator, type Page } from "@playwright/test";
+import sharp from "sharp";
 import type { Client } from "pg";
 import { connectTestClient } from "../support/test-database";
 
@@ -114,6 +118,53 @@ export async function productOf(sku: string): Promise<{ id: string; slug: string
   try {
     const { rows } = await db.query<{ id: string; slug: string }>("select p.id, p.slug from products p join variants v on v.product_id = p.id where v.sku = $1", [sku]);
     return rows[0];
+  } finally {
+    await db.end();
+  }
+}
+
+/**
+ * A complete fictional product for the storefront preview, written straight into babysunray_test: names and
+ * text in both languages, a category, a confirmed fabric statement, three SKUs with stock, a size chart and one
+ * generated photo in the run's throwaway media folder.
+ */
+export async function seedStorefrontProduct(options: { featured?: boolean } = {}): Promise<{ productId: string; slug: string; nameEn: string; nameBn: string; skus: string[] }> {
+  const { slug, sku } = uniqueName("e2e-shop");
+  const nameEn = `Fictional Romper ${slug.slice(-5)}`;
+  const nameBn = `কাল্পনিক রম্পার ${slug.slice(-5)}`;
+  const db = await testDatabase();
+  try {
+    const owner = await db.query<{ id: string }>("select id from auth_users where email = $1", [E2E_OWNER.email]);
+    const category = await db.query<{ id: string }>(
+      "insert into product_categories (slug, name_en, name_bn) values ($1, 'Fictional rompers', 'কাল্পনিক রম্পার') returning id",
+      [`${slug}-cat`],
+    );
+    const product = await db.query<{ id: string }>(
+      `insert into products (slug, name_en, name_bn, description_en, description_bn, category_id, fabric_en, fabric_bn, fabric_confirmed_at, fabric_confirmed_by_user_id, care_en, care_bn, featured)
+       values ($1, $2, $3, 'A fictional romper for tests.', 'পরীক্ষার জন্য একটি কাল্পনিক রম্পার।', $4, 'Fictional fabric', 'কাল্পনিক কাপড়', now(), $5, 'Fictional care', 'কাল্পনিক যত্ন', $6) returning id`,
+      [slug, nameEn, nameBn, category.rows[0].id, owner.rows[0].id, options.featured ?? false],
+    );
+    const productId = product.rows[0].id;
+    const skus: string[] = [];
+    for (const [suffix, size, colour, price, stock] of [["A", "0-3M", "Ivory", 85_000, 5], ["B", "3-6M", "Ivory", 92_050, 3], ["C", "3-6M", "Sand", 92_050, 0]] as const) {
+      const v = await db.query<{ id: string }>("insert into variants (product_id, sku, size, colour, price_paisa) values ($1, $2, $3, $4, $5) returning id", [productId, `${sku}-${suffix}`, size, colour, price]);
+      await db.query("insert into inventory_balances (variant_id, on_hand) values ($1, $2)", [v.rows[0].id, stock]);
+      if (stock > 0) {
+        await db.query("insert into stock_movements (variant_id, movement_type, quantity_delta, actor_type, actor_ref) values ($1, 'receipt', $2, 'system', 'e2e-seed')", [v.rows[0].id, stock]);
+      }
+      skus.push(`${sku}-${suffix}`);
+    }
+    for (const [size, point, mm] of [["0-3M", "chest", 245], ["0-3M", "length", 380], ["3-6M", "chest", 260], ["3-6M", "length", 410]] as const) {
+      await db.query("insert into product_measurements (product_id, size, point, value_mm) values ($1, $2, $3, $4)", [productId, size, point, mm]);
+    }
+    const image = await sharp({ create: { width: 800, height: 1000, channels: 3, background: { r: 120, g: 84, b: 52 } } }).png().toBuffer();
+    const key = `${randomBytes(16).toString("hex")}.png`;
+    writeFileSync(path.join(process.env.E2E_MEDIA_DIR!, key), image);
+    await db.query(
+      "insert into product_media (product_id, storage_key, content_type, byte_size, width, height, sha256, alt_en, alt_bn, position, created_by_user_id) values ($1, $2, 'image/png', $3, 800, 1000, $4, 'Fictional romper, front', 'কাল্পনিক রম্পার, সামনে', 0, $5)",
+      [productId, key, image.length, createHash("sha256").update(image).digest("hex"), owner.rows[0].id],
+    );
+    return { productId, slug, nameEn, nameBn, skus };
   } finally {
     await db.end();
   }

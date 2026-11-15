@@ -329,6 +329,9 @@ What batch H.17–H.20 built, as of 15 Nov 2026. Basis labels are unchanged: imp
 | I-5, K-2 | Local development storage only | Owner photo upload with type, size and decoding checks, metadata removed, stored outside the repository; a manifest (`product_media`) and `npm run media:verify`. No production storage, no automatic photo backup. Decision 14 stays open ([ADR-0006](../adr/0006-product-media-storage.md)). |
 | I-6 | Advisory checklist only | A read-only readiness checklist separates approved requirements, this proposed rule and recommendations. No publish action exists. |
 | D-8 | Extended | Three more export datasets: product content, size charts and the photo manifest. |
+| S-1, S-2, S-6, S-7, S-8, S-13 | Owner-only preview, not live | A bilingual storefront prototype under `/office/storefront-preview` with product list, search and filters, product page with sizes in cm, a cart re-checked against the database and the delivery charge shown before checkout. Visual design is a prototype (BR-6, decision 4). Checkout wording stays P. Accessibility checked with axe (WCAG 2.2 A and AA rules) and keyboard tests; no usability test with people yet (G-9). |
+| S-3, S-4, S-17 | Simulated only | Guest COD checkout runs as a simulation that records nothing. Public checkout stays disabled until G-7 is met. |
+| S-14 | Still undecided | The preview has product search and filters so the founder can judge them; customer search at launch, accounts, wishlists and reviews remain undecided. |
 | S-15, G-4 | Hardened, not complete | The tracking page removes the token from the address bar and the tab's history and keeps it in memory only. Limits per live link and a global limit for unknown tokens that never blocks a live link. A per-client limit and flood protection still need a trusted proxy (decision 1). |
 
 ## 10. Phasing (proposed)

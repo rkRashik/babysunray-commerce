@@ -6,7 +6,7 @@ Long-term goals (founder-confirmed; see requirements B-8 to B-13): a complete, p
 
 ## Status
 
-**Foundation and decisions phase.** The Next.js application is scaffolded as an engineering base only. `src/app/page.tsx` is a development-status page that proves the framework renders; it is not the approved homepage. There is no storefront, no public checkout and no deployment; orders are internal, entered by the Owner (see Orders). The backend foundation exists: a catalogue and stock schema with services and idempotent operations, an authentication and authorisation foundation, an Owner API under `/api/v1` for the draft catalogue and physical stock, and a functional Owner Office at `/office` for the same operations, orders, a dashboard, reports, exports, physical stock counts and printable documents (see Catalogue and inventory, Orders, Authentication, API, Owner Office and Backup and recovery), with PostgreSQL integration and browser tests. Local encrypted backups and a restore drill on fictional data exist; no backup schedule, off-device copy or recovery objective is decided. The Office is functional screens only, not an approved visual design. The two local databases are created by the founder with `db/local-setup.sql`. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`).
+**Foundation and decisions phase.** The Next.js application is scaffolded as an engineering base only. `src/app/page.tsx` is a development-status page that proves the framework renders; it is not the approved homepage. There is no public storefront, no public checkout and no deployment; orders are internal, entered by the Owner (see Orders). An Owner-only storefront preview shows how draft products would look to customers (see Storefront preview); nothing in it is public. The backend foundation exists: a catalogue and stock schema with services and idempotent operations, an authentication and authorisation foundation, an Owner API under `/api/v1` for the draft catalogue and physical stock, and a functional Owner Office at `/office` for the same operations, orders, a dashboard, reports, exports, physical stock counts and printable documents (see Catalogue and inventory, Orders, Authentication, API, Owner Office and Backup and recovery), with PostgreSQL integration and browser tests. Local encrypted backups and a restore drill on fictional data exist; no backup schedule, off-device copy or recovery objective is decided. The Office is functional screens only, not an approved visual design. The two local databases are created by the founder with `db/local-setup.sql`. The Git repository is private on GitHub (`rkRashik/babysunray-commerce`).
 
 Requirements and the stack decision are drafts under founder review.
 
@@ -187,6 +187,20 @@ Owner Office only, development storage only (`src/modules/media`, [ADR-0006](doc
 - Serving: `/office/media/{id}` for the signed-in Owner only (`401` otherwise), `private, no-cache` with an ETag, `nosniff` and a sandbox policy; `?w=320|640|1280` gives a smaller copy.
 - **Database backups do not contain the photo files**: copy the folder separately ([runbook](docs/operations/runbook.md), Product photos).
 
+## Storefront preview
+
+A private, bilingual prototype of the customer shop at `/office/storefront-preview/en` and `/office/storefront-preview/bn` (`src/app/office/storefront-preview`, `src/modules/storefront`). It shows the Owner's **draft** products as customers might see them, so it is Owner-only: every page, Server Action and photo checks the session and the `storefront:preview` permission on the server, and as an `/office` route it is never indexed, framed or cached. Labelled "Storefront Preview — Not Live" on every page. Prototype layout from the approved logo colours as a reference only; the website's design, colours and typography are not decided (BR-6).
+
+| Screen | Does |
+|---|---|
+| Home | The store line from the approved business context (B-2, S-4), the Owner's categories, featured and newest products. No slogan, review or stock photo. |
+| Products | Search (English or Bangla name), category, size, colour and in-stock filters in the URL, 24 per page. |
+| Product | Photos, size choice with the product's own measurements in cm, colour, quantity, availability, description, a fabric statement only once the Owner confirmed it, care, the size chart, configured delivery charges, and a note that policy text is not approved yet. |
+| Cart | SKUs and quantities only, kept in this browser (localStorage). Every change re-reads prices, names, stock and the delivery charge from the database (`quoteCart`, integer paisa): a price change shows at once, a sold-out, deactivated, archived or unknown SKU is named and blocks checkout. The cart is not a reservation. |
+| Checkout | Guest form (name, Bangladesh mobile number, address, Dhaka City or Outside Dhaka), the received-not-confirmed explanation (founder rule B), the COD total. **Simulation only** (`simulateCheckout`): the same validation an order gets, then nothing: no order, reservation, idempotency record, message or log of the details. Tests count every table before and after. |
+
+Interface text is in `src/modules/storefront/i18n.ts` (English and Bangla, Bangla digits and BDT formatting without floating point; wording Draft — Founder Review). Product text is never translated or generated: a missing language shows the other language, marked with its `lang`, and the Office shows what is missing. Public checkout stays disabled until S-17 and G-7 are met; there is no anonymous catalogue, order endpoint or publish action. A future public shop needs its own reads of published products only.
+
 ## API
 
 Owner-only endpoints under `/api/v1`, authenticated with a Bearer token only (browser cookies are refused). The contract is served at `/api/v1/openapi.json`; usage, errors, idempotency, limits, pagination and the compatibility rules are in [docs/api/README.md](docs/api/README.md), decisions in [ADR-0004](docs/adr/0004-api-v1-and-bearer-transport.md) and [ADR-0005](docs/adr/0005-operation-idempotency.md).
@@ -220,6 +234,7 @@ A minimal, functional internal area at `/office` (`src/app/office`), built with 
 | `/office/products/{id}/measurements` | Size chart in centimetres for each size on its active SKUs | `catalog:read`, `catalog:write` |
 | `/office/products/{id}/photos` | Upload, describe, reorder, replace and remove photos (Product photos above) | `catalog:read`; changes `catalog:write` |
 | `/office/categories` | Create categories (slug, English and Bangla names) and rename them | `catalog:read`, `catalog:write` |
+| `/office/storefront-preview/{en,bn}/...` | The private storefront preview (Storefront preview above) | `storefront:preview` |
 | `/office/variants/{id}/edit` | Edit an active variant's size, colour and price in Taka (prefilled); shows its stock, which the edit never changes | `catalog:read`, `catalog:write`, `stock:read` |
 | `/office/orders` | Orders newest first; filter by order status, "needs attention" (deadline passed, expired, open cancellation request) and order number; the four dimensions side by side | `orders:read` |
 | `/office/orders/new` | Assisted order (Messenger, WhatsApp, other): customer, Bangladesh phone, address, configured zone, up to 5 SKU lines; stock reserved at once | `orders:write` |

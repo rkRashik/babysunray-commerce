@@ -14,6 +14,9 @@ export const PERMISSIONS = [
   "reports:read",
   // Exports may hold customer personal data (requirement D-6): a permission of its own, audited per request.
   "exports:create",
+  // The private storefront preview (draft products, cart and checkout simulation). Never granted to anonymous
+  // visitors: a public storefront would need its own, published-only reads.
+  "storefront:preview",
   "users:manage",
 ] as const;
 

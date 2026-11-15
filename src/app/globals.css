@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+/* Storefront preview prototype tokens (src/app/office/storefront-preview). Taken from the approved logo colours
+   as a reference only: the website's colour system and typography are not decided (BR-6), so this is a
+   prototype. Contrast on ivory: cocoa 13.1:1, umber 6.0:1, tan-ink 6.6:1; amber is used behind cocoa text
+   (4.8:1) or as decoration, never as text on ivory (2.7:1). */
+@theme {
+  --color-sf-cocoa: #332923;
+  --color-sf-amber: #c28b56;
+  --color-sf-ivory: #f9f6f1;
+  --color-sf-sand: #e8d5bf;
+  --color-sf-umber: #6b5b4f;
+  --color-sf-tan: #7a4e24;
+  --color-sf-line: #e3d7c8;
+  --color-sf-danger: #9b2c2c;
+}
+
 /* Bangla text: installed system fonts that cover the script, and room for its taller glyphs. A fallback for
    legibility only, not a brand typeface (open decision 4). */
 :lang(bn) {
@@ -34,5 +49,25 @@
   }
   .print-sheet thead {
     display: table-header-group;
+  }
+}
+
+/* Storefront preview: one visible focus style everywhere (cocoa on light, ivory on the dark band), and no
+   motion for people who ask for less. */
+.sf :focus-visible {
+  outline: 2px solid var(--color-sf-cocoa);
+  outline-offset: 2px;
+}
+.sf .sf-dark :focus-visible {
+  outline-color: var(--color-sf-ivory);
+}
+.sf h1:lang(en),
+.sf h2:lang(en) {
+  letter-spacing: -0.015em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sf * {
+    scroll-behavior: auto !important;
+    transition: none !important;
   }
 }

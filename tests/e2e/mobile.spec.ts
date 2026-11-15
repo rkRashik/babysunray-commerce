@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { clearSignInLimits, ensureZones, seedSku, signIn, uniqueName } from "./support";
+import { clearSignInLimits, ensureZones, seedSku, seedStorefrontProduct, signIn, uniqueName } from "./support";
 
 // The Office on a phone-sized screen (Pixel 7 profile: touch, 412 px wide).
 
@@ -109,5 +109,43 @@ test("dashboard, reports, exports and a stock count on a phone, without sideways
   await expect(page.getByTestId(`line-state-${sku}`)).toContainText("difference 0");
   await page.getByRole("button", { name: "Apply corrections" }).tap();
   await expect(page.getByTestId("count-status")).toContainText("applied");
+  await noSideScroll(page);
+});
+
+test("storefront preview on a phone: the menu, size and colour by touch, the cart and checkout, without sideways scrolling", async ({ page }) => {
+  await ensureZones();
+  const product = await seedStorefrontProduct();
+  await page.goto("/office/storefront-preview/en");
+  await noSideScroll(page);
+  const menu = page.getByTestId("mobile-menu");
+  await menu.getByText("Menu").tap();
+  await expect(menu.getByRole("link", { name: "All products" })).toBeVisible();
+  await menu.getByRole("searchbox").fill(product.nameEn);
+  await menu.getByRole("button", { name: "Search" }).tap();
+  await expect(page.getByTestId("result-count")).toHaveText("1 product");
+  await noSideScroll(page);
+  await page.getByRole("link", { name: new RegExp(product.nameEn) }).tap();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(product.nameEn);
+  await noSideScroll(page);
+  const chip = (text: string) => page.locator("label").filter({ has: page.getByRole("radio", { name: new RegExp(`^${text}`) }) });
+  await chip("0-3M").tap();
+  await chip("Ivory").tap();
+  await page.getByRole("button", { name: "One more" }).tap();
+  await page.getByRole("button", { name: "Add to cart" }).tap();
+  await expect(page.getByTestId("cart-count")).toHaveText("2");
+  // Touch targets of the buying controls are at least 44 × 44 CSS pixels.
+  for (const control of [page.getByRole("button", { name: "One more" }), page.getByRole("button", { name: "Add to cart" }), chip("0-3M")]) {
+    const box = (await control.boundingBox())!;
+    expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+  }
+  await page.getByRole("link", { name: /^Cart/ }).tap();
+  await expect(page.getByTestId("subtotal")).toHaveText("৳ 1,700");
+  await page.getByTestId(`cart-line-${product.skus[0]}`).getByRole("button", { name: /^One fewer/ }).tap();
+  await expect(page.getByTestId("subtotal")).toHaveText("৳ 850");
+  await page.getByLabel(/^Dhaka City/).tap();
+  await expect(page.getByTestId("total")).toHaveText("৳ 910");
+  await noSideScroll(page);
+  await page.getByRole("link", { name: "Go to checkout" }).tap();
+  await expect(page.getByTestId("simulation-note")).toBeVisible();
   await noSideScroll(page);
 });
