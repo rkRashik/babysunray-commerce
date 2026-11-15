@@ -251,7 +251,7 @@ describe("stock", () => {
     await receiveStock(db, { sku: variant.sku, quantity: 7, actor: { type: "system", ref: "integration-test" } });
     const { status, body } = await get({ path: `/skus/${variant.sku.toLowerCase()}/stock`, template: "/skus/{sku}/stock", params: { sku: variant.sku.toLowerCase() } });
     expect(status).toBe(200);
-    expect(body.data).toEqual({ sku: variant.sku, variantId: variant.id, onHand: 7 });
+    expect(body.data).toEqual({ sku: variant.sku, variantId: variant.id, onHand: 7, reserved: 0, available: 7 });
   });
 
   it("answers 404 for an unknown SKU and 400 for an invalid one", async () => {

@@ -29,6 +29,19 @@ const ROUTES: Record<string, RouteModule> = {
   "/stock-adjustments": (await import("../../src/app/api/v1/stock-adjustments/route")) as unknown as RouteModule,
   "/skus/{sku}/stock": (await import("../../src/app/api/v1/skus/[sku]/stock/route")) as unknown as RouteModule,
   "/skus/{sku}/movements": (await import("../../src/app/api/v1/skus/[sku]/movements/route")) as unknown as RouteModule,
+  "/orders": (await import("../../src/app/api/v1/orders/route")) as unknown as RouteModule,
+  "/orders/{orderId}": (await import("../../src/app/api/v1/orders/[orderId]/route")) as unknown as RouteModule,
+  "/orders/{orderId}/transitions": (await import("../../src/app/api/v1/orders/[orderId]/transitions/route")) as unknown as RouteModule,
+  "/orders/{orderId}/cancellation-review": (await import("../../src/app/api/v1/orders/[orderId]/cancellation-review/route")) as unknown as RouteModule,
+  "/orders/{orderId}/payments": (await import("../../src/app/api/v1/orders/[orderId]/payments/route")) as unknown as RouteModule,
+  "/orders/{orderId}/rto-charge": (await import("../../src/app/api/v1/orders/[orderId]/rto-charge/route")) as unknown as RouteModule,
+  "/orders/{orderId}/returns": (await import("../../src/app/api/v1/orders/[orderId]/returns/route")) as unknown as RouteModule,
+  "/orders/{orderId}/returns/{returnId}/steps": (await import("../../src/app/api/v1/orders/[orderId]/returns/[returnId]/steps/route")) as unknown as RouteModule,
+  "/orders/{orderId}/inspections/{quarantineItemId}": (await import("../../src/app/api/v1/orders/[orderId]/inspections/[quarantineItemId]/route")) as unknown as RouteModule,
+  "/orders/{orderId}/tracking-link": (await import("../../src/app/api/v1/orders/[orderId]/tracking-link/route")) as unknown as RouteModule,
+  "/orders/{orderId}/tracking-link/revoke": (await import("../../src/app/api/v1/orders/[orderId]/tracking-link/revoke/route")) as unknown as RouteModule,
+  "/delivery-zones": (await import("../../src/app/api/v1/delivery-zones/route")) as unknown as RouteModule,
+  "/delivery-zones/{code}": (await import("../../src/app/api/v1/delivery-zones/[code]/route")) as unknown as RouteModule,
 };
 const openApiRoute = await import("../../src/app/api/v1/openapi.json/route");
 const { apiPost } = await import("../../src/api/v1/http");
@@ -533,7 +546,7 @@ describe("failures and contract", () => {
 
   it("documents every route and method that exists, and nothing else", async () => {
     const implemented = Object.entries(ROUTES).flatMap(([template, module]) =>
-      ["GET", "POST", "PATCH"].flatMap((m) => (module[m] ? [`${m.toLowerCase()} ${template}`] : [])),
+      ["GET", "POST", "PATCH", "PUT"].flatMap((m) => (module[m] ? [`${m.toLowerCase()} ${template}`] : [])),
     );
     // A route exports 405 handlers for the methods it does not support; ask each handler.
     const real: string[] = [];

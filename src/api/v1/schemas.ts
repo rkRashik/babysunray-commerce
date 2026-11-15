@@ -35,6 +35,14 @@ export const PROBLEM_CODES = [
   "VERSION_CONFLICT",
   "PRODUCT_NOT_EDITABLE",
   "VARIANT_NOT_EDITABLE",
+  // Added in 1.3.0 with orders.
+  "ORDER_NOT_FOUND",
+  "RETURN_NOT_FOUND",
+  "QUARANTINE_ITEM_NOT_FOUND",
+  "INVALID_TRANSITION",
+  "DELIVERY_ZONE_UNAVAILABLE",
+  "VARIANT_NOT_ORDERABLE",
+  "PAYMENT_LIMIT_EXCEEDED",
 ] as const;
 export type ProblemCode = (typeof PROBLEM_CODES)[number];
 
@@ -93,7 +101,13 @@ export const productSchema = productSummarySchema
   .register(apiRegistry, { id: "Product" });
 
 export const stockLevelSchema = z
-  .object({ sku: z.string(), variantId: z.uuid(), onHand: z.int().min(0) })
+  .object({
+    sku: z.string(),
+    variantId: z.uuid(),
+    onHand: z.int().min(0).meta({ description: "Physical units in stock." }),
+    reserved: z.int().min(0).meta({ description: "Units held for orders not yet dispatched (added in 1.3.0)." }),
+    available: z.int().min(0).meta({ description: "onHand minus reserved: what a new order can take (added in 1.3.0)." }),
+  })
   .register(apiRegistry, { id: "StockLevel" });
 
 export const stockMovementSchema = z

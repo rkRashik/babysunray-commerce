@@ -7,7 +7,7 @@ The contract itself is `GET /api/v1/openapi.json` (OpenAPI 3.1, generated from `
 
 ## What exists
 
-Owner-only endpoints for the draft catalogue and physical stock. There are no public endpoints, no order, reservation or selling endpoints, and nothing publishes a product.
+Owner-only endpoints for the draft catalogue, physical stock and internal (Owner-assisted) orders. There are no public endpoints and no checkout, and nothing publishes a product.
 
 | Endpoint | Permission | Does |
 |---|---|---|
@@ -23,6 +23,15 @@ Owner-only endpoints for the draft catalogue and physical stock. There are no pu
 | `POST /api/v1/stock-adjustments` | `stock:adjust` | Change a SKU's stock up or down with a required reason (201); never below zero |
 | `GET /api/v1/skus/{sku}/stock` | `stock:read` | On-hand stock of a SKU |
 | `GET /api/v1/skus/{sku}/movements` | `stock:read` | The SKU's stock ledger, oldest first; `limit`, `cursor` |
+| `GET /api/v1/orders`, `GET /api/v1/orders/{orderId}` | `orders:read` | Orders newest first (`status`, `attention`, `number`, `limit`, `cursor`); one order with items, holds, history, requests, returns, quarantine and money |
+| `POST /api/v1/orders` | `orders:write` | Owner-assisted order (201): reserves every line or creates nothing |
+| `POST /api/v1/orders/{orderId}/transitions` | `orders:write` | `confirm`, `pack`, `dispatch`, `deliver`, `mark_rto`, `receive_rto`, `cancel`, `close` |
+| `POST /api/v1/orders/{orderId}/cancellation-review` | `orders:write` | Approve or reject a customer's cancellation request |
+| `POST /api/v1/orders/{orderId}/payments`, `.../rto-charge` | `payments:record` | Courier collection or settlement (201); the actual RTO charge |
+| `POST /api/v1/orders/{orderId}/returns`, `.../returns/{returnId}/steps` | `orders:write` (refund step: `payments:record`) | Open a return or exchange (201); receive, approve, reject, refund, complete |
+| `POST /api/v1/orders/{orderId}/inspections/{quarantineItemId}` | `stock:receive` | Restock (once) or reject a returned or RTO item |
+| `POST /api/v1/orders/{orderId}/tracking-link`, `.../tracking-link/revoke` | `orders:write` | New guest tracking link (201; token shown once); revoke it |
+| `GET /api/v1/delivery-zones`, `PUT /api/v1/delivery-zones/{code}` | `orders:read` / `settings:write` | Configured zones; set a zone's charge and active flag |
 
 The actor of every stock movement is the signed-in user. A request cannot name an actor, user or role; such fields are refused as unknown.
 
@@ -72,9 +81,9 @@ The token is a session: it expires with it, and sign-out, `revoke-session` or di
 | 400 | `VALIDATION_FAILED`, `MALFORMED_JSON`, `IDEMPOTENCY_KEY_REQUIRED` |
 | 401 | `UNAUTHENTICATED` |
 | 403 | `FORBIDDEN`, `ORIGIN_NOT_ALLOWED` |
-| 404 | `PRODUCT_NOT_FOUND`, `VARIANT_NOT_FOUND`, `ROUTE_NOT_FOUND` |
+| 404 | `PRODUCT_NOT_FOUND`, `VARIANT_NOT_FOUND`, `ORDER_NOT_FOUND`, `RETURN_NOT_FOUND`, `QUARANTINE_ITEM_NOT_FOUND`, `ROUTE_NOT_FOUND` |
 | 405 | `METHOD_NOT_ALLOWED` |
-| 409 | `SLUG_TAKEN`, `SKU_TAKEN`, `INSUFFICIENT_STOCK`, `STOCK_LIMIT_EXCEEDED`, `VERSION_CONFLICT`, `PRODUCT_NOT_EDITABLE`, `VARIANT_NOT_EDITABLE` |
+| 409 | `SLUG_TAKEN`, `SKU_TAKEN`, `INSUFFICIENT_STOCK`, `STOCK_LIMIT_EXCEEDED`, `VERSION_CONFLICT`, `PRODUCT_NOT_EDITABLE`, `VARIANT_NOT_EDITABLE`, `INVALID_TRANSITION`, `DELIVERY_ZONE_UNAVAILABLE`, `VARIANT_NOT_ORDERABLE`, `PAYMENT_LIMIT_EXCEEDED` |
 | 413 | `PAYLOAD_TOO_LARGE` |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` |
 | 422 | `IDEMPOTENCY_KEY_REUSED` |
@@ -89,6 +98,17 @@ The token is a session: it expires with it, and sign-out, `revoke-session` or di
 - **Rate limits:** per signed-in user and one-minute window, separately for reads (default 300) and writes (default 60). Set with `API_RATE_LIMIT_READS_PER_MINUTE` and `API_RATE_LIMIT_WRITES_PER_MINUTE`; these are technical limits, not business policy. Requests without a valid token are rejected before counting, so they cannot use up a user's quota. Windows are fixed, so up to twice the limit can pass around a window boundary.
 - **CORS:** none. No response carries `Access-Control-*` headers, a preflight (`OPTIONS`) is answered 405, and a request whose `Origin` is not the site's own origin is refused with `403 ORIGIN_NOT_ALLOWED`. Native clients send no `Origin` and are unaffected.
 
+## Orders
+
+Rules: [order-policy-decisions.md](../product/order-policy-decisions.md) (founder-approved rules, the transition table and the engineering defaults).
+
+- Every order change sends the order `version` it last read; a stale one gets `409 VERSION_CONFLICT`, so a stale screen never overrides a newer transition. Every change runs once per `Idempotency-Key`.
+- `POST /orders` accepts no price or total: the server computes them and snapshots the zone's configured delivery charge. Every line is reserved, or nothing is created (`INSUFFICIENT_STOCK`, `DELIVERY_ZONE_UNAVAILABLE`, `VARIANT_NOT_ORDERABLE`). Only assisted sources (`messenger`, `whatsapp`, `other`) are accepted.
+- `GET /skus/{sku}/stock` returns `onHand`, `reserved` and `available`.
+- Money (payments, refunds) is integer paisa and never exceeds the expected COD (collection), the collected amount (settlement, refunds) or the returned goods' value (refunds).
+- The tracking-link token is in the creation answer only (`token: null` on a replay). Build the link as `https://<site>/track#t=<token>`: the fragment is never sent to a server. Treat the token as a credential; it is the customer's only key to the order.
+- Customer contact details appear in Owner responses but are never searchable, so they never travel in a URL.
+
 ## Versioning and compatibility
 
 Within `/api/v1`, only compatible changes are made:
@@ -102,6 +122,8 @@ Version 1.1.0 added the write endpoints, problem codes, the `body` error locatio
 
 Version 1.2.0 (compatible) added `PATCH /products/{productId}`, `PATCH /variants/{variantId}`, the optional `q` search parameter, the `version` field on products and variants, and the 409 codes `VERSION_CONFLICT`, `PRODUCT_NOT_EDITABLE` and `VARIANT_NOT_EDITABLE`.
 
+Version 1.3.0 added the order and delivery-zone endpoints, `reserved` and `available` on stock levels, the movement types `dispatch` and `return_restock` (the movement `type` list is now documented as one that may grow), and the problem codes `ORDER_NOT_FOUND`, `RETURN_NOT_FOUND`, `QUARANTINE_ITEM_NOT_FOUND`, `INVALID_TRANSITION`, `DELIVERY_ZONE_UNAVAILABLE`, `VARIANT_NOT_ORDERABLE` and `PAYMENT_LIMIT_EXCEEDED`. The new movement types are a change a strict 1.2.0 client would notice; no such client exists.
+
 ## Testing
 
 ```
@@ -112,4 +134,4 @@ npm run test:contract   # OpenAPI validity, plus every endpoint against the docu
 
 ## Not available yet
 
-Public catalogue, orders, reservations, selling, returns, client SDKs and native apps. Retention of idempotency records. A per-client (IP) limit for unauthenticated traffic waits for the hosting and proxy decision.
+Public catalogue, public checkout and website orders, online payments, courier integrations, client SDKs and native apps. Retention of idempotency records. A per-client (IP) limit for unauthenticated traffic waits for the hosting and proxy decision.

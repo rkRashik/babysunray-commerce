@@ -48,6 +48,13 @@ const PROBLEMS: Record<ProblemCode, [status: number, title: string]> = {
   VERSION_CONFLICT: [409, "Changed since it was read"],
   PRODUCT_NOT_EDITABLE: [409, "Product cannot be edited"],
   VARIANT_NOT_EDITABLE: [409, "Variant cannot be edited"],
+  ORDER_NOT_FOUND: [404, "Order not found"],
+  RETURN_NOT_FOUND: [404, "Return not found"],
+  QUARANTINE_ITEM_NOT_FOUND: [404, "Quarantined item not found"],
+  INVALID_TRANSITION: [409, "Not allowed in the current state"],
+  DELIVERY_ZONE_UNAVAILABLE: [409, "No active delivery charge for this zone"],
+  VARIANT_NOT_ORDERABLE: [409, "SKU cannot be ordered"],
+  PAYMENT_LIMIT_EXCEEDED: [409, "Amount exceeds what is allowed"],
   PAYLOAD_TOO_LARGE: [413, "Request body too large"],
   UNSUPPORTED_MEDIA_TYPE: [415, "Unsupported media type"],
   IDEMPOTENCY_KEY_REUSED: [422, "Idempotency-Key reused"],
@@ -222,6 +229,13 @@ const DOMAIN_TO_PROBLEM: Partial<Record<DomainError["code"], ProblemCode>> = {
   VERSION_CONFLICT: "VERSION_CONFLICT",
   PRODUCT_NOT_EDITABLE: "PRODUCT_NOT_EDITABLE",
   VARIANT_NOT_EDITABLE: "VARIANT_NOT_EDITABLE",
+  ORDER_NOT_FOUND: "ORDER_NOT_FOUND",
+  RETURN_NOT_FOUND: "RETURN_NOT_FOUND",
+  QUARANTINE_ITEM_NOT_FOUND: "QUARANTINE_ITEM_NOT_FOUND",
+  INVALID_TRANSITION: "INVALID_TRANSITION",
+  DELIVERY_ZONE_UNAVAILABLE: "DELIVERY_ZONE_UNAVAILABLE",
+  VARIANT_NOT_ORDERABLE: "VARIANT_NOT_ORDERABLE",
+  PAYMENT_LIMIT_EXCEEDED: "PAYMENT_LIMIT_EXCEEDED",
 };
 
 function toProblem(error: unknown, requestId: string): Response {

@@ -174,9 +174,14 @@ Owner-only endpoints under `/api/v1`, authenticated with a Bearer token only (br
 | `GET /api/v1/products`, `GET /api/v1/products/{productId}` | `catalog:read` |
 | `POST /api/v1/products`, `POST .../products/{productId}/variants`, `.../archive`, `POST .../variants/{variantId}/deactivate`, `PATCH /api/v1/products/{productId}`, `PATCH /api/v1/variants/{variantId}` | `catalog:write` |
 | `POST /api/v1/stock-receipts` / `POST /api/v1/stock-adjustments` | `stock:receive` / `stock:adjust` |
-| `GET /api/v1/skus/{sku}/stock`, `GET /api/v1/skus/{sku}/movements` | `stock:read` |
+| `GET /api/v1/skus/{sku}/stock` (on-hand, reserved, available), `GET /api/v1/skus/{sku}/movements` | `stock:read` |
+| `GET /api/v1/orders`, `GET /api/v1/orders/{orderId}`, `GET /api/v1/delivery-zones` | `orders:read` |
+| `POST /api/v1/orders`, `.../transitions`, `.../cancellation-review`, `.../returns`, `.../returns/{returnId}/steps`, `.../tracking-link`, `.../tracking-link/revoke` | `orders:write` (refunds: `payments:record`) |
+| `POST .../orders/{orderId}/payments`, `.../rto-charge` | `payments:record` |
+| `POST .../orders/{orderId}/inspections/{quarantineItemId}` | `stock:receive` |
+| `PUT /api/v1/delivery-zones/{code}` | `settings:write` |
 
-`GET /api/v1/products` also searches (`q`: slug, English or Bangla name, SKU). Edits carry the `version` last read, so a stale client gets `409 VERSION_CONFLICT` instead of overwriting a newer change. Every write needs an `Idempotency-Key` and a JSON body of at most 64 KiB. Requests are rate limited per signed-in user (defaults 300 reads and 60 writes per minute; `API_RATE_LIMIT_READS_PER_MINUTE`, `API_RATE_LIMIT_WRITES_PER_MINUTE`). No CORS access is granted. Not built: public catalogue, orders, reservations, selling, and a limit for unauthenticated traffic (needs the hosting decision). Unsupported methods answer 405 and unknown paths 404, both as problem responses.
+`GET /api/v1/products` also searches (`q`: slug, English or Bangla name, SKU). Edits carry the `version` last read, so a stale client gets `409 VERSION_CONFLICT` instead of overwriting a newer change. Every write needs an `Idempotency-Key` and a JSON body of at most 64 KiB. Requests are rate limited per signed-in user (defaults 300 reads and 60 writes per minute; `API_RATE_LIMIT_READS_PER_MINUTE`, `API_RATE_LIMIT_WRITES_PER_MINUTE`). No CORS access is granted. Not built: public catalogue, public checkout, online payments, courier integrations, and a limit for unauthenticated traffic (needs the hosting decision). Unsupported methods answer 405 and unknown paths 404, both as problem responses.
 
 ## Owner Office
 

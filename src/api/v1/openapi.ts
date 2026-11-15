@@ -1,4 +1,6 @@
 import * as z from "zod";
+// Registers the order schemas in apiRegistry before the components are generated.
+import "./order-schemas";
 import { apiRegistry, PROBLEM_CODES, type ProblemCode } from "./schemas";
 
 // The OpenAPI 3.1 description of /api/v1, served at /api/v1/openapi.json. Only implemented endpoints
@@ -6,7 +8,7 @@ import { apiRegistry, PROBLEM_CODES, type ProblemCode } from "./schemas";
 // parameters are written out below. tests/db/api*.integration.test.ts check real responses against this
 // document, and tests/api/openapi.test.ts validates it against the OpenAPI 3.1 schema.
 
-export const API_VERSION = "1.2.0";
+export const API_VERSION = "1.3.0";
 
 const ref = (id: string) => ({ $ref: `#/components/schemas/${id}` });
 
@@ -126,6 +128,185 @@ function write(w: Write) {
   };
 }
 
+const ORDER = "docs/product/order-policy-decisions.md";
+const orderId = uuidParameter("orderId");
+const orderWrite = (w: Omit<Write, "ok" | "notFound"> & { ok?: Write["ok"]; notFound?: ProblemCode[] }) =>
+  write({ ok: { status: "200", description: "The order as it is now.", schemaId: "OrderResponse" }, notFound: ["ORDER_NOT_FOUND"], ...w });
+
+// Orders (added in 1.3.0). Rules and the transition table: docs/product/order-policy-decisions.md.
+function orderPaths() {
+  return {
+    "/orders": {
+      get: read("GET, POST", {
+        operationId: "listOrders",
+        summary: "List orders, newest first",
+        description: "Requires `orders:read`. Contact details are returned to the Owner but cannot be searched, so they never travel in a URL.",
+        parameters: [
+          limitParameter,
+          cursorParameter,
+          { name: "status", in: "query", required: false, schema: { type: "string", enum: ["pending_verification", "verification_expired", "confirmed", "cancelled", "closed"] } },
+          { name: "attention", in: "query", required: false, description: "`true`: only orders past their verification deadline, expired, or with an open cancellation request.", schema: { type: "string", enum: ["true"] } },
+          { name: "number", in: "query", required: false, description: "Order reference, e.g. ORD-000042 or 42.", schema: { type: "string", minLength: 1, maxLength: 20 } },
+        ],
+        responses: { "200": ok("A page of orders.", "OrderList") },
+      }),
+      post: write({
+        operationId: "createOrder",
+        summary: "Create an Owner-assisted order (Messenger, WhatsApp, other)",
+        description: `Starts Pending Verification and reserves every line in the same transaction, or creates nothing (no backorders). Prices, delivery charge and total are computed on the server from the catalogue and the zone's active configured charge. See ${ORDER}.`,
+        permission: "orders:write",
+        request: { schemaId: "CreateOrderRequest", required: true },
+        ok: { status: "201", description: "The created order.", schemaId: "OrderResponse" },
+        notFound: ["VARIANT_NOT_FOUND"],
+        conflict: ["INSUFFICIENT_STOCK", "DELIVERY_ZONE_UNAVAILABLE", "VARIANT_NOT_ORDERABLE"],
+        allow: "GET, POST",
+      }),
+    },
+    "/orders/{orderId}": {
+      get: read("GET", {
+        operationId: "getOrder",
+        summary: "Get an order with its items, holds, history and money",
+        description: "Requires `orders:read`.",
+        parameters: [orderId],
+        responses: { "200": ok("The order.", "OrderResponse"), "404": problemResponse("No order has this id.", ["ORDER_NOT_FOUND"]) },
+      }),
+    },
+    "/orders/{orderId}/transitions": {
+      post: orderWrite({
+        operationId: "transitionOrder",
+        summary: "Confirm, pack, dispatch, deliver, mark RTO, receive RTO, cancel or close",
+        description: `One step of the transition table (${ORDER}, section 2); anything else is 409 INVALID_TRANSITION. A late confirmation reserves again and may answer INSUFFICIENT_STOCK. Dispatch turns the holds into on-hand deductions once.`,
+        permission: "orders:write",
+        parameters: [orderId],
+        request: { schemaId: "OrderTransitionRequest", required: true },
+        conflict: ["INVALID_TRANSITION", "VERSION_CONFLICT", "INSUFFICIENT_STOCK"],
+        allow: "POST",
+      }),
+    },
+    "/orders/{orderId}/cancellation-review": {
+      post: orderWrite({
+        operationId: "reviewCancellation",
+        summary: "Approve or reject a customer's cancellation request",
+        description: "Approval cancels the order and releases its holds exactly once; rejection changes nothing else.",
+        permission: "orders:write",
+        parameters: [orderId],
+        request: { schemaId: "CancellationReviewRequest", required: true },
+        conflict: ["INVALID_TRANSITION", "VERSION_CONFLICT"],
+        allow: "POST",
+      }),
+    },
+    "/orders/{orderId}/payments": {
+      post: orderWrite({
+        operationId: "recordPayment",
+        summary: "Record a courier collection or a settlement",
+        description: "Manual COD accounting: collection after dispatch, at most the expected COD in total; settlement at most what was collected. Partial amounts are allowed.",
+        permission: "payments:record",
+        parameters: [orderId],
+        request: { schemaId: "PaymentRequest", required: true },
+        ok: { status: "201", description: "The order with the new totals.", schemaId: "OrderResponse" },
+        conflict: ["INVALID_TRANSITION", "VERSION_CONFLICT", "PAYMENT_LIMIT_EXCEEDED"],
+        allow: "POST",
+      }),
+    },
+    "/orders/{orderId}/rto-charge": {
+      post: orderWrite({
+        operationId: "recordRtoCharge",
+        summary: "Record the courier's RTO charge",
+        description: "The actual charge, kept apart from the order total.",
+        permission: "payments:record",
+        parameters: [orderId],
+        request: { schemaId: "RtoChargeRequest", required: true },
+        conflict: ["INVALID_TRANSITION", "VERSION_CONFLICT"],
+        allow: "POST",
+      }),
+    },
+    "/orders/{orderId}/returns": {
+      post: orderWrite({
+        operationId: "createReturn",
+        summary: "Open a return or exchange request",
+        description: "Within 7 days of delivery, one open request per order, at most the delivered and not yet returned quantity. Return shipping responsibility follows the reason.",
+        permission: "orders:write",
+        parameters: [orderId],
+        request: { schemaId: "CreateReturnRequest", required: true },
+        ok: { status: "201", description: "The order with the new request.", schemaId: "OrderResponse" },
+        conflict: ["INVALID_TRANSITION", "VERSION_CONFLICT"],
+        allow: "POST",
+      }),
+    },
+    "/orders/{orderId}/returns/{returnId}/steps": {
+      post: orderWrite({
+        operationId: "advanceReturn",
+        summary: "Receive, approve, reject, refund or complete a return",
+        description:
+          "receive: the goods go into quarantine. approve/reject: only after every returned item is inspected. refund (payments:record): an approved return, bKash, Nagad or bank transfer, at most the money collected and not refunded and at most the goods' value. complete: an exchange, or a return where nothing was collected.",
+        permission: "orders:write",
+        parameters: [orderId, uuidParameter("returnId")],
+        request: { schemaId: "ReturnStepRequest", required: true },
+        notFound: ["ORDER_NOT_FOUND", "RETURN_NOT_FOUND"],
+        conflict: ["INVALID_TRANSITION", "VERSION_CONFLICT", "PAYMENT_LIMIT_EXCEEDED"],
+        allow: "POST",
+      }),
+    },
+    "/orders/{orderId}/inspections/{quarantineItemId}": {
+      post: orderWrite({
+        operationId: "inspectQuarantineItem",
+        summary: "Inspect a returned or RTO item",
+        description: "restock: exactly one return_restock ledger row makes it sellable again. reject: it stays out of stock. Decided once.",
+        permission: "stock:receive",
+        parameters: [orderId, uuidParameter("quarantineItemId")],
+        request: { schemaId: "InspectionRequest", required: true },
+        notFound: ["ORDER_NOT_FOUND", "QUARANTINE_ITEM_NOT_FOUND"],
+        conflict: ["INVALID_TRANSITION", "VERSION_CONFLICT"],
+        allow: "POST",
+      }),
+    },
+    "/orders/{orderId}/tracking-link": {
+      post: orderWrite({
+        operationId: "createTrackingLink",
+        summary: "Create a guest tracking link",
+        description: "Revokes the previous link. The token appears in this answer only (a replay returns `token: null`); only its SHA-256 digest is stored. The link is `/track#t=<token>`; it works until revoked or 30 days after the order is closed.",
+        permission: "orders:write",
+        parameters: [orderId],
+        request: { schemaId: "EmptyRequest", required: false },
+        ok: { status: "201", description: "The new link's token.", schemaId: "TrackingLinkResponse" },
+        allow: "POST",
+      }),
+    },
+    "/orders/{orderId}/tracking-link/revoke": {
+      post: orderWrite({
+        operationId: "revokeTrackingLink",
+        summary: "Revoke the order's guest tracking link",
+        description: "The link stops working at once. Revoking when there is none changes nothing.",
+        permission: "orders:write",
+        parameters: [orderId],
+        request: { schemaId: "EmptyRequest", required: false },
+        allow: "POST",
+      }),
+    },
+    "/delivery-zones": {
+      get: read("GET", {
+        operationId: "listDeliveryZones",
+        summary: "List the configured delivery zones",
+        description: "Requires `orders:read`. A zone that was never configured is absent and takes no orders.",
+        responses: { "200": ok("The configured zones.", "DeliveryZoneList") },
+      }),
+    },
+    "/delivery-zones/{code}": {
+      put: write({
+        operationId: "setDeliveryZone",
+        summary: "Set a zone's delivery charge",
+        description: "Dhaka City or Outside Dhaka. Send `version: null` the first time, then the version you last read. Existing orders keep the charge they were submitted with.",
+        permission: "settings:write",
+        parameters: [{ name: "code", in: "path", required: true, schema: { type: "string", enum: ["dhaka_city", "outside_dhaka"] } }],
+        request: { schemaId: "DeliveryZoneRequest", required: true },
+        ok: { status: "200", description: "The zone as it is now.", schemaId: "DeliveryZoneResponse" },
+        conflict: ["VERSION_CONFLICT"],
+        allow: "PUT",
+      }),
+    },
+  };
+}
+
 /** Builds the document. `serverUrl` is the installation's origin; the document itself is brand-neutral. */
 export function buildOpenApiDocument(serverUrl?: string) {
   return {
@@ -135,7 +316,7 @@ export function buildOpenApiDocument(serverUrl?: string) {
       title: "Commerce API",
       version: API_VERSION,
       description:
-        "Owner-only API for the draft catalogue and physical stock. Every endpoint requires a Bearer token (a Better Auth " +
+        "Owner-only API for the draft catalogue, physical stock and internal (Owner-assisted) orders. Every endpoint requires a Bearer token (a Better Auth " +
         "session token obtained by signing in from a non-browser client). Browser cookies are never accepted and no CORS " +
         "access is granted. Writes require an Idempotency-Key. Money is integer paisa; times are UTC (ISO 8601). " +
         "Compatibility rules: docs/api/README.md.",
@@ -309,6 +490,7 @@ export function buildOpenApiDocument(serverUrl?: string) {
           },
         }),
       },
+      ...orderPaths(),
     },
     components: {
       securitySchemes: {
