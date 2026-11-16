@@ -71,3 +71,41 @@
     transition: none !important;
   }
 }
+
+/* Storefront preview design concepts (Gate H.27), for the founder to compare; neither is approved (BR-6). Same
+   colour tokens and contrast as above; only type, shape and layout differ. System fonts only, nothing downloaded.
+   Concept A, Editorial Boutique: an installed book serif for English display text and headings (Bangla keeps its
+   own script font above), generous space, square edges. */
+.sf[data-concept="editorial"] :is(h1, h2, .sf-display):lang(en) {
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  font-weight: 500;
+}
+.sf[data-concept="editorial"] :is(h1, h2):lang(bn) {
+  font-weight: 600;
+}
+/* Concept B, Modern Family Shop: rounded cards and controls, pill-shaped badges and category chips, and on a phone
+   Add to cart (with its answer) in a bar fixed to the bottom of the screen; the page and focus scrolling keep
+   clear of it, so it never hides content or a focused control. */
+.sf[data-concept="family"] :is(button, input, select, textarea, details, .sf-card) {
+  border-radius: 0.75rem;
+}
+.sf[data-concept="family"] .sf-pill {
+  border-radius: 9999px;
+}
+@media (max-width: 767px) {
+  .sf[data-concept="family"] .sf-buy {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 5;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--color-sf-line);
+    background: var(--color-sf-ivory);
+  }
+  .sf[data-concept="family"]:has(.sf-buy) {
+    padding-bottom: 8rem;
+  }
+  html:has(.sf[data-concept="family"] .sf-buy) {
+    scroll-padding-bottom: 8rem;
+  }
+}

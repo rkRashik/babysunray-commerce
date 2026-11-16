@@ -111,12 +111,15 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
           </button>
         </div>
       </div>
-      <button type="button" onClick={add} className="min-h-12 w-full rounded-sm bg-sf-cocoa px-6 text-lg font-semibold text-sf-ivory hover:bg-[#4a3c33] sm:w-auto">
-        {t.addToCart}
-      </button>
-      <p role="status" aria-live="polite" className={message?.error ? "font-medium text-sf-danger" : "font-medium"} data-testid="add-message">
-        {message?.text ?? ""}
-      </p>
+      {/* sf-buy: in Concept B on a phone, the button and its answer form a bar fixed to the bottom of the screen. */}
+      <div className="sf-buy space-y-3">
+        <p role="status" aria-live="polite" className={`empty:hidden ${message?.error ? "font-medium text-sf-danger" : "font-medium"}`} data-testid="add-message">
+          {message?.text ?? ""}
+        </p>
+        <button type="button" onClick={add} className="min-h-12 w-full rounded-sm bg-sf-cocoa px-6 text-lg font-semibold text-sf-ivory hover:bg-[#4a3c33] sm:w-auto">
+          {t.addToCart}
+        </button>
+      </div>
       <p className="text-sm text-sf-umber">{t.notInCart}</p>
     </div>
   );

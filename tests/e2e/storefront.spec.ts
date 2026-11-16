@@ -319,3 +319,60 @@ test("keyboard and motion: a skip link first, a visible focus ring on every cont
     expect(style.transition.split(",").every((d) => d.trim() === "0s")).toBe(true);
   }
 });
+
+test("design concepts: both show the same product, price and cart; switching keeps the page; Concept B passes the same checks and records nothing", async ({ page }) => {
+  const product = await seedStorefrontProduct({ featured: true });
+  await signIn(page);
+  await page.goto(PREVIEW);
+  await expect(page.getByRole("heading", { level: 1, name: "Storefront preview" })).toBeVisible();
+  await expectNoAxeViolations(page);
+  await page.getByTestId("open-editorial-en").click();
+  await expect(page.locator(".sf")).toHaveAttribute("data-concept", "editorial");
+  await expect(page.getByRole("button", { name: "A · Editorial Boutique" })).toHaveAttribute("aria-pressed", "true");
+
+  await page.goto(`${PREVIEW}/en/products/${product.slug}?from=${encodeURIComponent("q=romper")}`);
+  const priceA = await page.getByTestId("price").textContent();
+  await chip(page, "0-3M").click();
+  await chip(page, "Ivory").click();
+  await page.getByRole("button", { name: "Add to cart" }).click();
+  await expect(page.getByTestId("cart-count")).toHaveText("1");
+
+  // Switch in place: same page, same query, same cart, same price.
+  await page.getByRole("button", { name: "B · Modern Family Shop" }).click();
+  await expect(page.locator(".sf")).toHaveAttribute("data-concept", "family");
+  await expect(page).toHaveURL(new RegExp(`/en/products/${product.slug}[?]from=`));
+  await expect(page.getByTestId("price")).toHaveText(priceA ?? "");
+  await expect(page.getByTestId("cart-count")).toHaveText("1");
+  await expectNoAxeViolations(page);
+
+  for (const lang of ["en", "bn"] as const) {
+    await page.goto(`${PREVIEW}/${lang}`);
+    await expect(page.locator(".sf")).toHaveAttribute("data-concept", "family");
+    await expect(page.getByRole("list", { name: lang === "en" ? "Featured" : "বিশেষ পণ্য" })).toContainText(lang === "en" ? product.nameEn : product.nameBn);
+    await expectNoAxeViolations(page);
+    await page.goto(`${PREVIEW}/${lang}/products`);
+    await expect(page.getByRole("list", { name: lang === "en" ? "Categories" : "ক্যাটাগরি" })).toBeVisible();
+    await expectNoAxeViolations(page);
+    await page.goto(`${PREVIEW}/${lang}/cart`);
+    await expectNoAxeViolations(page);
+  }
+
+  // The checkout simulation is the same component in Concept B: nothing is recorded, and a lost answer at the
+  // last step says the order was not placed (S-12).
+  const before = await counts();
+  await page.goto(`${PREVIEW}/en/checkout`);
+  await page.getByLabel("Full name").fill("Test Customer");
+  await page.getByLabel("Mobile number").fill("01711000061");
+  await page.getByLabel("Delivery address").fill("House 61, Test Road");
+  await page.getByLabel(/^Dhaka City/).check();
+  await page.getByRole("button", { name: "Review order" }).click();
+  await expect(page.getByTestId("checkout-review")).toBeVisible();
+  await expectNoAxeViolations(page);
+  await page.route("**/office/storefront-preview/en/checkout", (route) => (route.request().method() === "POST" ? route.abort() : route.continue()));
+  await page.getByRole("button", { name: "Place order (simulation)" }).click();
+  await expect(page.getByTestId("checkout-failure")).toHaveText("The order was not placed and nothing was recorded. Check your connection and try again, or contact the shop.");
+  await page.unroute("**/office/storefront-preview/en/checkout");
+  await page.getByRole("button", { name: "Place order (simulation)" }).click();
+  await expect(page.getByTestId("simulation-result")).toContainText("received, waiting for verification");
+  expect(await counts()).toEqual(before);
+});

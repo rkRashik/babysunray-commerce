@@ -74,7 +74,7 @@ export function OfficeShell({
             <Link href="/office/media-health" aria-current={current === "media" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
               Photo storage
             </Link>
-            <Link href="/office/storefront-preview/en" aria-current={current === "preview" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
+            <Link href="/office/storefront-preview" aria-current={current === "preview" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
               Storefront preview
             </Link>
             <Link href="/office/policies" aria-current={current === "policies" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>

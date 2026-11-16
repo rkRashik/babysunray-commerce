@@ -29,27 +29,29 @@ function Nav({ lang, facets, className }: { lang: Lang; facets: Facets; classNam
   );
 }
 
-function Search({ lang, id }: { lang: Lang; id: string }) {
+export function Search({ lang, id, large = false }: { lang: Lang; id: string; large?: boolean }) {
   const t = dictionary(lang);
   return (
     <form action={`${base(lang)}/products`} method="get" role="search" className="flex items-center gap-2">
       <label htmlFor={id} className="sr-only">
         {t.searchLabel}
       </label>
-      <input id={id} type="search" name="q" maxLength={100} placeholder={t.searchPlaceholder} className="min-h-11 w-full min-w-0 rounded-sm border border-sf-line bg-white px-3 text-base placeholder:text-sf-umber" />
-      <button type="submit" className="min-h-11 rounded-sm border border-sf-cocoa px-3 font-medium hover:bg-sf-cocoa hover:text-sf-ivory">
+      <input id={id} type="search" name="q" maxLength={100} placeholder={t.searchPlaceholder} className={`${large ? "min-h-12 text-lg" : "min-h-11 text-base"} w-full min-w-0 rounded-sm border border-sf-line bg-white px-3 placeholder:text-sf-umber`} />
+      <button type="submit" className={`${large ? "min-h-12 bg-sf-cocoa px-5 text-sf-ivory" : "min-h-11 px-3 hover:bg-sf-cocoa hover:text-sf-ivory"} rounded-sm border border-sf-cocoa font-medium`}>
         {t.search}
       </button>
     </form>
   );
 }
 
-export function Header({ lang, facets, storeName }: { lang: Lang; facets: Facets; storeName: string }) {
+// Concept B keeps search outside the phone menu, so browsing starts with one tap less; Concept A keeps the header quiet.
+export function Header({ lang, facets, storeName, concept }: { lang: Lang; facets: Facets; storeName: string; concept: "editorial" | "family" }) {
   const t = dictionary(lang);
+  const family = concept === "family";
   return (
     <header className="border-b border-sf-line bg-sf-ivory">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-        <Link href={base(lang)} className="mr-auto inline-flex min-h-11 items-center rounded-sm text-xl font-semibold">
+        <Link href={base(lang)} className={`mr-auto inline-flex min-h-11 items-center rounded-sm text-xl ${family ? "font-bold" : "sf-display font-medium tracking-wide"}`}>
           {storeName}
         </Link>
         <nav aria-label={t.mainNav} className="hidden md:block">
@@ -62,10 +64,15 @@ export function Header({ lang, facets, storeName }: { lang: Lang; facets: Facets
           <LanguageSwitch lang={lang} />
         </Suspense>
         <CartLink lang={lang} />
+        {family ? (
+          <div className="w-full md:hidden">
+            <Search lang={lang} id="sf-search-narrow" />
+          </div>
+        ) : null}
         <details className="w-full md:hidden" data-testid="mobile-menu">
           <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-sm font-medium">{t.menu}</summary>
           <nav aria-label={t.mainNav} className="space-y-3 pb-3 pt-1">
-            <Search lang={lang} id="sf-search-narrow" />
+            {family ? null : <Search lang={lang} id="sf-search-narrow" />}
             <Nav lang={lang} facets={facets} className="flex flex-col" />
           </nav>
         </details>

@@ -75,9 +75,10 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
       {t.simulateOnly}
     </p>
   );
+  // At the last step a failure means the order was not placed (S-12); before it, only the check failed.
   const failure = failed ? (
-    <p role="alert" className="font-medium text-sf-danger">
-      {t.cartCheckFailed}
+    <p role="alert" className="font-medium text-sf-danger" data-testid="checkout-failure">
+      {stage === "review" ? t.orderNotPlaced : t.cartCheckFailed}
     </p>
   ) : null;
   const q = result?.quote;

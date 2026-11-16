@@ -4,6 +4,7 @@ import { getDb } from "@/db/client";
 import { dictionary, isLang } from "@/modules/storefront/i18n";
 import { previewFacets } from "@/modules/storefront/service";
 import { requireOffice } from "../../_lib/session";
+import { previewConcept } from "../_components/concept";
 import { Header } from "../_components/header";
 import { Footer, PreviewBanner } from "../_components/parts";
 
@@ -20,15 +21,16 @@ export default async function PreviewLayout({ children, params }: { children: Re
   const facets = await previewFacets(getDb(), principal);
   const t = dictionary(lang);
   const identity = installationIdentity();
+  const concept = await previewConcept();
   // The installation's preview colours (validated for contrast) replace the prototype tokens for this subtree.
   const theme = { "--color-sf-cocoa": identity.theme.ink, "--color-sf-amber": identity.theme.accent, "--color-sf-ivory": identity.theme.paper } as React.CSSProperties;
   return (
-    <div lang={lang} className="sf min-h-screen bg-sf-ivory text-sf-cocoa" style={theme}>
+    <div lang={lang} data-concept={concept} className="sf min-h-screen bg-sf-ivory text-sf-cocoa" style={theme}>
       <a href="#sf-main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-10 focus:rounded-sm focus:bg-white focus:px-3 focus:py-2">
         {t.skip}
       </a>
-      <PreviewBanner lang={lang} />
-      <Header lang={lang} facets={facets} storeName={identity.storeName} />
+      <PreviewBanner lang={lang} concept={concept} />
+      <Header lang={lang} facets={facets} storeName={identity.storeName} concept={concept} />
       <main id="sf-main" tabIndex={-1} className="mx-auto max-w-6xl px-4 py-8 focus:outline-none">
         {children}
       </main>

@@ -182,3 +182,21 @@ test("checkout simulation on a 360-pixel-wide phone: every step fits, nothing is
     await db.end();
   }
 });
+
+test("Concept B on a phone: search outside the menu, Add to cart and its answer always on screen, no sideways scrolling", async ({ page }) => {
+  const product = await seedStorefrontProduct();
+  await page.goto("/office/storefront-preview");
+  await page.getByTestId("open-family-en").tap();
+  await expect(page.locator(".sf")).toHaveAttribute("data-concept", "family");
+  await expect(page.locator("header").getByRole("searchbox")).toBeVisible();
+  await noSideScroll(page);
+  await page.goto(`/office/storefront-preview/en/products/${product.slug}`);
+  const add = page.getByRole("button", { name: "Add to cart" });
+  await expect(add).toBeInViewport();
+  await add.tap();
+  await expect(page.getByTestId("add-message")).toBeInViewport();
+  await expect(page.getByTestId("add-message")).toHaveText("Choose a size and colour first.");
+  await page.mouse.wheel(0, 3000);
+  await expect(add).toBeInViewport();
+  await noSideScroll(page);
+});

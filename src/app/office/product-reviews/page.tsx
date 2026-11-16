@@ -4,6 +4,7 @@ import { readinessFlags } from "@/modules/catalogue/preparation";
 import { type PreparationItem, READINESS_ITEMS } from "@/modules/catalogue/readiness";
 import { reviewStates } from "@/modules/catalogue/review";
 import { listProducts } from "@/modules/catalogue/service";
+import { DomainError } from "@/modules/domain-error";
 import { formatTime, OfficeShell, productTitle } from "../_components/shell";
 import { requireOffice } from "../_lib/session";
 
@@ -41,10 +42,15 @@ const SHORT: Record<PreparationItem, string> = {
 
 export default async function ProductReviewsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireOffice("catalog:read");
-  const { after, afterId } = await searchParams;
+  const { after, afterId, q } = await searchParams;
+  const term = typeof q === "string" && q.trim() !== "" ? q.trim().slice(0, 100) : undefined;
   const db = getDb();
   const cursor = typeof after === "string" && typeof afterId === "string" && /^[0-9T:.\-Z]{20,40}$/.test(after) && /^[0-9a-f-]{36}$/.test(afterId) ? { createdAt: after, id: afterId } : undefined;
-  const page = await listProducts(db, { limit: PAGE, status: "draft", after: cursor });
+  const page = await listProducts(db, { limit: PAGE, status: "draft", after: cursor, q: term }).catch((error: unknown) => {
+    // A search term the catalogue search refuses (control characters): no results instead of an error page.
+    if (error instanceof DomainError && error.code === "INVALID_INPUT") return { items: [], hasMore: false };
+    throw error;
+  });
   const ids = page.items.map((p) => p.id);
   const [flags, states] = [await readinessFlags(db, ids), await reviewStates(db, ids)];
   const last = page.items.at(-1);
@@ -54,8 +60,19 @@ export default async function ProductReviewsPage({ searchParams }: { searchParam
         Draft products, oldest first, with what each still lacks and its internal review. Open a product to check it and record a review; any later change to its text, claims, sizes, photos, SKUs or prices
         makes the review outdated. Reviewing publishes nothing.
       </p>
+      <form method="get" action="/office/product-reviews" role="search" className="flex flex-wrap items-end gap-2">
+        <div>
+          <label htmlFor="review-q" className="block text-sm font-medium">
+            Search by name, slug or SKU
+          </label>
+          <input id="review-q" type="search" name="q" maxLength={100} defaultValue={term ?? ""} className="mt-1 block rounded border border-gray-400 bg-white px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900" />
+        </div>
+        <button type="submit" className="rounded border border-gray-400 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900">
+          Search
+        </button>
+      </form>
       {page.items.length === 0 ? (
-        <p role="status">No draft products.</p>
+        <p role="status">{term ? "No draft product matches." : "No draft products."}</p>
       ) : (
         <div className="overflow-x-auto rounded border border-gray-300 bg-white">
           <table className="w-full text-left text-sm" data-testid="review-queue">
@@ -111,7 +128,7 @@ export default async function ProductReviewsPage({ searchParams }: { searchParam
         </div>
       )}
       {page.hasMore && last ? (
-        <Link href={`/office/product-reviews?after=${encodeURIComponent(last.key.createdAt)}&afterId=${last.id}`} className="inline-block underline">
+        <Link href={`/office/product-reviews?after=${encodeURIComponent(last.key.createdAt)}&afterId=${last.id}${term ? `&q=${encodeURIComponent(term)}` : ""}`} className="inline-block underline">
           Next {PAGE}
         </Link>
       ) : null}

@@ -6,6 +6,7 @@ import { dictionary, formatTaka, isLang, localised } from "@/modules/storefront/
 import { getPreviewProduct, listPreviewProducts } from "@/modules/storefront/service";
 import { requireOffice } from "../../../../_lib/session";
 import { Gallery } from "../../../_components/gallery";
+import { previewConcept } from "../../../_components/concept";
 import { base, listQuery, Localised, ProductGrid } from "../../../_components/parts";
 import { VariantPicker } from "../../../_components/variant-picker";
 
@@ -189,7 +190,7 @@ export default async function PreviewProduct({ params, searchParams }: Props) {
           <h2 id="sf-related" className="text-2xl font-semibold">
             {t.moreInCategory(categoryName)}
           </h2>
-          <ProductGrid products={related} lang={lang} label={t.moreInCategory(categoryName)} />
+          <ProductGrid products={related} lang={lang} label={t.moreInCategory(categoryName)} concept={await previewConcept()} />
         </section>
       ) : null}
     </div>

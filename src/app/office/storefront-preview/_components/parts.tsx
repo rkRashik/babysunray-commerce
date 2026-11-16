@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import type { InstallationIdentity } from "@/config/installation";
 import { dictionary, formatTaka, type Lang, localised } from "@/modules/storefront/i18n";
 import type { PhotoRef, ProductCard } from "@/modules/storefront/service";
+import { ConceptSwitch } from "./header-client";
 
 // Server-rendered building blocks of the storefront preview (prototype layout, not an approved design).
 
@@ -62,48 +64,71 @@ export function Localised({ lang, en, bn, missing }: { lang: Lang; en: string | 
 
 const STOCK = { in: "inStock", partial: "someSizesOut", out: "soldOut" } as const;
 
-export function ProductTile({ product, lang, from }: { product: ProductCard; lang: Lang; from?: string }) {
+export type ConceptName = "editorial" | "family";
+
+// Concept A: image-led tiles, a quiet name in the display face, price and stock in small text; the first featured
+// product can lead at double size. Concept B: cards with a square photo, bold price, a stock badge and a visible
+// "See options" cue (inside the one link, hidden from screen readers so the link name stays the product name).
+export function ProductTile({ product, lang, from, concept = "editorial", lead = false }: { product: ProductCard; lang: Lang; from?: string; concept?: ConceptName; lead?: boolean }) {
   const t = dictionary(lang);
   const name = localised(lang, product.nameEn, product.nameBn) ?? localised(lang === "en" ? "bn" : "en", product.nameEn, product.nameBn) ?? product.slug;
   const price = product.minPricePaisa === product.maxPricePaisa ? formatTaka(product.minPricePaisa, lang) : t.from(formatTaka(product.minPricePaisa, lang));
+  const href = `${base(lang)}/products/${product.slug}${from ? `?from=${encodeURIComponent(from)}` : ""}`;
+  const out = product.stock === "out";
+  const title = <Localised lang={lang} en={product.nameEn} bn={product.nameBn} missing={t.untitled} />;
+  const photo = (sizes: string) =>
+    product.photo ? <Photo photo={product.photo} lang={lang} name={name} sizes={sizes} /> : <div className="flex h-full items-end p-3 text-sm text-sf-umber">{t.noPhoto}</div>;
+  if (concept === "family") {
+    return (
+      <li>
+        <Link href={href} className="sf-card group flex h-full flex-col overflow-hidden border border-sf-line bg-white">
+          <div className="aspect-square overflow-hidden bg-sf-sand">{photo("(min-width: 1024px) 22vw, (min-width: 640px) 30vw, 46vw")}</div>
+          <div className="flex flex-1 flex-col gap-1 p-3">
+            <p className="font-semibold leading-snug group-hover:underline group-hover:underline-offset-4">{title}</p>
+            <p className="text-lg font-bold tabular-nums">{price}</p>
+            <p className={`sf-pill mt-auto w-fit border px-2 py-0.5 text-sm ${out ? "border-sf-danger font-medium text-sf-danger" : "border-sf-line"}`}>{t[STOCK[product.stock]]}</p>
+            <span aria-hidden="true" className="sf-pill mt-2 inline-flex min-h-10 items-center justify-center bg-sf-cocoa px-3 text-sm font-semibold text-sf-ivory">
+              {t.seeOptions}
+            </span>
+          </div>
+        </Link>
+      </li>
+    );
+  }
   return (
-    <li>
-      <Link href={`${base(lang)}/products/${product.slug}${from ? `?from=${encodeURIComponent(from)}` : ""}`} className="group block rounded-sm">
-        <div className="aspect-[4/5] overflow-hidden rounded-sm bg-sf-sand">
-          {product.photo ? (
-            <Photo photo={product.photo} lang={lang} name={name} sizes="(min-width: 1024px) 22vw, (min-width: 640px) 30vw, 46vw" />
-          ) : (
-            <div className="flex h-full items-end p-3 text-sm text-sf-umber">{t.noPhoto}</div>
-          )}
-        </div>
-        <p className="mt-2 font-medium leading-snug group-hover:underline group-hover:underline-offset-4">
-          <Localised lang={lang} en={product.nameEn} bn={product.nameBn} missing={t.untitled} />
-        </p>
-        <p className="tabular-nums">{price}</p>
-        <p className={product.stock === "out" ? "text-sm font-medium text-sf-danger" : "text-sm text-sf-umber"}>{t[STOCK[product.stock]]}</p>
+    <li className={lead ? "col-span-2 lg:row-span-2" : undefined}>
+      <Link href={href} className="group block rounded-sm">
+        <div className="aspect-[4/5] overflow-hidden bg-sf-sand">{photo(lead ? "(min-width: 1024px) 60vw, 92vw" : "(min-width: 1024px) 30vw, 46vw")}</div>
+        <p className={`sf-display mt-3 leading-snug group-hover:underline group-hover:underline-offset-4 ${lead ? "text-2xl" : "text-lg"}`}>{title}</p>
+        <p className="mt-1 text-sm tabular-nums">{price}</p>
+        <p className={out ? "text-sm font-medium text-sf-danger" : "text-sm text-sf-umber"}>{t[STOCK[product.stock]]}</p>
       </Link>
     </li>
   );
 }
 
-export function ProductGrid({ products, lang, label, from }: { products: ProductCard[]; lang: Lang; label: string; from?: string }) {
+export function ProductGrid({ products, lang, label, from, concept = "editorial", lead = false }: { products: ProductCard[]; lang: Lang; label: string; from?: string; concept?: ConceptName; lead?: boolean }) {
+  const layout = concept === "family" ? "grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4" : "grid grid-cols-2 gap-x-5 gap-y-10 lg:grid-cols-3 lg:gap-x-8";
   return (
-    <ul aria-label={label} className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
-      {products.map((p) => (
-        <ProductTile key={p.id} product={p} lang={lang} from={from} />
+    <ul aria-label={label} className={layout}>
+      {products.map((p, i) => (
+        <ProductTile key={p.id} product={p} lang={lang} from={from} concept={concept} lead={lead && i === 0 && products.length > 2} />
       ))}
     </ul>
   );
 }
 
-export function PreviewBanner({ lang }: { lang: Lang }) {
+export function PreviewBanner({ lang, concept }: { lang: Lang; concept: "editorial" | "family" }) {
   const t = dictionary(lang);
   return (
     <div className="bg-sf-amber text-sf-cocoa">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-2 text-sm">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2 text-sm">
         <p>
           <strong className="font-semibold" data-testid="preview-banner">{t.previewBanner}</strong> <span>{t.previewNote}</span>
         </p>
+        <Suspense>
+          <ConceptSwitch concept={concept} labels={{ label: t.conceptLabel, editorial: t.conceptEditorial, family: t.conceptFamily }} />
+        </Suspense>
         <Link href="/office" className="font-medium underline underline-offset-2">
           {t.backToOffice}
         </Link>

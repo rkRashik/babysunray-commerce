@@ -202,6 +202,8 @@ Owner Office only, development storage only (`src/modules/media`, [ADR-0006](doc
 
 A private, bilingual prototype of the customer shop at `/office/storefront-preview/en` and `/office/storefront-preview/bn` (`src/app/office/storefront-preview`, `src/modules/storefront`). It shows the Owner's **draft** products as customers might see them, so it is Owner-only: every page, Server Action and photo checks the session and the `storefront:preview` permission on the server, and as an `/office` route it is never indexed, framed or cached. Labelled "Storefront Preview — Not Live" on every page. Prototype layout from the approved logo colours as a reference only; the website's design, colours and typography are not decided (BR-6).
 
+**Two design concepts (Gate H.27):** `/office/storefront-preview` describes Concept A, Editorial Boutique, and Concept B, Modern Family Shop, and opens either in English or Bangla; the preview's banner switches between them on the same page (a cookie holding one word). Same products, prices, stock, cart and checkout simulation from the same services; only layout and styling differ. Neither is approved. Differences, tests and the wording still needing approval: [storefront-concepts.md](docs/design/storefront-concepts.md).
+
 | Screen | Does |
 |---|---|
 | Home | The installation's name and optional description (`STORE_*` settings, [installation.md](docs/operations/installation.md) section 3; BabySunray's own values are in the [runbook](docs/operations/runbook.md) section 2), the Owner's categories, featured and newest products. No slogan, review or stock photo. |
@@ -295,6 +297,7 @@ Local tooling only (`src/db/backup.mts`, `scripts/backup-*.mts`); how to use it 
 | [Bulk catalogue import](docs/operations/catalogue-import.md) | The import file format, rules, limits and safety | Draft — Founder Review |
 | [Installing a separate copy](docs/operations/installation.md) | Setting up another business's local installation with fictional data, the shop identity settings, the rehearsal (`npm run test:install`) and the licence inventory | Draft — Founder Review |
 | [ADR-0007: Guest checkout foundation](docs/adr/0007-guest-checkout-foundation.md) | Inactive guest checkout: customer actor, anonymous idempotency, one-time tracking link, unrouted transport | Draft — Founder Review |
+| [Storefront concepts](docs/design/storefront-concepts.md) | The two private design concepts, customer wording needing approval, customer sign-in options | Draft — Founder Review |
 | [Launch readiness](docs/operations/launch-readiness.md) | The activation barrier, the readiness page, policy drafting, product reviews, the guest checkout contract | Draft — Founder Review |
 | [ADR-0006: Product photo storage](docs/adr/0006-product-media-storage.md) | A storage interface with a local development folder outside the repository, a manifest, fail-closed in production | Draft — Founder Review |
 | [API guide](docs/api/README.md) | Calling `/api/v1`, errors, pagination, compatibility rules | Draft — Founder Review |

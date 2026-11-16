@@ -5,7 +5,8 @@ import { DomainError } from "@/modules/domain-error";
 import { dictionary, isLang, localised } from "@/modules/storefront/i18n";
 import { listPreviewProducts, type PreviewFilters, previewFacets } from "@/modules/storefront/service";
 import { requireOffice } from "../../../_lib/session";
-import { base, listQuery, ProductGrid } from "../../_components/parts";
+import { previewConcept } from "../../_components/concept";
+import { base, listQuery, Localised, ProductGrid } from "../../_components/parts";
 
 type Props = { params: Promise<{ lang: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
@@ -30,6 +31,7 @@ export default async function PreviewProducts({ params, searchParams }: Props) {
     page: /^[0-9]{1,3}$/.test(one(query.page) ?? "") ? Number(query.page) : 1,
   };
   const facets = await previewFacets(db, principal);
+  const concept = await previewConcept();
   const result = await listPreviewProducts(db, principal, filters).catch((error: unknown) => {
     // A search term with control characters or over 100 characters: show no results instead of failing.
     if (error instanceof DomainError && error.code === "INVALID_INPUT") return { items: [], hasMore: false, page: 1 };
@@ -48,7 +50,23 @@ export default async function PreviewProducts({ params, searchParams }: Props) {
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-semibold">{title}</h1>
-      <details className="rounded-sm border border-sf-line bg-white p-4" open={filtered}>
+      {concept === "family" && facets.categories.length ? (
+        // Concept B: categories one tap away above the filters.
+        <ul aria-label={t.categories} className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          {[{ slug: "", nameEn: t.shopAll, nameBn: t.shopAll }, ...facets.categories].map((c) => (
+            <li key={c.slug || "all"} className="shrink-0">
+              <Link
+                href={`${base(lang)}/products${c.slug ? `?category=${c.slug}` : ""}`}
+                aria-current={(filters.category ?? "") === c.slug ? "page" : undefined}
+                className="sf-pill inline-flex min-h-11 items-center border border-sf-cocoa bg-white px-4 font-medium aria-[current=page]:bg-sf-cocoa aria-[current=page]:text-sf-ivory"
+              >
+                <Localised lang={lang} en={c.nameEn} bn={c.nameBn} />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <details className="rounded-sm border border-sf-line bg-white p-4" open={filtered || concept === "family"}>
         <summary className="cursor-pointer font-medium">{t.filters}</summary>
         <form method="get" action={`${base(lang)}/products`} className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5" aria-label={t.filters}>
           <div className="lg:col-span-2">
@@ -116,7 +134,7 @@ export default async function PreviewProducts({ params, searchParams }: Props) {
       <p role="status" className="text-sf-umber" data-testid="result-count">
         {result.items.length === 0 ? (filtered ? t.noMatches : t.noProducts) : t.results(result.items.length, result.hasMore)}
       </p>
-      {result.items.length ? <ProductGrid products={result.items} lang={lang} label={title} from={listQuery(pageHref(result.page).split("?")[1])} /> : null}
+      {result.items.length ? <ProductGrid products={result.items} lang={lang} label={title} from={listQuery(pageHref(result.page).split("?")[1])} concept={concept} /> : null}
       {result.page > 1 || result.hasMore ? (
         <nav aria-label={t.pages} className="flex gap-6">
           {result.page > 1 ? (

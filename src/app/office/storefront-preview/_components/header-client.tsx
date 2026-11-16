@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { cartUnits } from "@/modules/storefront/cart";
 import { dictionary, type Lang, toBnDigits } from "@/modules/storefront/i18n";
+import { chooseConceptAction } from "../actions";
 import { useCart } from "./cart-store";
 
 // The two header controls that depend on the browser: the language switch (same page, other language, same
@@ -33,5 +34,30 @@ export function CartLink({ lang }: { lang: Lang }) {
       </span>
       <span className="sr-only">{t.cartUnitsWord(units)}</span>
     </Link>
+  );
+}
+
+/** Owner-only switch between the two design concepts; stays on the same page (same language, filters and cart). */
+export function ConceptSwitch({ concept, labels }: { concept: "editorial" | "family"; labels: { label: string; editorial: string; family: string } }) {
+  const pathname = usePathname();
+  const search = useSearchParams();
+  return (
+    <form action={chooseConceptAction} className="flex flex-wrap items-center gap-2" data-testid="concept-switch">
+      <input type="hidden" name="returnTo" value={`${pathname}${search.size ? `?${search.toString()}` : ""}`} />
+      <span id="sf-concept-label">{labels.label}:</span>
+      {(["editorial", "family"] as const).map((c) => (
+        <button
+          key={c}
+          type="submit"
+          name="concept"
+          value={c}
+          aria-pressed={concept === c}
+          aria-describedby="sf-concept-label"
+          className="min-h-11 rounded-sm border border-sf-cocoa px-3 font-medium aria-pressed:bg-sf-cocoa aria-pressed:text-sf-ivory"
+        >
+          {labels[c]}
+        </button>
+      ))}
+    </form>
   );
 }
