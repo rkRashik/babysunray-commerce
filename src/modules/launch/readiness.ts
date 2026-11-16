@@ -4,6 +4,7 @@ import type { Db } from "@/db/database";
 import { deliveryZones, guestCheckoutSubmissions, inventoryBalances, orders, policyDrafts, productReviews, products, stockMovements, stockReservations, variants } from "@/db/schema";
 import { assertPermission, type Principal } from "../auth/principal";
 import { MET } from "../catalogue/preparation";
+import { APPROVED_PUBLICATION_RULE } from "../catalogue/publication";
 import { contentDigest } from "../catalogue/review";
 import { DELIVERY_ZONES } from "../orders/rules";
 import { POLICY_KINDS, POLICY_TITLES, type PolicyKind, type PolicyStatus } from "../policies/drafts";
@@ -57,9 +58,18 @@ async function integrityCounts(db: Db) {
     (select count(*) from ${orders} o where o.order_status = 'confirmed' and o.fulfilment_status in ('unfulfilled', 'packed')
       and not exists (select 1 from ${stockReservations} r where r.order_id = o.id and r.status = 'active')) as unheld_orders,
     (select count(*) from ${orders} o where o.order_status = 'pending_verification' and o.verification_expires_at <= now()) as overdue,
-    (select count(*) from ${guestCheckoutSubmissions}) as guest_submissions`);
+    (select count(*) from ${guestCheckoutSubmissions}) as guest_submissions,
+    (select count(*) from ${products} p where p.status = 'published') as published`);
   const r = rows[0];
-  return { reservedMismatch: n(r.reserved_mismatch), ledgerMismatch: n(r.ledger_mismatch), strayHolds: n(r.stray_holds), unheldOrders: n(r.unheld_orders), overdue: n(r.overdue), guestSubmissions: n(r.guest_submissions) };
+  return {
+    reservedMismatch: n(r.reserved_mismatch),
+    ledgerMismatch: n(r.ledger_mismatch),
+    strayHolds: n(r.stray_holds),
+    unheldOrders: n(r.unheld_orders),
+    overdue: n(r.overdue),
+    guestSubmissions: n(r.guest_submissions),
+    published: n(r.published),
+  };
 }
 
 const STATUS_BY_POLICY: Record<PolicyStatus, CheckStatus> = { empty: "incomplete", drafted: "incomplete", reviewed: "founder_approval" };
@@ -95,6 +105,9 @@ export async function launchReadiness(db: Db, principal: Principal): Promise<Lau
     href: "/office/catalogue-preparation",
   });
 
+  // Without an approved rule nothing can be published through the application; a published product means a
+  // direct database change, which must be investigated.
+  const unexpectedlyPublished = APPROVED_PUBLICATION_RULE === null && integrity.published > 0;
   const catalogue: ReadinessCheck[] = [
     productRow("names", "Product name in English and Bangla", c.name, "S-1"),
     productRow("descriptions", "Description in English and Bangla", c.description, "S-1"),
@@ -118,9 +131,11 @@ export async function launchReadiness(db: Db, principal: Principal): Promise<Lau
     {
       id: "publication",
       label: "Publication eligibility",
-      status: "founder_approval",
-      evidence: "No publication rule is approved (I-6 is proposed) and there is no publish action. A review does not make a product public.",
-      next: "Founder decides what a product needs before it is published.",
+      status: unexpectedlyPublished ? "incomplete" : "founder_approval",
+      evidence: unexpectedlyPublished
+        ? `${plural(integrity.published, "product")} marked published although no publication rule is approved: this was not done through the application.`
+        : "No publication rule is approved (I-6 is proposed). The publication mechanics are built and tested, but the publish operation refuses and nothing calls it. A review does not make a product public.",
+      next: unexpectedlyPublished ? "Investigate the database change; take a backup first." : "Founder decides what a product needs before it is published.",
       source: "I-6",
     },
   ];

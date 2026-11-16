@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, ne, sql } from "drizzle-orm";
 import type { Db } from "@/db/database";
 import { deliveryZones, inventoryBalances, orders, products, quarantineItems, returns, variants } from "@/db/schema";
 import { invalidInput } from "../domain-error";
@@ -56,7 +56,7 @@ const QUEUE_COLUMNS = {
 
 // Sellable catalogue only: active variants of products that are not archived.
 const available = sql<number>`${inventoryBalances.onHand} - ${inventoryBalances.reserved}`.mapWith(Number);
-const sellable = and(eq(variants.status, "active"), eq(products.status, "draft"));
+const sellable = and(eq(variants.status, "active"), ne(products.status, "archived"));
 
 async function stockList(tx: Db, maxAvailable: number) {
   const where = and(sellable, sql`${inventoryBalances.onHand} - ${inventoryBalances.reserved} <= ${maxAvailable}`);

@@ -8,7 +8,7 @@ import { apiRegistry, PROBLEM_CODES, type ProblemCode } from "./schemas";
 // parameters are written out below. tests/db/api*.integration.test.ts check real responses against this
 // document, and tests/api/openapi.test.ts validates it against the OpenAPI 3.1 schema.
 
-export const API_VERSION = "1.4.0";
+export const API_VERSION = "1.5.0";
 
 const ref = (id: string) => ({ $ref: `#/components/schemas/${id}` });
 
@@ -328,11 +328,11 @@ export function buildOpenApiDocument(serverUrl?: string) {
         get: read("GET, POST", {
           operationId: "listProducts",
           summary: "List products, oldest first",
-          description: "Ordered by creation time, then id. Requires `catalog:read`. Drafts and archived products only.",
+          description: "Ordered by creation time, then id. Requires `catalog:read`. Every status: draft, published (none while no publication rule is approved) and archived.",
           parameters: [
             limitParameter,
             cursorParameter,
-            { name: "status", in: "query", required: false, schema: { type: "string", enum: ["draft", "archived"] } },
+            { name: "status", in: "query", required: false, schema: { type: "string", enum: ["draft", "published", "archived"] } },
             {
               name: "q",
               in: "query",
@@ -451,12 +451,13 @@ export function buildOpenApiDocument(serverUrl?: string) {
         post: write({
           operationId: "archiveProduct",
           summary: "Archive a product",
-          description: "Products are never deleted. Archiving an archived product changes nothing.",
+          description: "Products are never deleted. Archiving an archived product changes nothing. A published product must be withdrawn first (409 PRODUCT_NOT_EDITABLE).",
           permission: "catalog:write",
           parameters: [uuidParameter("productId")],
           request: { schemaId: "EmptyRequest", required: false },
           ok: { status: "200", description: "The product as it is now.", schemaId: "ProductResponse" },
           notFound: ["PRODUCT_NOT_FOUND"],
+          conflict: ["PRODUCT_NOT_EDITABLE"],
           allow: "POST",
         }),
       },

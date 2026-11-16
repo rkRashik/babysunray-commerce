@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import type { Db } from "@/db/database";
 import { deliveryZones, inventoryBalances, productCategories, productMedia, products, variants } from "@/db/schema";
 import { assertPermission, type Principal } from "../auth/principal";
@@ -35,7 +35,7 @@ export type ProductCard = {
 export type Facets = { categories: { slug: string; nameEn: string | null; nameBn: string | null }[]; sizes: string[]; colours: string[] };
 
 const available = sql<number>`(${inventoryBalances.onHand} - ${inventoryBalances.reserved})::int`;
-const sellable = sql`${products.status} = 'draft' and exists (select 1 from ${variants} where ${variants.productId} = ${products.id} and ${variants.status} = 'active')`;
+const sellable = sql`${products.status} <> 'archived' and exists (select 1 from ${variants} where ${variants.productId} = ${products.id} and ${variants.status} = 'active')`;
 const escapeLike = (term: string) => `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 function filterCondition(f: PreviewFilters) {
@@ -113,7 +113,7 @@ export async function previewFacets(db: Db, principal: Principal): Promise<Facet
       .selectDistinct({ size: variants.size, colour: variants.colour })
       .from(variants)
       .innerJoin(products, eq(products.id, variants.productId))
-      .where(and(eq(variants.status, "active"), eq(products.status, "draft")));
+      .where(and(eq(variants.status, "active"), ne(products.status, "archived")));
     const unique = (values: (string | null)[]) => [...new Set(values.filter((v): v is string => v !== null))].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
     return { categories, sizes: unique(options.map((o) => o.size)), colours: unique(options.map((o) => o.colour)) };
   }, SNAPSHOT);
@@ -128,7 +128,7 @@ export async function getPreviewProduct(db: Db, principal: Principal, slug: stri
   assertPermission(principal, "storefront:preview");
   if (typeof slug !== "string" || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) || slug.length > 100) return null;
   return db.transaction(async (tx) => {
-    const [row] = await tx.select({ id: products.id }).from(products).where(and(eq(products.slug, slug), eq(products.status, "draft")));
+    const [row] = await tx.select({ id: products.id }).from(products).where(and(eq(products.slug, slug), ne(products.status, "archived")));
     if (!row) return null;
     const product = await getProductWithVariants(tx, row.id);
     const ids = product.variants.map((v) => v.id);
@@ -215,7 +215,7 @@ export async function quoteCart(db: Db, principal: Principal, input: { lines: un
     const quoted = lines.map((line: CartLine): QuotedLine => {
       const r = rows.find((x) => x.sku === line.sku);
       if (!r) return { ...line, status: "unknown", available: 0, unitPricePaisa: null, lineTotalPaisa: null, productSlug: null, nameEn: null, nameBn: null, size: null, colour: null, photo: null };
-      const orderable = r.variantStatus === "active" && r.productStatus === "draft";
+      const orderable = r.variantStatus === "active" && r.productStatus !== "archived";
       const free = Math.max(0, r.available);
       const lineTotal = r.pricePaisa * line.quantity;
       if (!Number.isSafeInteger(lineTotal)) throw new DomainError("INVALID_INPUT", "The cart total is too large.");

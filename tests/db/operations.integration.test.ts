@@ -330,10 +330,10 @@ describe("invariants", () => {
   it("stores no request content: only ids, a fingerprint and the result reference", async () => {
     const { sku } = await newSku();
     const k = key();
-    await receiveStockOnce(db, ownerA, k, { sku, quantity: 1, reason: "Supplier delivery note 4471" });
+    await receiveStockOnce(db, ownerA, k, { sku, quantity: 1, reason: "Supplier delivery note QXZ-PLM" }); // letters no hex fingerprint, id or date can contain
     const { rows } = await pool.query("select * from idempotency_records where idempotency_key = $1", [k]);
     expect(Object.keys(rows[0]).sort()).toEqual(["created_at", "idempotency_key", "operation", "request_fingerprint", "result", "user_id"]);
-    expect(JSON.stringify(rows[0])).not.toContain("4471");
+    expect(JSON.stringify(rows[0])).not.toContain("QXZ-PLM");
     expect(Object.keys(rows[0].result).sort()).toEqual(["movementId", "onHand"]);
   });
 });

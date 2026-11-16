@@ -92,7 +92,7 @@ export const productSummarySchema = z
   .object({
     id: z.uuid(),
     slug: z.string(),
-    status: z.enum(["draft", "archived"]),
+    status: z.enum(["draft", "published", "archived"]).meta({ description: "draft, published or archived. No product can be published while no publication rule is approved." }),
     name: localised,
     version,
     createdAt: timestamp,
@@ -226,7 +226,7 @@ export const DEFAULT_LIMIT = 25;
 export const productListQuery = z.strictObject({
   limit,
   cursor,
-  status: z.enum(["draft", "archived"]).optional(),
+  status: z.enum(["draft", "published", "archived"]).optional(),
   q: z.string().max(100).optional().meta({ description: "Search text, at most 100 characters." }),
 });
 export const movementListQuery = z.strictObject({ limit, cursor });

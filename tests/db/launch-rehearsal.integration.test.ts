@@ -3,8 +3,7 @@ import type { Pool } from "pg";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import type { Db } from "../../src/db/database";
 import type { Principal } from "../../src/modules/auth/principal";
-import { replaceMeasurementsOnce, reviewProductOnce, updateProductOnce } from "../../src/modules/catalogue/operations";
-import { reviewStates } from "../../src/modules/catalogue/review";
+import { replaceMeasurementsOnce, updateProductOnce } from "../../src/modules/catalogue/operations";
 import { createProduct, createVariant } from "../../src/modules/catalogue/service";
 import { getStockLevel, receiveStock } from "../../src/modules/inventory/service";
 import { launchReadiness } from "../../src/modules/launch/readiness";
@@ -31,6 +30,7 @@ import { addToCart, setQuantity } from "../../src/modules/storefront/cart";
 import { quoteCart } from "../../src/modules/storefront/service";
 import { clearAuthState, count, createTestAuth, createVerifiedOwner } from "../support/auth";
 import { errorCodeOf, TEST_ACTOR } from "../support/fixtures";
+import { publishNow } from "../support/publication";
 import { createTestDb } from "../support/test-database";
 
 // A private launch rehearsal (Gate H.28), test database only: one fictional product from preparation to review, a
@@ -69,7 +69,7 @@ it("rehearses the whole customer and Owner journey on one fictional product", as
   await replaceMeasurementsOnce(db, owner, key(), { productId: product.id, expectedVersion: version, measurements: ["0-3M", "3-6M"].flatMap((size, i) => [{ size, point: "chest", valueMm: 245 + i * 15 }, { size, point: "length", valueMm: 380 + i * 30 }]) });
   await receiveStock(db, { sku: small.sku, quantity: 4, actor: TEST_ACTOR });
   await receiveStock(db, { sku: large.sku, quantity: 2, actor: TEST_ACTOR });
-  await reviewProductOnce(db, owner, key(), { productId: product.id, contentSha256: (await reviewStates(db, [product.id])).get(product.id)?.contentSha256 ?? "" });
+  await publishNow(db, owner, product.id); // reviewed, then published under the test-only rule
 
   // 4-5. A cart with quantity changes, priced from the database with the delivery charge (the Owner's preview quote;
   // a public, published-only quote does not exist yet).

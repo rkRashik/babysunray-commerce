@@ -255,7 +255,7 @@ describe("edit forms", () => {
     expect(both.state?.error).toBe("A product needs a name in English or Bangla.");
     await submit(actions.archiveProductAction, { idempotencyKey: randomUUID(), productId: product.id });
     const archived = await submit(actions.updateProductAction, { idempotencyKey: randomUUID(), productId: product.id, version: "2", nameEn: "Revived" });
-    expect(archived.state?.error).toBe("An archived product cannot be edited.");
+    expect(archived.state?.error).toBe("Only a draft product can be edited (this one is archived or published).");
   });
 
   it("saves a variant's size, colour and exact price without touching SKU or stock", async () => {

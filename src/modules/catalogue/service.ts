@@ -58,15 +58,21 @@ export async function createProduct(db: Db, input: NewProduct): Promise<Product>
   }
 }
 
-/** Archives a product. Products are never deleted (requirement I-11). Archiving twice is harmless. */
+/**
+ * Archives a product. Products are never deleted (requirement I-11). Archiving twice is harmless. A published
+ * product is withdrawn first (publication.ts), so its removal from the shop is recorded in the publication history.
+ */
 export async function archiveProduct(db: Db, productId: string): Promise<Product> {
+  const id = validateId(productId, "productId");
   const [product] = await db
     .update(products)
     .set({ status: "archived", version: sql`${products.version} + 1`, updatedAt: sql`now()` })
-    .where(eq(products.id, validateId(productId, "productId")))
+    .where(and(eq(products.id, id), sql`${products.status} <> 'published'`))
     .returning();
-  if (!product) throw new DomainError("PRODUCT_NOT_FOUND", "Product not found.");
-  return product;
+  if (product) return product;
+  const [existing] = await db.select({ id: products.id }).from(products).where(eq(products.id, id));
+  if (!existing) throw new DomainError("PRODUCT_NOT_FOUND", "Product not found.");
+  throw new DomainError("PRODUCT_NOT_EDITABLE", "A published product is withdrawn from the shop before it is archived.");
 }
 
 /**
@@ -140,7 +146,7 @@ type ProductSet = Partial<Pick<Product, "nameEn" | "nameBn" | "descriptionEn" | 
 async function lockDraft(tx: Db, id: string, version: number): Promise<Product> {
   const [current] = await tx.select().from(products).where(eq(products.id, id)).for("update");
   if (!current) throw new DomainError("PRODUCT_NOT_FOUND", "Product not found.");
-  if (current.status !== "draft") throw new DomainError("PRODUCT_NOT_EDITABLE", "An archived product cannot be edited.");
+  if (current.status !== "draft") throw new DomainError("PRODUCT_NOT_EDITABLE", "Only a draft product can be edited (this one is archived or published).");
   if (current.version !== version) throw conflict("product");
   return current;
 }
@@ -288,7 +294,7 @@ export async function updateVariant(db: Db, variantId: string, expectedVersion: 
       .where(eq(variants.id, id))
       .for("update");
     if (!current) throw new DomainError("VARIANT_NOT_FOUND", "Variant not found.");
-    if (current.productStatus !== "draft") throw new DomainError("VARIANT_NOT_EDITABLE", "A variant of an archived product cannot be edited.");
+    if (current.productStatus !== "draft") throw new DomainError("VARIANT_NOT_EDITABLE", "A variant of an archived or published product cannot be edited.");
     if (current.variant.status !== "active") throw new DomainError("VARIANT_NOT_EDITABLE", "An inactive variant cannot be edited.");
     if (current.variant.version !== version) throw conflict("variant");
     const [variant] = await tx
@@ -339,7 +345,7 @@ function matches(term: string) {
 /**
  * Products oldest first, ordered by (created_at, id) so rows created in the same microsecond still have a
  * fixed order. `after` continues from the last row of the previous page; filters (status, search) apply to
- * every page alike. For the Owner Office only: every product here is a draft or archived, and none is public.
+ * every page alike. For the Owner Office only: products of every status; nothing here is a public read.
  * Without an index the search reads every product row, which suits a small catalogue.
  */
 export async function listProducts(

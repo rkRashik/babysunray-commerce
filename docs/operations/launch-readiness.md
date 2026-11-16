@@ -50,7 +50,7 @@ Live checks: catalogue counts over draft products (the readiness checklist, avai
 
 ## 4. Product release preparation
 
-There is no publish action and no published state. Every product stays a draft.
+There is no publish action anyone can reach, and every product stays a draft. A `published` state and the publication mechanics exist since Gate H.32 (catalogue guide, "Publication"), but publishing needs a founder-approved publication rule (I-6), and none exists. Until then the readiness page flags any product found published as a database change to investigate.
 
 1. **Prepare** each product until the readiness checklist is met (`/office/catalogue-preparation`, the product page).
 2. **Check** how it would look in the customer preview (`/office/storefront-preview`).
@@ -58,7 +58,7 @@ There is no publish action and no published state. Every product stays a draft.
 4. A review is **current** only while the content still has that digest. Any change to names, descriptions, fabric (or its confirmation), care, size guidance, category, a SKU's size, colour, price or status, a new SKU, the size chart or a photo (file, description or order) makes it **outdated**. Stock, the featured flag and category names do not.
 5. A review needs the founder-stated items (both names, both descriptions, an active priced SKU). It is refused if the content changed after the page was loaded.
 
-A review grants no visibility. It is used in one place: the inactive guest checkout service accepts only SKUs of products with a current review (an engineering default, Draft — Founder Review, until a publication rule is approved).
+A review grants no visibility. Publishing (not yet possible) requires a current review of exactly what is published. The inactive guest checkout service accepts only active SKUs of **published** products (since Gate H.32; before, a current review was enough), the same rule as the published-only catalogue, so today it accepts none. Unknown, draft, withdrawn, archived and inactive SKUs get the same answer.
 
 ## 5. Guest checkout service (inactive)
 

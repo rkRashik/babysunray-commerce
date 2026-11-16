@@ -34,7 +34,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ pr
     return (
       <OfficeShell title="Edit details" breadcrumbs={crumbs}>
         <p role="status" className="text-sm text-gray-700">
-          This product is archived, so it cannot be edited. <Link href={back} className="underline">Back to the product</Link>.
+          This product is {product.status}, so it cannot be edited. <Link href={back} className="underline">Back to the product</Link>.
         </p>
       </OfficeShell>
     );

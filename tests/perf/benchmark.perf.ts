@@ -23,6 +23,7 @@ import { getPeriodReport } from "../../src/modules/reports/summary";
 import { getPreviewProduct, listPreviewProducts, previewFacets, quoteCart } from "../../src/modules/storefront/service";
 import { clearAuthState, createTestAuth, createVerifiedOwner } from "../support/auth";
 import { testImage } from "../support/images";
+import { publishNow } from "../support/publication";
 import { createTestDb } from "../support/test-database";
 
 // Performance benchmark (Gate H.28) on fictional data in babysunray_test only: 5,000 draft products with three SKUs
@@ -180,10 +181,9 @@ it("orders: list pages, attention filter, dashboard, a year's report, guest subm
   await measure("reports.period.365days", () => getPeriodReport(db, parseDateRange(yearAgo, today)));
   await explain("orders.attention", sql`select id from orders where order_status = 'verification_expired' or (order_status = 'pending_verification' and verification_expires_at <= now()) or exists (select 1 from cancellation_requests c where c.order_id = orders.id and c.status = 'open') order by created_at desc, id desc limit 26`);
 
-  // One guest submission into the full catalogue (a reviewed product).
+  // One guest submission into the full catalogue (a reviewed, published product).
   const [{ id }] = (await pool.query<{ id: string }>("select id from products where slug = 'perf-p-77'")).rows;
-  const state = (await reviewStates(db, [id])).get(id)!;
-  await reviewProductOnce(db, owner, randomUUID(), { productId: id, contentSha256: state.contentSha256 });
+  await publishNow(db, owner, id);
   const request = () => ({ customer: { name: "Perf Guest", phone: "01711000777", address: "House 77, Fictional Road" }, deliveryZone: "dhaka_city", items: [{ sku: "PERF-77-1", quantity: 1, unitPricePaisa: 52_500 }], deliveryChargePaisa: 6_000, totalPaisa: 58_500 });
   const t = performance.now();
   expect((await placeGuestOrder(db, randomUUID(), request())).replayed).toBe(false);

@@ -100,6 +100,7 @@ describe("destructive reset statements", () => {
       '"public"."product_categories"',
       '"public"."product_measurements"',
       '"public"."product_media"',
+      '"public"."product_publication_events"',
       '"public"."product_reviews"',
       '"public"."products"',
       '"public"."quarantine_items"',

@@ -99,6 +99,13 @@
       "when": 1794775767532,
       "tag": "0013_guest_checkout_launch_preparation",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794846843870,
+      "tag": "0014_product_publication",
+      "breakpoints": true
     }
   ]
 }

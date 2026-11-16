@@ -68,10 +68,13 @@ describe("products", () => {
     expect((await createProduct(db, { slug: "cat-2-pack", nameEn: "Test" })).slug).toBe("cat-2-pack");
   });
 
-  it("only allows draft and archived, so no product can become sellable yet", async () => {
-    expect(
-      await errorCodeOf(pool.query("insert into products (slug, name_en, status) values ('cat-pub', 'x', 'published')")),
-    ).toBe("23514");
+  it("allows only draft, published and archived (migration 0014); nothing in the application can publish yet", async () => {
+    for (const status of ["live", "Published", "deleted", ""]) {
+      expect(await errorCodeOf(pool.query("insert into products (slug, name_en, status) values ('cat-pub', 'x', $1)", [status]))).toBe("23514");
+    }
+    // The database accepts the state; publishing is refused by the application (publication.integration.test.ts).
+    await pool.query("insert into products (slug, name_en, status) values ('cat-pub', 'x', 'published')");
+    await pool.query("update products set status = 'archived' where slug = 'cat-pub'");
   });
 
   it("archives instead of deleting, and a product with variants cannot be deleted", async () => {

@@ -82,7 +82,7 @@ export async function submitOrder(tx: Db, input: NewOrder, actor: OrderActor): P
   const snapshot = lines.map((line) => {
     const c = bySku.get(line.sku);
     if (!c) throw new DomainError("VARIANT_NOT_FOUND", `No variant has the SKU ${line.sku}.`);
-    if (c.variant.status !== "active" || c.productStatus !== "draft") {
+    if (c.variant.status !== "active" || c.productStatus === "archived") {
       throw new DomainError("VARIANT_NOT_ORDERABLE", `${line.sku} is inactive or its product is archived, so it cannot be ordered.`);
     }
     const lineTotalPaisa = c.variant.pricePaisa * line.quantity;

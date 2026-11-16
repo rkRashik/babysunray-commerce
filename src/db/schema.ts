@@ -33,7 +33,10 @@ export const productCategories = pgTable(
   ],
 );
 
-// A product is never published by this schema: publication rules (requirement I-6) are not approved yet.
+// Status: draft (editable, never shown to customers), published (shown by the published-only public reads; its
+// content cannot be edited, migration 0014) or archived (never undone). No code path can publish while no
+// publication rule (requirement I-6) is approved: src/modules/catalogue/publication.ts.
+const PRODUCT_STATUSES = ["draft", "published", "archived"] as const;
 export const products = pgTable(
   "products",
   {
@@ -43,7 +46,7 @@ export const products = pgTable(
     nameBn: text("name_bn"),
     descriptionEn: text("description_en"),
     descriptionBn: text("description_bn"),
-    status: text("status", { enum: ["draft", "archived"] }).notNull().default("draft"),
+    status: text("status", { enum: PRODUCT_STATUSES }).notNull().default("draft"),
     version: version(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -64,7 +67,7 @@ export const products = pgTable(
   (t) => [
     check("products_version_positive", sql`${t.version} >= 1`),
     check("products_slug_format", sql`${t.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and length(${t.slug}) <= 100`),
-    check("products_status_valid", sql`${t.status} in ('draft', 'archived')`),
+    check("products_status_valid", sql`${t.status} in ('draft', 'published', 'archived')`),
     check("products_name_present", sql`${t.nameEn} is not null or ${t.nameBn} is not null`),
     check(
       "products_names_valid",
@@ -959,6 +962,31 @@ export const productReviews = pgTable(
     index("product_reviews_product_id_created_at_idx").on(t.productId, t.createdAt),
     check("product_reviews_content_sha256_format", sql`${t.contentSha256} ~ '^[0-9a-f]{64}$'`),
     check("product_reviews_open_items_array", sql`jsonb_typeof(${t.openItems}) = 'array'`),
+  ],
+);
+
+// Append-only record of every publication decision (migration 0014; trigger as for export_requests): who published
+// or withdrew which product, when, the SHA-256 of its reviewed content at that moment (contentDigest in
+// src/modules/catalogue/review.ts) and, for a publication, the id of the founder-approved rule it met. The product's
+// status is the current state; this table is its history. Nothing writes it while no publication rule is approved.
+export const productPublicationEvents = pgTable(
+  "product_publication_events",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "restrict" }),
+    event: text("event", { enum: ["published", "withdrawn"] }).notNull(),
+    contentSha256: text("content_sha256").notNull(),
+    ruleId: text("rule_id"),
+    actorUserId: userRef("actor_user_id").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("product_publication_events_product_id_id_idx").on(t.productId, t.id),
+    check("product_publication_events_event_valid", sql`${t.event} in ('published', 'withdrawn')`),
+    check("product_publication_events_content_sha256_format", sql`${t.contentSha256} ~ '^[0-9a-f]{64}$'`),
+    check("product_publication_events_rule_consistent", sql`(${t.event} = 'published') = (${t.ruleId} is not null) and (${t.ruleId} is null or ${t.ruleId} ~ '^[a-z0-9][a-z0-9.-]{0,63}$')`),
   ],
 );
 

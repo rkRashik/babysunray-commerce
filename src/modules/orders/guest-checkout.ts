@@ -4,8 +4,8 @@ import { asc, eq } from "drizzle-orm";
 import * as z from "zod";
 import type { Db } from "@/db/database";
 import { guestCheckoutSubmissions, orderItems, orders } from "@/db/schema";
-import { skusWithoutCurrentReview } from "../catalogue/review";
 import { normalizeSku } from "../catalogue/rules";
+import { skusNotOrderableByCustomers } from "../catalogue/visibility";
 import { DomainError } from "../domain-error";
 import { canonicalJson } from "../idempotency/service";
 import { GUEST_CHECKOUT } from "./internal";
@@ -37,8 +37,8 @@ import { createTrackingLink } from "./tracking";
 //   data and nothing a reader could test guesses against without the key;
 // - the client sends the prices and delivery charge it showed; any difference refuses the order (QUOTE_CHANGED),
 //   so a customer never gets an order at an amount they were not shown (S-7);
-// - only SKUs of products with a current internal review can be ordered (an engineering default until a
-//   publication rule, I-6, is approved; docs/operations/launch-readiness.md);
+// - only active SKUs of published products can be ordered, the same rule as the public catalogue
+//   (src/modules/catalogue/visibility.ts). Nothing can be published while no publication rule (I-6) is approved;
 // - the order's tracking link is created in the same transaction and its token returned once, in this answer.
 //   A replay never creates another link (that would revoke the first) and cannot show the token again: only its
 //   digest is stored. A customer whose first answer was lost still sees that the order was received, and the
@@ -172,8 +172,10 @@ async function attempt(db: Db, key: string, input: GuestCheckout): Promise<Guest
       return { replayed: true, order: await summary(tx, existing.orderId), trackingToken: null };
     }
 
-    const unreviewed = await skusWithoutCurrentReview(tx, input.items.map((i) => i.sku));
-    if (unreviewed.length) throw new DomainError("VARIANT_NOT_ORDERABLE", `${unreviewed[0]} cannot be ordered.`);
+    // Unknown, inactive, draft, withdrawn and archived SKUs are refused alike, so the answer reveals nothing about
+    // products a customer cannot see.
+    const refused = await skusNotOrderableByCustomers(tx, input.items.map((i) => i.sku));
+    if (refused.length) throw new DomainError("VARIANT_NOT_ORDERABLE", "An item cannot be ordered.");
     const order = await submitOrder(
       tx,
       { source: "website", ...input.customer, deliveryZone: input.deliveryZone, note: null, items: input.items.map((i) => ({ sku: i.sku, quantity: i.quantity })) },

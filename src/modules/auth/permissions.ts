@@ -20,6 +20,9 @@ export const PERMISSIONS = [
   // Recording an internal product review (Gate H.26): separate from editing, so a later role can edit without
   // reviewing. A review publishes nothing.
   "catalog:review",
+  // Publishing and withdrawing products (Gate H.32). Holding it publishes nothing while no publication rule
+  // (I-6) is approved: the operation refuses (src/modules/catalogue/publication.ts).
+  "catalog:publish",
   // Private customer-policy drafts (S-17): reading may show unpublished wording; writing never publishes.
   "policies:read",
   "policies:write",

@@ -1,12 +1,12 @@
 import "server-only";
-import { desc, eq, inArray, type SQL, sql } from "drizzle-orm";
+import { desc, eq, type SQL, sql } from "drizzle-orm";
 import type { Db } from "@/db/database";
-import { productReviews, products, variants } from "@/db/schema";
+import { productReviews, products } from "@/db/schema";
 import type { UserActor } from "../actor";
 import { validateActor } from "../actor";
 import { DomainError } from "../domain-error";
 import { evaluateReadiness } from "./readiness";
-import { normalizeSku, validateId } from "./rules";
+import { validateId } from "./rules";
 import { getProductWithVariants } from "./service";
 
 // Internal product review (Gate H.26). The Owner records that a draft product's current content was reviewed.
@@ -73,25 +73,6 @@ export async function reviewStates(db: Db, productIds: string[]): Promise<Map<st
       },
     ]),
   );
-}
-
-/**
- * SKUs (canonical) whose draft product has no current review, among those that exist. The products are locked
- * FOR SHARE, so a content edit (which locks the product FOR UPDATE) cannot commit while the caller's transaction
- * relies on the answer. Unknown SKUs are not listed; the caller reports them itself.
- */
-export async function skusWithoutCurrentReview(tx: Db, skus: string[]): Promise<string[]> {
-  if (skus.length === 0) return [];
-  const rows = await tx
-    .select({
-      sku: variants.sku,
-      current: sql<boolean>`coalesce((select r.content_sha256 from ${productReviews} r where r.product_id = ${products.id} order by r.created_at desc, r.id desc limit 1) = ${contentDigest()}, false)`,
-    })
-    .from(variants)
-    .innerJoin(products, eq(products.id, variants.productId))
-    .where(inArray(variants.sku, skus.map((s) => normalizeSku(s))))
-    .for("share", { of: products });
-  return rows.filter((r) => !r.current).map((r) => r.sku);
 }
 
 /**

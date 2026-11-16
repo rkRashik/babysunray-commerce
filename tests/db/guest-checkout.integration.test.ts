@@ -4,8 +4,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { guestCheckoutResponse } from "../../src/api/guest-checkout";
 import type { Db } from "../../src/db/database";
 import type { Principal } from "../../src/modules/auth/principal";
-import { reviewProductOnce } from "../../src/modules/catalogue/operations";
-import { reviewStates } from "../../src/modules/catalogue/review";
 import { createProduct, createVariant, updateProduct, updateVariant } from "../../src/modules/catalogue/service";
 import { receiveStock } from "../../src/modules/inventory/service";
 import { publicCheckoutGate } from "../../src/modules/launch/gate";
@@ -15,6 +13,7 @@ import { getOrderDetail } from "../../src/modules/orders/queries";
 import { guestView } from "../../src/modules/orders/tracking";
 import { clearAuthState, count, createTestAuth, createVerifiedOwner } from "../support/auth";
 import { errorCodeOf, TEST_ACTOR, withFailingInserts } from "../support/fixtures";
+import { publishNow, withdrawNow } from "../support/publication";
 import { createTestDb } from "../support/test-database";
 
 // The future guest checkout service and its unrouted HTTP transport against PostgreSQL (Gate H.25). Every attempt
@@ -58,19 +57,14 @@ async function setZone(code: "dhaka_city" | "outside_dhaka", chargePaisa: number
   await setDeliveryZoneOnce(db, owner, key(), { code, chargePaisa, active, expectedVersion: rows[0]?.version ?? null });
 }
 
-/** A complete, reviewed draft product with one SKU and `stock` units. */
-async function reviewedSku(stock: number, pricePaisa = 50_000, review = true) {
+/** A complete product with one SKU and `stock` units, published under the test rule (tests/support/publication.ts). */
+async function publishedSku(stock: number, pricePaisa = 50_000, publish = true) {
   counter += 1;
   const product = await createProduct(db, { slug: `guest-p-${counter}`, nameEn: "Guest Test Romper", nameBn: "অতিথি পরীক্ষা রম্পার", descriptionEn: "Fictional.", descriptionBn: "কাল্পনিক।" });
   const variant = await createVariant(db, { productId: product.id, sku: `GUEST-${counter}`, size: "6-12M", colour: "Ivory", pricePaisa });
   if (stock > 0) await receiveStock(db, { sku: variant.sku, quantity: stock, actor: TEST_ACTOR });
-  if (review) await reviewNow(product.id);
+  if (publish) await publishNow(db, owner, product.id);
   return { productId: product.id, variantId: variant.id, sku: variant.sku, pricePaisa };
-}
-
-async function reviewNow(productId: string) {
-  const state = (await reviewStates(db, [productId])).get(productId);
-  await reviewProductOnce(db, owner, key(), { productId, contentSha256: state?.contentSha256 ?? "" });
 }
 
 type Line = { sku: string; quantity: number; unitPricePaisa: number };
@@ -123,7 +117,7 @@ async function race(lockSql: string, param: string, attempts: (racingDb: Db) => 
 
 describe("guest checkout service", () => {
   it("creates a website order as the customer, never as a user: Pending Verification, stock held, one private link", async () => {
-    const a = await reviewedSku(3);
+    const a = await publishedSku(3);
     const before = await counts();
     const result = await placeGuestOrder(db, key(), request([line(a, 2)]));
     expect(result.replayed).toBe(false);
@@ -151,7 +145,7 @@ describe("guest checkout service", () => {
   });
 
   it("refuses an Owner actor, role, user id or order source in the request, and creates nothing", async () => {
-    const a = await reviewedSku(2);
+    const a = await publishedSku(2);
     const before = await counts();
     for (const extra of [{ actor: { type: "user", ref: ownerId } }, { role: "owner" }, { createdByUserId: ownerId }, { source: "whatsapp" }]) {
       expect(await fieldErrors(placeGuestOrder(db, key(), request([line(a)], extra)))).toContainEqual({ field: "request", code: "unknown_field" });
@@ -162,7 +156,7 @@ describe("guest checkout service", () => {
   });
 
   it("validates every field and names the fields only", async () => {
-    const a = await reviewedSku(2);
+    const a = await publishedSku(2);
     const before = await counts();
     expect(await fieldErrors(placeGuestOrder(db, key(), request([line(a)], { customer: { ...CUSTOMER, phone: "02 9112233" } })))).toEqual([{ field: "customer.phone", code: "phone_invalid" }]);
     expect(await fieldErrors(placeGuestOrder(db, key(), request([line(a)], { customer: { ...CUSTOMER, name: "x".repeat(101) } })))).toEqual([{ field: "customer.name", code: "name_too_long" }]);
@@ -180,7 +174,7 @@ describe("guest checkout service", () => {
   });
 
   it("refuses a missing, short or malformed key before anything else", async () => {
-    const a = await reviewedSku(1);
+    const a = await publishedSku(1);
     for (const bad of [undefined, "", "short-key", "x".repeat(31), "has space".padEnd(40, "x"), "é".repeat(40), "x".repeat(129)]) {
       expect(await fieldErrors(placeGuestOrder(db, bad, request([line(a)])))).toEqual([{ field: "idempotencyKey", code: "key_invalid" }]);
     }
@@ -188,7 +182,7 @@ describe("guest checkout service", () => {
   });
 
   it("the same key after a lost response returns the same order, creates no second link and keeps the first link working", async () => {
-    const a = await reviewedSku(2);
+    const a = await publishedSku(2);
     const k = key();
     const first = await placeGuestOrder(db, k, request([line(a)]));
     const before = await counts();
@@ -202,7 +196,7 @@ describe("guest checkout service", () => {
   });
 
   it("the same key with a different request is refused and changes nothing", async () => {
-    const a = await reviewedSku(3);
+    const a = await publishedSku(3);
     const k = key();
     await placeGuestOrder(db, k, request([line(a)]));
     const before = await counts();
@@ -213,7 +207,7 @@ describe("guest checkout service", () => {
   });
 
   it("two customers racing for the last unit: exactly one order, the other refused with nothing left behind", async () => {
-    const a = await reviewedSku(1);
+    const a = await publishedSku(1);
     const before = await counts();
     const outcomes = await race("select 1 from inventory_balances where variant_id = $1 for update", a.variantId, (racing) => [placeGuestOrder(racing, key(), request([line(a)])), placeGuestOrder(racing, key(), request([line(a)]))], 2);
     expect(outcomes.filter((o) => o.ok)).toHaveLength(1);
@@ -223,7 +217,7 @@ describe("guest checkout service", () => {
   });
 
   it("a retry while the first attempt is still in its transaction waits, then replays the one order", async () => {
-    const a = await reviewedSku(2);
+    const a = await publishedSku(2);
     const k = key();
     const before = await counts();
     // The first attempt blocks on the stock row after claiming the key; the retry blocks on the claimed key.
@@ -238,8 +232,8 @@ describe("guest checkout service", () => {
   });
 
   it("a two-SKU order with one short line creates no order, hold, link or submission", async () => {
-    const a = await reviewedSku(5);
-    const b = await reviewedSku(1);
+    const a = await publishedSku(5);
+    const b = await publishedSku(1);
     const before = await counts();
     expect(await errorCodeOf(placeGuestOrder(db, key(), request([line(a, 2), line(b, 2)])))).toBe("INSUFFICIENT_STOCK");
     expect(await counts()).toEqual(before);
@@ -247,21 +241,23 @@ describe("guest checkout service", () => {
   });
 
   it("refuses when a price, the stock or the delivery charge changed after the cart was shown", async () => {
-    const a = await reviewedSku(2, 40_000);
+    const a = await publishedSku(2, 40_000);
     const shown = request([line(a)]);
+    // A published product's price cannot change: withdraw, edit, review and publish again.
+    await withdrawNow(db, owner, a.productId);
     await updateVariant(db, a.variantId, 1, { pricePaisa: 45_000 });
-    await reviewNow(a.productId);
+    await publishNow(db, owner, a.productId);
     const before = await counts();
     expect(await errorCodeOf(placeGuestOrder(db, key(), shown))).toBe("QUOTE_CHANGED");
     expect(await counts()).toEqual(before);
     expect(await reserved(a.variantId)).toBe(0);
 
-    const b = await reviewedSku(1);
+    const b = await publishedSku(1);
     const forB = request([line(b)]);
     await placeGuestOrder(db, key(), request([line(b)]));
     expect(await errorCodeOf(placeGuestOrder(db, key(), forB))).toBe("INSUFFICIENT_STOCK");
 
-    const c = await reviewedSku(2);
+    const c = await publishedSku(2);
     const forC = request([line(c)]);
     await setZone("dhaka_city", DHAKA + 1_000, true);
     try {
@@ -276,19 +272,29 @@ describe("guest checkout service", () => {
     expect((await placeGuestOrder(db, key(), forC)).order.totalPaisa).toBe(c.pricePaisa + DHAKA);
   });
 
-  it("only orders products with a current internal review; any later content change outdates the review", async () => {
-    const unreviewed = await reviewedSku(2, 50_000, false);
-    expect(await errorCodeOf(placeGuestOrder(db, key(), request([line(unreviewed)])))).toBe("VARIANT_NOT_ORDERABLE");
-    const a = await reviewedSku(2);
-    await updateProduct(db, a.productId, 1, { careEn: "Fictional care text." });
-    expect(await errorCodeOf(placeGuestOrder(db, key(), request([line(a)])))).toBe("VARIANT_NOT_ORDERABLE");
-    await reviewNow(a.productId);
+  it("orders only active SKUs of published products; draft, withdrawn, inactive and unknown SKUs get one answer", async () => {
+    const draft = await publishedSku(2, 50_000, false);
+    const before = await counts();
+    const refusals = [];
+    refusals.push(await errorCodeOf(placeGuestOrder(db, key(), request([line(draft)]))));
+    const a = await publishedSku(2);
+    await withdrawNow(db, owner, a.productId);
+    await updateProduct(db, a.productId, 3, { careEn: "Fictional care text." }); // created 1, published 2, withdrawn 3
+    refusals.push(await errorCodeOf(placeGuestOrder(db, key(), request([line(a)]))));
+    refusals.push(await errorCodeOf(placeGuestOrder(db, key(), request([{ sku: "GUEST-UNKNOWN", quantity: 1, unitPricePaisa: 1 }]))));
+    const inactive = await publishedSku(2);
+    await pool.query("update variants set status = 'inactive' where id = $1", [inactive.variantId]);
+    refusals.push(await errorCodeOf(placeGuestOrder(db, key(), request([line(inactive)]))));
+    expect(refusals).toEqual(Array(4).fill("VARIANT_NOT_ORDERABLE"));
+    const { orders, submissions, tokens, holds } = before;
+    expect(await counts()).toMatchObject({ orders, submissions, tokens, holds });
+    // Published again after its review: orderable.
+    await publishNow(db, owner, a.productId);
     expect((await placeGuestOrder(db, key(), request([line(a)]))).replayed).toBe(false);
-    expect(await errorCodeOf(placeGuestOrder(db, key(), request([{ sku: "GUEST-UNKNOWN", quantity: 1, unitPricePaisa: 1 }])))).toBe("VARIANT_NOT_FOUND");
   });
 
   it("rolls everything back when the database fails mid-transaction, and the same key then works", async () => {
-    const a = await reviewedSku(2);
+    const a = await publishedSku(2);
     const k = key();
     const before = await counts();
     expect(await errorCodeOf(withFailingInserts(pool, "order_tracking_tokens", () => placeGuestOrder(db, k, request([line(a)]))))).toBe("P0001");
@@ -300,7 +306,7 @@ describe("guest checkout service", () => {
   });
 
   it("a committed submission can never be changed or deleted", async () => {
-    const a = await reviewedSku(1);
+    const a = await publishedSku(1);
     await placeGuestOrder(db, key(), request([line(a)]));
     await expect(pool.query("update guest_checkout_submissions set request_mac = repeat('0', 64)")).rejects.toThrow(/not allowed/);
     await expect(pool.query("update guest_checkout_submissions set order_id = null")).rejects.toThrow(/not allowed/);
@@ -318,7 +324,7 @@ describe("guest checkout transport (unrouted, test harness only)", () => {
     );
 
   it("with the real launch gate, refuses before reading anything, whatever the policy state", async () => {
-    const a = await reviewedSku(1);
+    const a = await publishedSku(1);
     const before = await counts();
     const reviewed = { delivery: "reviewed", returns: "reviewed", privacy: "reviewed", checkout_notices: "reviewed" } as const;
     const realGate = () => publicCheckoutGate({ policies: reviewed, deliveryZonesConfigured: true, reviewedProducts: 1 });
@@ -329,7 +335,7 @@ describe("guest checkout transport (unrouted, test harness only)", () => {
   });
 
   it("creates the order once over HTTP: 201 with the token, then 200 replayed without it", async () => {
-    const a = await reviewedSku(2);
+    const a = await publishedSku(2);
     const k = key();
     const first = await post(request([line(a)]), { "idempotency-key": k });
     expect(first.status).toBe(201);
@@ -345,7 +351,7 @@ describe("guest checkout transport (unrouted, test harness only)", () => {
   });
 
   it("refuses other origins, media types, missing keys, oversized and malformed bodies, and other methods", async () => {
-    const a = await reviewedSku(1);
+    const a = await publishedSku(1);
     const before = await counts();
     expect((await post(request([line(a)]), { origin: "https://evil.example" })).status).toBe(403);
     expect((await post(request([line(a)]), { "content-type": "text/plain" })).status).toBe(415);
@@ -358,7 +364,7 @@ describe("guest checkout transport (unrouted, test harness only)", () => {
   });
 
   it("answers validation and business failures with field names and fixed messages, never the customer's data", async () => {
-    const a = await reviewedSku(1);
+    const a = await publishedSku(1);
     const invalid = await post(request([line(a)], { customer: { ...CUSTOMER, phone: "12345" } }));
     expect(invalid.status).toBe(400);
     const text = await invalid.text();
@@ -370,7 +376,7 @@ describe("guest checkout transport (unrouted, test harness only)", () => {
   });
 
   it("an unexpected failure says the order was not recorded and logs no customer data or token", async () => {
-    const a = await reviewedSku(1);
+    const a = await publishedSku(1);
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     try {
       const response = await withFailingInserts(pool, "orders", () => post(request([line(a)])));
