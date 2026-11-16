@@ -362,6 +362,20 @@ As of 16 Nov 2026. Basis labels are unchanged; no design is approved and nothing
 | S-2, S-13, BR-6 | Third prototype, not approved | Concept C, a proposed hybrid of A and B, with a proposed design system; tested on a 360-pixel screen for fit, 44-pixel targets and axe in both languages ([storefront-concepts.md](../design/storefront-concepts.md)). No usability test with people (G-9). |
 | S-14, S-17, I-5, I-6, O-8 | Decisions collected | The decisions the public storefront still needs, with recommendations: [storefront-launch-decisions.md](storefront-launch-decisions.md). None is implemented as policy. |
 
+### 9.5 Implementation status (Batch H.31–H.38)
+
+As of 16 Nov 2026. Basis labels are unchanged: building a foundation for a **P** or **Q** item does not approve it, and nothing here is public. Feature-by-feature overview: [backend-completeness.md](../architecture/backend-completeness.md).
+
+| ID | Status | Notes |
+|---|---|---|
+| I-6 | Mechanics built, refusing | A `published` state, publish and withdraw services, an append-only publication history and published-only reads (migration 0014). Publishing needs a founder-approved rule; none exists, so the only publishing operation refuses and nothing routes to it. A published product's content cannot be edited. |
+| S-3, S-4, S-7, S-14, S-17 | Dormant | Published-only catalogue, filters, product page and cart quote, and a storewide guest checkout limit (migration 0015), as services and unrouted HTTP handlers ([public-api.md](../api/public-api.md)). The guest checkout now orders only published products. Customer accounts are evaluated, not built ([ADR-0008](../adr/0008-customer-identity-recovery-and-mfa.md)). |
+| OF-3, OF-8 | Extended | Courier deductions recorded by the Owner (migration 0016): collected money counts as accounted for once settled or recorded as deducted, so a courier's fee no longer keeps an order open. Reconciliation report, period report and exports include them. Statement import stays P (no format known). |
+| S-15, API-11 | Hardened | The public tracking endpoints count body bytes while streaming (they read any size before); request ids on public answers. Per-client limits still need a trusted proxy. |
+| EN-6, API-11 | Extended | Connection-wait (10 s) and statement (60 s) limits on the application pool; tests for publication races, two concurrent expiry batches and draft leaks through every public read. |
+| OF-5, OF-10, S-14 | Evaluated, not built | Recovery codes or email reset, Better Auth's 2FA plugin (TOTP codes can be replayed within about 90 seconds; backup codes stored encrypted, not hashed), customer identity in a separate auth instance: [ADR-0008](../adr/0008-customer-identity-recovery-and-mfa.md). |
+| OF-6 | Gap recorded | Account events (sign-in, password change, session revocation) are not audited yet; listed as remaining work. |
+
 ## 10. Phasing (proposed)
 
 | Phase | Outcome | Basis |
@@ -425,5 +439,6 @@ Also out of scope: a separate backend server, Express, microservices, a monorepo
 | Founder instruction, batch H.21–H.24 (15 Nov 2026) | Bulk catalogue import, catalogue preparation, media backup and restore tooling, storefront preview improvements, installation configuration and rehearsal | Approves the named engineering scope only; basis labels unchanged; no publication, public checkout, hosting, backup schedule or RPO/RTO approved. |
 | Founder instruction, Gate H.30 (16 Nov 2026) | Storefront design research, a proposed hybrid concept, customer-journey review, one launch decision document | Approves the named engineering scope only; final design approval stays with the founder; no public storefront, checkout or policy approved. |
 | Founder instruction, batch H.25–H.28 (16 Nov 2026) | Inactive guest checkout service, launch gate and readiness, private policy drafts, internal product review, two storefront design concepts, performance and recovery work, launch rehearsal | Approves the named engineering scope only; basis labels unchanged; no public checkout, publication, hosting, design, policy text, RPO/RTO or customer accounts approved. |
+| Founder instruction, batch H.31–H.38 (16 Nov 2026) | Backend completion: integrity and security fixes, publication foundation, dormant customer-facing API, courier deductions, operational limits, evaluation of customer identity, recovery and 2FA | Approves the named engineering scope only; basis labels unchanged; no publication, public checkout, customer accounts, hosting or deployment approved. |
 | Founder instruction, batch H.17–H.20 (15 Nov 2026) | Order and tracking fixes, product content and readiness, local development media, an Owner-only storefront preview with cart and checkout simulation, test and readiness work | Approves the named engineering scope only; basis labels unchanged; no publication, public checkout, customer accounts, hosting or final design approved. |
 | Original BabySunray brand and business documents on the G: drive | Not read for this draft | Should be checked against sections 1 and 8 during review. |

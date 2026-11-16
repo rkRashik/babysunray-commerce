@@ -71,6 +71,9 @@ it("rehearses the whole customer and Owner journey on one fictional product", as
   await receiveStock(db, { sku: large.sku, quantity: 2, actor: TEST_ACTOR });
   await publishNow(db, owner, product.id); // reviewed, then published under the test-only rule
 
+  // Other test files may record orders today too: the report is compared with itself before and after.
+  const reportBefore = await getPeriodReport(db, parseDateRange(today, today));
+
   // 4-5. A cart with quantity changes, priced from the database with the delivery charge (the Owner's preview quote;
   // a public, published-only quote does not exist yet).
   let cart = addToCart([], small.sku, 1);
@@ -140,7 +143,11 @@ it("rehearses the whole customer and Owner journey on one fictional product", as
   );
   for (const row of ledger.rows) expect(Number(row.sum), row.sku).toBe(row.on_hand);
   const report = await getPeriodReport(db, parseDateRange(today, today));
-  expect(JSON.stringify(report)).toContain(String(quote.totalPaisa));
+  const delta = (pick: (r: typeof report) => { count: number; amountPaisa: number }) => ({ count: pick(report).count - pick(reportBefore).count, amountPaisa: pick(report).amountPaisa - pick(reportBefore).amountPaisa });
+  expect(delta((r) => r.received.total)).toEqual({ count: 2, amountPaisa: (quote.totalPaisa as number) + second.order.totalPaisa });
+  expect(delta((r) => r.money.collected)).toEqual({ count: 1, amountPaisa: quote.totalPaisa });
+  expect(delta((r) => r.money.settled)).toEqual({ count: 1, amountPaisa: quote.totalPaisa });
+  expect(delta((r) => r.money.refunded)).toEqual({ count: 1, amountPaisa: 85_000 });
   const readiness = await launchReadiness(db, owner);
   expect(readiness.sections.find((s) => s.id === "commerce")?.checks.find((c) => c.id === "integrity")?.status).toBe("ready");
   expect(readiness.gate.open).toBe(false);

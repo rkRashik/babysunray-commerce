@@ -23,6 +23,8 @@ Each document starts with a status line. Most are **Draft — Founder Review**: 
 | [ADR-0005: Operation idempotency](adr/0005-operation-idempotency.md) | One idempotency record per user and key, committed with the operation |
 | [ADR-0006: Product photo storage](adr/0006-product-media-storage.md) | Storage interface, local development folder, manifest |
 | [ADR-0007: Guest checkout foundation](adr/0007-guest-checkout-foundation.md) | The inactive guest checkout: customer actor, anonymous idempotency, one-time tracking link |
+| [ADR-0008: Customer identity, recovery and 2FA](adr/0008-customer-identity-recovery-and-mfa.md) | Proposal only: separate customer identity, Owner recovery options, an evaluation of Better Auth's two-factor plugin, staff permissions |
+| [Backend completeness](architecture/backend-completeness.md) | Feature by feature: implemented, tested, production readiness, what blocks it, remaining work |
 
 ## API
 
