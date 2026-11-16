@@ -19,10 +19,10 @@ export default async function ImportPage() {
           a fabric statement.
         </p>
         <div className="flex flex-wrap gap-3 text-sm">
-          <a href="/office/import/template?format=xlsx" className="underline" download>
+          <a href="/office/import/template?format=xlsx" className="underline">
             Download the XLSX template
           </a>
-          <a href="/office/import/template?format=csv" className="underline" download>
+          <a href="/office/import/template?format=csv" className="underline">
             Download the CSV template
           </a>
         </div>
