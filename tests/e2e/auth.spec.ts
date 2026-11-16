@@ -92,3 +92,19 @@ test("a session that expires while a form is open sends the Owner to sign-in and
     await db.end();
   }
 });
+
+test("before the page's script runs, the sign-in form cannot be submitted, so a password never reaches a URL", async ({ browser, baseURL }) => {
+  // No JavaScript at all: the state of every browser between the HTML arriving and the script taking over.
+  const context = await browser.newContext({ javaScriptEnabled: false, ignoreHTTPSErrors: true, baseURL });
+  const page = await context.newPage();
+  await page.goto("/office/login");
+  await page.getByLabel("Email").fill(E2E_OWNER.email);
+  await page.getByLabel("Password").fill("a fictional password long enough");
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeDisabled();
+  await page.getByLabel("Password").press("Enter");
+  await page.waitForTimeout(500);
+  expect(page.url()).not.toMatch(/password|email=/);
+  await expect(page).toHaveURL(/\/office\/login$/);
+  await expect(page.locator("form")).toHaveAttribute("method", "post");
+  await context.close();
+});
