@@ -65,15 +65,15 @@ export default async function PreviewProduct({ params, searchParams }: Props) {
   return (
     <div className="space-y-10">
       <nav aria-label={t.home} className="text-sm text-sf-umber">
-        <ol className="flex flex-wrap gap-2">
+        <ol className="flex flex-wrap items-center gap-x-2">
           <li>
-            <Link href={base(lang)} className="underline underline-offset-4">
+            <Link href={base(lang)} className="inline-flex min-h-11 items-center underline underline-offset-4">
               {t.home}
             </Link>
           </li>
           <li aria-hidden="true">/</li>
           <li>
-            <Link href={`${base(lang)}/products`} className="underline underline-offset-4">
+            <Link href={`${base(lang)}/products`} className="inline-flex min-h-11 items-center underline underline-offset-4">
               {t.shopAll}
             </Link>
           </li>
@@ -81,7 +81,7 @@ export default async function PreviewProduct({ params, searchParams }: Props) {
             <>
               <li aria-hidden="true">/</li>
               <li>
-                <Link href={`${base(lang)}/products?category=${category.slug}`} className="underline underline-offset-4">
+                <Link href={`${base(lang)}/products?category=${category.slug}`} className="inline-flex min-h-11 items-center underline underline-offset-4">
                   {categoryName}
                 </Link>
               </li>
@@ -107,6 +107,18 @@ export default async function PreviewProduct({ params, searchParams }: Props) {
           ) : (
             <p className="font-medium text-sf-danger">{t.soldOut}</p>
           )}
+          {/* The delivery charges and payment method next to the buying decision, as configured; nothing promised beyond them. */}
+          <section aria-labelledby="sf-buy-info" className="sf-card space-y-2 border border-sf-line bg-white p-4 text-sm" data-testid="buy-info">
+            <h2 id="sf-buy-info" className="text-base font-semibold">
+              {t.deliveryAndPayment}
+            </h2>
+            <ul className="space-y-1 tabular-nums">
+              {zones.map((z) => (
+                <li key={z.code}>{z.chargePaisa === null ? t.deliveryNotSet(t.deliveryZone[z.code]) : t.deliveryCharge(t.deliveryZone[z.code], formatTaka(z.chargePaisa, lang))}</li>
+              ))}
+            </ul>
+            <p>{t.payment}</p>
+          </section>
         </div>
       </div>
 

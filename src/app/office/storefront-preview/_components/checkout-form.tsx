@@ -62,10 +62,17 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
   const steps: [Stage, string][] = [["details", t.stepDetails], ["review", t.stepReview], ["done", t.stepDone]];
   const position = steps.findIndex(([s]) => s === stage);
   const progress = (
-    <ol className="flex flex-wrap gap-x-6 gap-y-1 text-sm" aria-label={t.stepOf(count(position + 1), count(steps.length))}>
+    <ol className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm" aria-label={t.stepOf(count(position + 1), count(steps.length))} data-testid="checkout-steps">
       {steps.map(([s, label], i) => (
-        <li key={s} aria-current={s === stage ? "step" : undefined} className={s === stage ? "font-semibold" : "text-sf-umber"}>
-          {count(i + 1)}. {label}
+        <li key={s} aria-current={s === stage ? "step" : undefined} className={`flex items-center gap-2 ${s === stage ? "font-semibold" : "text-sf-umber"}`}>
+          {/* Done steps filled, the current one outlined in cocoa: the number repeats the order for sighted readers. */}
+          <span
+            aria-hidden="true"
+            className={`sf-pill inline-flex h-7 w-7 items-center justify-center border text-xs tabular-nums ${i < position ? "border-sf-cocoa bg-sf-cocoa text-sf-ivory" : s === stage ? "border-2 border-sf-cocoa bg-white text-sf-cocoa" : "border-sf-line bg-white"}`}
+          >
+            {count(i + 1)}
+          </span>
+          <span>{label}</span>
         </li>
       ))}
     </ol>
@@ -132,6 +139,19 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
           {t.simulatedNote}
         </p>
         <p>{t.pendingBody}</p>
+        <p className="sf-card border border-dashed border-sf-umber bg-white px-4 py-3 text-sm" data-testid="reference-preview">
+          {t.referencePreview}
+        </p>
+        <section aria-labelledby={`${id}-next`} className="space-y-2" data-testid="next-steps">
+          <h3 id={`${id}-next`} className="text-lg font-semibold">
+            {t.nextTitle}
+          </h3>
+          <ol className="list-decimal space-y-1 pl-5">
+            {t.nextSteps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+        </section>
         <div className="space-y-4 rounded-sm bg-white p-5">{summary}</div>
         <div className="flex flex-wrap gap-4">
           <button type="button" onClick={() => setStage("details")} className="min-h-11 rounded-sm border border-sf-cocoa px-5 font-medium">

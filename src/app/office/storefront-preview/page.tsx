@@ -5,8 +5,8 @@ import { type Concept, previewConcept } from "./_components/concept";
 
 export const metadata = { title: "Storefront preview · Owner Office" };
 
-// The entry to the private storefront preview: the two design concepts side by side in words, and a way to open
-// either in English or Bangla (Gate H.27). Both are prototypes for the founder's review, not approved designs.
+// The entry to the private storefront preview: the design concepts side by side in words, and a way to open any of
+// them in English or Bangla (Gates H.27 and H.30). All are prototypes for the founder's review, not approved designs.
 
 const CONCEPTS: { id: Concept; title: string; points: string[] }[] = [
   {
@@ -29,6 +29,16 @@ const CONCEPTS: { id: Concept; title: string; points: string[] }[] = [
       "Bold sans-serif headings throughout.",
     ],
   },
+  {
+    id: "hybrid",
+    title: "Concept C · Hybrid (proposed)",
+    points: [
+      "The engineering recommendation, for your decision: A's calm, photography-led look with B's faster shopping.",
+      "A's book serif for English headings and the shop name; tall photo tiles with the price in bold and a stock badge.",
+      "B's search on the home page and outside the phone menu, category chips on home and the product list, and Add to cart fixed at the bottom of a phone screen.",
+      "A middle corner radius, generous spacing, and the delivery charges and cash-on-delivery note beside the buying panel.",
+    ],
+  },
 ];
 
 export default async function PreviewIndex() {
@@ -37,11 +47,11 @@ export default async function PreviewIndex() {
   return (
     <OfficeShell title="Storefront preview" current="preview">
       <p className="text-sm text-gray-700">
-        Two design concepts for you to compare. Neither is an approved design (BR-6), and no customer can see either. Both show the same draft products, prices, stock, delivery charges, cart (kept in this
-        browser) and checkout simulation, from the same services; only layout and styling differ. Colours are the approved logo colours used as a reference. The choice applies to this browser; switch at any
+        Three design concepts for you to compare; C is the proposed hybrid of A and B. None is an approved design (BR-6), and no customer can see any of them. All show the same draft products, prices, stock,
+        delivery charges, cart (kept in this browser) and checkout simulation, from the same services; only layout and styling differ. Colours are the approved logo colours used as a reference. The choice applies to this browser; switch at any
         time with the buttons in the preview&apos;s top banner.
       </p>
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-3">
         {CONCEPTS.map((c) => (
           <Section key={c.id} title={c.title}>
             {current === c.id ? <p className="text-sm font-semibold">Currently shown in this browser.</p> : null}

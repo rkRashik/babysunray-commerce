@@ -9,7 +9,7 @@ import { previewConcept } from "../_components/concept";
 import { Search } from "../_components/header";
 import { base, Localised, ProductGrid } from "../_components/parts";
 
-// Home page prototype in two concepts (Gate H.27): the installation's name and optional description
+// Home page prototype in three concepts (Gates H.27 and H.30): the installation's name and optional description
 // (src/config/installation.ts), the Owner's categories, featured products and what is new. No slogan, claim,
 // review or stock photo in either: only configured or Owner data. The products and their order are the same.
 export default async function PreviewHome({ params }: { params: Promise<{ lang: string }> }) {
@@ -25,7 +25,37 @@ export default async function PreviewHome({ params }: { params: Promise<{ lang: 
   const latest = items.filter((p) => !p.featured).slice(0, 8);
   const family = concept === "family";
 
-  const hero = family ? (
+  // Concept C: A's display name and amber rule, then B's search and category chips, all above the fold on a phone.
+  const hybridHero = (
+    <section aria-labelledby="sf-hero" className="space-y-6 border-b border-sf-line pb-10 pt-2">
+      <div className="max-w-3xl">
+        <h1 id="sf-hero" className="sf-display text-4xl leading-tight sm:text-5xl">
+          {identity.storeName}
+        </h1>
+        <span aria-hidden="true" className="mt-5 block h-px w-20 bg-sf-amber" />
+        {line ? <p className="mt-5 max-w-xl text-lg leading-relaxed text-sf-umber">{line}</p> : null}
+      </div>
+      <div className="max-w-xl">
+        <Search lang={lang} id="sf-search-hero" large />
+      </div>
+      <ul aria-label={t.categories} className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        <li className="shrink-0">
+          <Link href={`${base(lang)}/products`} className="sf-pill inline-flex min-h-11 items-center bg-sf-cocoa px-5 font-semibold text-sf-ivory">
+            {t.shopAll}
+          </Link>
+        </li>
+        {facets.categories.map((c) => (
+          <li key={c.slug} className="shrink-0">
+            <Link href={`${base(lang)}/products?category=${c.slug}`} className="sf-pill inline-flex min-h-11 items-center border border-sf-cocoa bg-white px-5 font-medium">
+              <Localised lang={lang} en={c.nameEn} bn={c.nameBn} />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+
+  const hero = concept === "hybrid" ? hybridHero : family ? (
     // Concept B: search first, then every category as a large chip (scrolls sideways on a phone).
     <section aria-labelledby="sf-hero" className="sf-card space-y-5 bg-sf-sand px-5 py-8 sm:px-10 sm:py-10">
       <h1 id="sf-hero" className="text-3xl font-bold leading-tight sm:text-4xl">
@@ -81,7 +111,7 @@ export default async function PreviewHome({ params }: { params: Promise<{ lang: 
 
   const heading = family ? "text-2xl font-bold" : "sf-display text-3xl";
   return (
-    <div className={family ? "space-y-10" : "space-y-16"}>
+    <div className={family ? "space-y-10" : concept === "hybrid" ? "space-y-12" : "space-y-16"}>
       {hero}
 
       {items.length === 0 ? (
@@ -95,7 +125,7 @@ export default async function PreviewHome({ params }: { params: Promise<{ lang: 
           <h2 id="sf-featured" className={heading}>
             {t.featured}
           </h2>
-          <ProductGrid products={featured} lang={lang} label={t.featured} concept={concept} lead={!family} />
+          <ProductGrid products={featured} lang={lang} label={t.featured} concept={concept} lead={concept === "editorial"} />
         </section>
       ) : null}
 

@@ -50,8 +50,8 @@ export default async function PreviewProducts({ params, searchParams }: Props) {
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-semibold">{title}</h1>
-      {concept === "family" && facets.categories.length ? (
-        // Concept B: categories one tap away above the filters.
+      {concept !== "editorial" && facets.categories.length ? (
+        // Concepts B and C: categories one tap away above the filters.
         <ul aria-label={t.categories} className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
           {[{ slug: "", nameEn: t.shopAll, nameBn: t.shopAll }, ...facets.categories].map((c) => (
             <li key={c.slug || "all"} className="shrink-0">
@@ -67,7 +67,7 @@ export default async function PreviewProducts({ params, searchParams }: Props) {
         </ul>
       ) : null}
       <details className="rounded-sm border border-sf-line bg-white p-4" open={filtered || concept === "family"}>
-        <summary className="cursor-pointer font-medium">{t.filters}</summary>
+        <summary className="cursor-pointer py-2.5 font-medium">{t.filters}</summary>
         <form method="get" action={`${base(lang)}/products`} className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5" aria-label={t.filters}>
           <div className="lg:col-span-2">
             <label htmlFor="sf-q" className="text-sm font-medium">

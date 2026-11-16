@@ -38,24 +38,27 @@ export function CartLink({ lang }: { lang: Lang }) {
 }
 
 /** Owner-only switch between the two design concepts; stays on the same page (same language, filters and cart). */
-export function ConceptSwitch({ concept, labels }: { concept: "editorial" | "family"; labels: { label: string; editorial: string; family: string } }) {
+export function ConceptSwitch({ concept, labels }: { concept: "editorial" | "family" | "hybrid"; labels: { label: string; editorial: string; family: string; hybrid: string } }) {
   const pathname = usePathname();
   const search = useSearchParams();
   return (
     <form action={chooseConceptAction} className="flex flex-wrap items-center gap-2" data-testid="concept-switch">
       <input type="hidden" name="returnTo" value={`${pathname}${search.size ? `?${search.toString()}` : ""}`} />
       <span id="sf-concept-label">{labels.label}:</span>
-      {(["editorial", "family"] as const).map((c) => (
+      {(["editorial", "family", "hybrid"] as const).map((c) => (
         <button
           key={c}
           type="submit"
           name="concept"
           value={c}
           aria-pressed={concept === c}
+          aria-label={labels[c]}
           aria-describedby="sf-concept-label"
-          className="min-h-11 rounded-sm border border-sf-cocoa px-3 font-medium aria-pressed:bg-sf-cocoa aria-pressed:text-sf-ivory"
+          className="min-h-11 min-w-11 rounded-sm border border-sf-cocoa px-3 font-medium aria-pressed:bg-sf-cocoa aria-pressed:text-sf-ivory"
         >
-          {labels[c]}
+          {/* On a phone only the letter shows, so the customer view starts higher; the name stays the full label. */}
+          <span className="sm:hidden">{labels[c].split(" · ")[0]}</span>
+          <span className="hidden sm:inline">{labels[c]}</span>
         </button>
       ))}
     </form>

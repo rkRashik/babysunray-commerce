@@ -104,7 +104,7 @@ test("the Owner browses in English and Bangla: banner, private headers, search, 
   await expect(page.getByRole("img", { name: "Fictional romper, front" })).toBeVisible();
   await expect.poll(() => page.getByRole("img", { name: "Fictional romper, front" }).evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
   await expect(page.getByRole("region", { name: "Size guide (cm)" }).getByRole("row", { name: /3-6M/ })).toContainText("26");
-  await expect(page.getByRole("region", { name: "Delivery" })).toContainText("Dhaka City: ৳ 60");
+  await expect(page.getByRole("region", { name: "Delivery", exact: true })).toContainText("Dhaka City: ৳ 60");
   await expectNoAxeViolations(page);
   await page.goto(`${PREVIEW}/bn/products/${product.slug}`);
   await expect(page.getByText("বুক ২৪.৫ সেমি, দৈর্ঘ্য ৩৮ সেমি")).toBeVisible();
@@ -375,4 +375,39 @@ test("design concepts: both show the same product, price and cart; switching kee
   await page.getByRole("button", { name: "Place order (simulation)" }).click();
   await expect(page.getByTestId("simulation-result")).toContainText("received, waiting for verification");
   expect(await counts()).toEqual(before);
+});
+
+test("Concept C (proposed hybrid): A's look with B's search and chips, the same data and cart, delivery and payment beside the buying panel, axe in both languages, no console errors", async ({ page }) => {
+  const product = await seedStorefrontProduct({ featured: true });
+  const errors: string[] = [];
+  page.on("console", (m) => m.type() === "error" && errors.push(m.text().slice(0, 300)));
+  page.on("pageerror", (e) => errors.push(e.message.slice(0, 300)));
+  await signIn(page);
+  await page.goto(PREVIEW);
+  await page.getByTestId("open-hybrid-en").click();
+  await expect(page.locator(".sf")).toHaveAttribute("data-concept", "hybrid");
+  await expect(page.getByRole("button", { name: "C · Hybrid (proposed)" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("list", { name: "Featured" })).toContainText(product.nameEn);
+  await expect(page.locator("main").getByRole("searchbox")).toBeVisible();
+  await expect(page.locator("main").getByRole("list", { name: "Categories" })).toBeVisible();
+  await expectNoAxeViolations(page);
+
+  await page.goto(`${PREVIEW}/en/products/${product.slug}`);
+  await expect(page.getByTestId("buy-info")).toContainText("Dhaka City: ৳ 60");
+  await expect(page.getByTestId("buy-info")).toContainText("Payment: cash on delivery.");
+  await chip(page, "0-3M").click();
+  await chip(page, "Ivory").click();
+  await page.getByRole("button", { name: "Add to cart" }).click();
+  await expect(page.getByTestId("cart-count")).toHaveText("1");
+  await expectNoAxeViolations(page);
+
+  for (const lang of ["en", "bn"] as const) {
+    for (const path of ["", "/products", `/products/${product.slug}`, "/cart", "/checkout"]) {
+      await page.goto(`${PREVIEW}/${lang}${path}`);
+      await expect(page.locator(".sf")).toHaveAttribute("data-concept", "hybrid");
+      await expect(page.locator("main h1")).toBeVisible();
+      await expectNoAxeViolations(page);
+    }
+  }
+  expect(errors).toEqual([]);
 });

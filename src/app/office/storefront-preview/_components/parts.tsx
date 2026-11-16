@@ -64,7 +64,7 @@ export function Localised({ lang, en, bn, missing }: { lang: Lang; en: string | 
 
 const STOCK = { in: "inStock", partial: "someSizesOut", out: "soldOut" } as const;
 
-export type ConceptName = "editorial" | "family";
+export type ConceptName = "editorial" | "family" | "hybrid";
 
 // Concept A: image-led tiles, a quiet name in the display face, price and stock in small text; the first featured
 // product can lead at double size. Concept B: cards with a square photo, bold price, a stock badge and a visible
@@ -78,6 +78,21 @@ export function ProductTile({ product, lang, from, concept = "editorial", lead =
   const title = <Localised lang={lang} en={product.nameEn} bn={product.nameBn} missing={t.untitled} />;
   const photo = (sizes: string) =>
     product.photo ? <Photo photo={product.photo} lang={lang} name={name} sizes={sizes} /> : <div className="flex h-full items-end p-3 text-sm text-sf-umber">{t.noPhoto}</div>;
+  if (concept === "hybrid") {
+    // Concept C: A's photography-led tile and display face, B's clear price and stock badge; no extra button.
+    return (
+      <li>
+        <Link href={href} className="group flex h-full flex-col rounded-sm">
+          <div className="sf-card aspect-[4/5] overflow-hidden bg-sf-sand">{photo("(min-width: 1024px) 22vw, (min-width: 640px) 30vw, 46vw")}</div>
+          <div className="flex flex-1 flex-col gap-1 pt-3">
+            <p className="sf-display text-lg leading-snug group-hover:underline group-hover:underline-offset-4">{title}</p>
+            <p className="font-semibold tabular-nums">{price}</p>
+            <p className={`sf-pill mt-1 w-fit border px-2 py-0.5 text-sm ${out ? "border-sf-danger font-medium text-sf-danger" : "border-sf-line text-sf-umber"}`}>{t[STOCK[product.stock]]}</p>
+          </div>
+        </Link>
+      </li>
+    );
+  }
   if (concept === "family") {
     return (
       <li>
@@ -108,7 +123,12 @@ export function ProductTile({ product, lang, from, concept = "editorial", lead =
 }
 
 export function ProductGrid({ products, lang, label, from, concept = "editorial", lead = false }: { products: ProductCard[]; lang: Lang; label: string; from?: string; concept?: ConceptName; lead?: boolean }) {
-  const layout = concept === "family" ? "grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4" : "grid grid-cols-2 gap-x-5 gap-y-10 lg:grid-cols-3 lg:gap-x-8";
+  const layout =
+    concept === "family"
+      ? "grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4"
+      : concept === "hybrid"
+        ? "grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 lg:gap-x-6"
+        : "grid grid-cols-2 gap-x-5 gap-y-10 lg:grid-cols-3 lg:gap-x-8";
   return (
     <ul aria-label={label} className={layout}>
       {products.map((p, i) => (
@@ -118,16 +138,16 @@ export function ProductGrid({ products, lang, label, from, concept = "editorial"
   );
 }
 
-export function PreviewBanner({ lang, concept }: { lang: Lang; concept: "editorial" | "family" }) {
+export function PreviewBanner({ lang, concept }: { lang: Lang; concept: ConceptName }) {
   const t = dictionary(lang);
   return (
     <div className="bg-sf-amber text-sf-cocoa">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2 text-sm">
         <p>
-          <strong className="font-semibold" data-testid="preview-banner">{t.previewBanner}</strong> <span>{t.previewNote}</span>
+          <strong className="font-semibold" data-testid="preview-banner">{t.previewBanner}</strong> <span className="hidden sm:inline">{t.previewNote}</span>
         </p>
         <Suspense>
-          <ConceptSwitch concept={concept} labels={{ label: t.conceptLabel, editorial: t.conceptEditorial, family: t.conceptFamily }} />
+          <ConceptSwitch concept={concept} labels={{ label: t.conceptLabel, editorial: t.conceptEditorial, family: t.conceptFamily, hybrid: t.conceptHybrid }} />
         </Suspense>
         <Link href="/office" className="font-medium underline underline-offset-2">
           {t.backToOffice}

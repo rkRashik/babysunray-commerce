@@ -44,14 +44,15 @@ export function Search({ lang, id, large = false }: { lang: Lang; id: string; la
   );
 }
 
-// Concept B keeps search outside the phone menu, so browsing starts with one tap less; Concept A keeps the header quiet.
-export function Header({ lang, facets, storeName, concept }: { lang: Lang; facets: Facets; storeName: string; concept: "editorial" | "family" }) {
+// Concepts B and C keep search outside the phone menu, so browsing starts with one tap less; Concept A keeps the header
+// quiet. A and C set the shop name in the display face.
+export function Header({ lang, facets, storeName, concept }: { lang: Lang; facets: Facets; storeName: string; concept: "editorial" | "family" | "hybrid" }) {
   const t = dictionary(lang);
-  const family = concept === "family";
+  const family = concept !== "editorial";
   return (
     <header className="border-b border-sf-line bg-sf-ivory">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-        <Link href={base(lang)} className={`mr-auto inline-flex min-h-11 items-center rounded-sm text-xl ${family ? "font-bold" : "sf-display font-medium tracking-wide"}`}>
+        <Link href={base(lang)} className={`mr-auto inline-flex min-h-11 items-center rounded-sm text-xl ${concept === "family" ? "font-bold" : "sf-display font-medium tracking-wide"}`}>
           {storeName}
         </Link>
         <nav aria-label={t.mainNav} className="hidden md:block">

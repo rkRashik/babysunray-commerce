@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { clearSignInLimits, ensureZones, seedSku, seedStorefrontProduct, signIn, testDatabase, uniqueName } from "./support";
 
@@ -199,4 +200,83 @@ test("Concept B on a phone: search outside the menu, Add to cart and its answer 
   await page.mouse.wheel(0, 3000);
   await expect(add).toBeInViewport();
   await noSideScroll(page);
+});
+
+/** Controls in the header and main content smaller than 44 × 24 CSS pixels (inline links inside running text are exempt). */
+async function smallTargets(page: import("@playwright/test").Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const small: string[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>("header a, header button, header input, header summary, main a, main button, main input:not([type=hidden]), main select, main textarea, main summary")) {
+      const choice = el.matches("input[type=radio], input[type=checkbox]");
+      const target = choice ? (el.closest("label") ?? el.parentElement ?? el) : el;
+      const r = target.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      if (el.tagName === "A" && getComputedStyle(el).display === "inline" && el.closest("p")) continue;
+      if (r.height < 43.5 || r.width < 24) small.push(`${el.tagName.toLowerCase()} "${(el.getAttribute("aria-label") ?? el.textContent ?? "").trim().slice(0, 30)}" ${Math.round(r.width)}×${Math.round(r.height)}`);
+    }
+    return small;
+  });
+}
+
+test("Concept C on a 360-pixel phone: every page fits, every control is at least 44 pixels, axe passes, and the checkout records nothing", async ({ page }) => {
+  await ensureZones();
+  const product = await seedStorefrontProduct({ featured: true });
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.goto("/office/storefront-preview");
+  await page.getByTestId("open-hybrid-en").tap();
+  await expect(page.locator(".sf")).toHaveAttribute("data-concept", "hybrid");
+  const axe = async () => {
+    const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
+    expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+  };
+  const check = async (path: string) => {
+    await page.goto(`/office/storefront-preview/${path}`);
+    await expect(page.locator("main h1")).toBeVisible();
+    await noSideScroll(page);
+    expect(await smallTargets(page), path).toEqual([]);
+    await axe();
+  };
+  for (const lang of ["en", "bn"]) {
+    await check(lang);
+    await check(`${lang}/products`);
+    await check(`${lang}/products/${product.slug}`);
+  }
+
+  // The buying panel: Add to cart in the fixed bar at once, its answer beside it.
+  await page.goto(`/office/storefront-preview/en/products/${product.slug}`);
+  await expect(page.getByRole("button", { name: "Add to cart" })).toBeInViewport();
+  await page.locator("label").filter({ has: page.getByRole("radio", { name: /^0-3M/ }) }).tap();
+  await page.locator("label").filter({ has: page.getByRole("radio", { name: /^Ivory/ }) }).tap();
+  await page.getByRole("button", { name: "Add to cart" }).tap();
+  await expect(page.getByTestId("add-message")).toBeInViewport();
+  await expect(page.getByTestId("cart-count")).toHaveText("1");
+  await check("bn/cart");
+  await expect(page.getByTestId("total")).toHaveText("—");
+
+  const db = await testDatabase();
+  const orders = async () => Number((await db.query("select count(*) as n from orders")).rows[0].n);
+  try {
+    const before = await orders();
+    await check("bn/checkout");
+    await page.getByLabel("পুরো নাম").fill("পরীক্ষামূলক গ্রাহক");
+    await page.getByLabel("মোবাইল নম্বর").fill("০১৭১১-০০০০৮১");
+    await page.getByLabel("ডেলিভারির ঠিকানা").fill("বাড়ি ৮১, পরীক্ষা রোড");
+    await page.getByLabel(/^ঢাকা সিটি/).tap();
+    await page.getByRole("button", { name: "অর্ডার যাচাই করুন" }).tap();
+    await expect(page.getByTestId("checkout-review")).toBeVisible();
+    await noSideScroll(page);
+    expect(await smallTargets(page)).toEqual([]);
+    await page.getByRole("button", { name: "অর্ডার দিন (সিমুলেশন)" }).tap();
+    const result = page.getByTestId("simulation-result");
+    await expect(result).toBeVisible();
+    await expect(page.getByTestId("next-steps")).toContainText("এরপর যা হবে");
+    await expect(page.getByTestId("reference-preview")).toBeVisible();
+    await expect(page.getByTestId("checkout-steps").locator("[aria-current=step]")).toContainText("সারসংক্ষেপ");
+    await noSideScroll(page);
+    expect(await smallTargets(page)).toEqual([]);
+    await axe();
+    expect(await orders()).toBe(before);
+  } finally {
+    await db.end();
+  }
 });
