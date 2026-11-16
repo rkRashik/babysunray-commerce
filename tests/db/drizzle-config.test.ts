@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 // The project's drizzle.config.ts refuses every drizzle-kit command that can change a database, so the
 // only migration path is `npm run db:migrate`. No database is needed: refused commands stop while the
-// config loads, before any connection. (`--config <other file>` bypasses this; see README.md.)
+// config loads, before any connection. (`--config <other file>` bypasses this; see docs/getting-started.md, section 4.)
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const BIN = path.join(ROOT, "node_modules/drizzle-kit/bin.cjs");

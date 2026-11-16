@@ -40,7 +40,7 @@ Requirement EN-2 asks for reviewed, repeatable migrations; EN-3 asks for paramet
 - Idempotency of stock operations. A unique key per ledger row could make a single-SKU receipt retry-safe, but it would fix a design that a multi-SKU operation (an order touching several SKUs) may contradict. Deferred until that operation model is designed (O-3, API-8, G-2). Since resolved at the operation level, not per ledger row: [ADR-0005](0005-operation-idempotency.md).
 - Reservation, holds, cancellation, returns, RTO and quarantine stock (O-9 to O-14, I-7).
 - Product publication rules (I-6). Products are `draft` or `archived` only, so none is publicly sellable.
-- Production migration procedure and database roles (ADR-0001, items 1 and 2). Development migrations run through `npm run db:migrate`, which checks the target before changing anything; those checks prevent mistakes and are not a security boundary (README.md, Database migrations).
+- Production migration procedure and database roles (ADR-0001, items 1 and 2). Development migrations run through `npm run db:migrate`, which checks the target before changing anything; those checks prevent mistakes and are not a security boundary (docs/getting-started.md, section 4).
 
 ## Alternatives considered
 

@@ -7,7 +7,7 @@ import { loadEnv } from "vite";
 // regular test runs, because it empties and restores the test database.
 const fileEnv = loadEnv("test", process.cwd(), "");
 const testDatabaseUrl = process.env.TEST_DATABASE_URL ?? fileEnv.TEST_DATABASE_URL;
-if (!testDatabaseUrl) throw new Error("TEST_DATABASE_URL is not set. See README.md (Local PostgreSQL) and .env.example.");
+if (!testDatabaseUrl) throw new Error("TEST_DATABASE_URL is not set. See docs/getting-started.md (sections 2 and 3) and .env.example.");
 
 export default defineConfig({
   resolve: {

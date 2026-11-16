@@ -71,7 +71,7 @@ Other risks:
 
 ## Development and deployment boundaries
 
-- **Local development** with a local PostgreSQL instance, including schema work and automated tests, does **not** wait for hosting. The founder approved it; setup is in README.md. Schema and logic that depend on undefined business rules still wait for those rules (requirements G-10).
+- **Local development** with a local PostgreSQL instance, including schema work and automated tests, does **not** wait for hosting. The founder approved it; setup is in docs/getting-started.md. Schema and logic that depend on undefined business rules still wait for those rules (requirements G-10).
 - **Production deployment** requires validated hosting, working backups and restore, and confirmed commercial-use terms (requirements G-8).
 - No paid service, trial or purchase happens without separate founder approval.
 

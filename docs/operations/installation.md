@@ -10,7 +10,7 @@ BabySunray's data never goes into another installation or its repository history
 
 ## 2. Set up
 
-Steps 1 to 4 are the same as for BabySunray, described once in the [README](../../README.md) (Development, Local PostgreSQL, Database migrations, Authentication).
+Steps 1 to 4 are the same as for BabySunray, described once in [getting-started.md](../getting-started.md) (tools, local PostgreSQL, configuration, migrations, the first admin account).
 
 1. Node.js 24 and PostgreSQL 18 on the machine; `npm ci` (the locked versions).
 2. Create the local databases and roles with `db/local-setup.sql`, as a PostgreSQL superuser.

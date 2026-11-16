@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { bigint, boolean, check, date, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
-// Database schema. Changes go through reviewed migrations in drizzle/ (README: Database migrations).
+// Database schema. Changes go through reviewed migrations in drizzle/ (docs/getting-started.md, section 4).
 // Checks mirror the validation in src/modules so the database rejects bad data even if a caller skips it.
 
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();

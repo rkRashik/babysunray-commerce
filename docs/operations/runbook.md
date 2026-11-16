@@ -155,6 +155,8 @@ No schedule, retention period or off-device destination is set up for either bac
 
 What exists: an encrypted local backup of the development database, a verification command, a restore command into a separate empty database, and a tested drill on fictional data. What does not exist: a schedule, retention, an off-device copy, or an approved RPO/RTO. A backup that has never been restored is not verified (K-6).
 
+How it works (`src/db/backup.mts`, `scripts/backup-*.mts`): a backup is a `pg_dump` custom-format archive (schema, data, sequences, triggers, migration history) streamed into chunked AES-256-GCM encryption with a scrypt key from an interactive passphrase, so no plaintext dump is written to disk; session, verification and rate-limit table data are left out. Changed, reordered or cut-short files and wrong passphrases are refused before any data is used (unit tests). Product photo files are **not** in these backups, only their records (section 7a). An export is not a backup.
+
 ### Create a backup (founder only, interactive)
 
 ```

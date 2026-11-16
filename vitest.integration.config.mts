@@ -10,7 +10,7 @@ const testDatabaseUrl = process.env.TEST_DATABASE_URL ?? fileEnv.TEST_DATABASE_U
 // Fail loudly instead of skipping, so a missing configuration is never reported as a pass.
 if (!testDatabaseUrl) {
   throw new Error(
-    "TEST_DATABASE_URL is not set. See README.md (Local PostgreSQL) and .env.example.",
+    "TEST_DATABASE_URL is not set. See docs/getting-started.md (sections 2 and 3) and .env.example.",
   );
 }
 

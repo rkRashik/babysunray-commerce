@@ -7,21 +7,24 @@ The contract itself is `GET /api/v1/openapi.json` (OpenAPI 3.1, generated from `
 
 ## What exists
 
-Owner-only endpoints for the draft catalogue, physical stock and internal (Owner-assisted) orders. There are no public endpoints and no checkout, and nothing publishes a product.
+Owner-only endpoints for the draft catalogue, physical stock and internal (Owner-assisted) orders. There are no public endpoints and no checkout, and nothing publishes a product. The table matches the OpenAPI document (`GET /api/v1/openapi.json`, version 1.4.0); a contract test checks that the documented operations are exactly the implemented ones.
 
 | Endpoint | Permission | Does |
 |---|---|---|
 | `GET /api/v1/products` | `catalog:read` | Products, oldest first; `q` (search), `status`, `limit`, `cursor` |
 | `POST /api/v1/products` | `catalog:write` | Create a draft product (201) |
 | `GET /api/v1/products/{productId}` | `catalog:read` | One product with its variants |
-| `PATCH /api/v1/products/{productId}` | `catalog:write` | Edit a draft product's names and descriptions (200) |
+| `PATCH /api/v1/products/{productId}` | `catalog:write` | Edit a draft product's content: names, descriptions, fabric (and its confirmation), care, size guidance, category, featured (200) |
+| `PUT /api/v1/products/{productId}/measurements` | `catalog:write` | Replace a draft product's size chart (200) |
+| `GET /api/v1/products/{productId}/readiness` | `catalog:read` | The advisory readiness checklist; publishes nothing |
+| `GET /api/v1/categories`, `POST /api/v1/categories` | `catalog:read` / `catalog:write` | List categories; create one (201) |
 | `PATCH /api/v1/variants/{variantId}` | `catalog:write` | Edit an active variant's size, colour and price (200) |
 | `POST /api/v1/products/{productId}/variants` | `catalog:write` | Add a variant (SKU) with a zero stock balance (201) |
 | `POST /api/v1/products/{productId}/archive` | `catalog:write` | Archive a product (200); nothing is deleted |
 | `POST /api/v1/variants/{variantId}/deactivate` | `catalog:write` | Mark a variant inactive (200); it keeps stock and history |
 | `POST /api/v1/stock-receipts` | `stock:receive` | Add received units to a SKU (201); inactive SKUs included |
 | `POST /api/v1/stock-adjustments` | `stock:adjust` | Change a SKU's stock up or down with a required reason (201); never below zero |
-| `GET /api/v1/skus/{sku}/stock` | `stock:read` | On-hand stock of a SKU |
+| `GET /api/v1/skus/{sku}/stock` | `stock:read` | On-hand, reserved and available stock of a SKU |
 | `GET /api/v1/skus/{sku}/movements` | `stock:read` | The SKU's stock ledger, oldest first; `limit`, `cursor` |
 | `GET /api/v1/orders`, `GET /api/v1/orders/{orderId}` | `orders:read` | Orders newest first (`status`, `attention`, `number`, `limit`, `cursor`); one order with items, holds, history, requests, returns, quarantine and money |
 | `POST /api/v1/orders` | `orders:write` | Owner-assisted order (201): reserves every line or creates nothing |
@@ -122,9 +125,9 @@ Version 1.1.0 added the write endpoints, problem codes, the `body` error locatio
 
 Version 1.2.0 (compatible) added `PATCH /products/{productId}`, `PATCH /variants/{variantId}`, the optional `q` search parameter, the `version` field on products and variants, and the 409 codes `VERSION_CONFLICT`, `PRODUCT_NOT_EDITABLE` and `VARIANT_NOT_EDITABLE`.
 
-Version 1.4.0 added product content: `category`, `fabric` (with `confirmedAt`), `care`, `sizeGuidance`, `featured`, `measurements` and `photos` (metadata only) on the product, the same content fields in `PATCH /products/{productId}`, `PUT /products/{productId}/measurements`, `GET /products/{productId}/readiness` (advisory; it publishes nothing), `GET` and `POST /categories`, and the problem code `CATEGORY_NOT_FOUND`. Only fields were added; no field was removed or changed. Photo upload and viewing are Owner Office only.
-
 Version 1.3.0 added the order and delivery-zone endpoints, `reserved` and `available` on stock levels, the movement types `dispatch` and `return_restock` (the movement `type` list is now documented as one that may grow), and the problem codes `ORDER_NOT_FOUND`, `RETURN_NOT_FOUND`, `QUARANTINE_ITEM_NOT_FOUND`, `INVALID_TRANSITION`, `DELIVERY_ZONE_UNAVAILABLE`, `VARIANT_NOT_ORDERABLE` and `PAYMENT_LIMIT_EXCEEDED`. The new movement types are a change a strict 1.2.0 client would notice; no such client exists.
+
+Version 1.4.0 added product content: `category`, `fabric` (with `confirmedAt`), `care`, `sizeGuidance`, `featured`, `measurements` and `photos` (metadata only) on the product, the same content fields in `PATCH /products/{productId}`, `PUT /products/{productId}/measurements`, `GET /products/{productId}/readiness` (advisory; it publishes nothing), `GET` and `POST /categories`, and the problem code `CATEGORY_NOT_FOUND`. Only fields were added; no field was removed or changed. Photo upload and viewing are Owner Office only.
 
 ## Testing
 

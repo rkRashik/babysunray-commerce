@@ -1,0 +1,39 @@
+# Authentication and authorisation
+
+**Status:** Draft — Founder Review
+**Purpose:** Sign-in, sessions, permissions, Bearer tokens for API clients, and the local account commands.
+
+Implemented with Better Auth ([ADR-0003](../adr/0003-authentication-foundation.md)): email and password, sessions stored in PostgreSQL and sent as an HttpOnly cookie, and role-based permissions in `src/modules/auth`. The only role today is `owner` (the admin), which holds every permission; permission checks are written so further roles can be added. There is no public sign-up. The API's Bearer transport is in [ADR-0004](../adr/0004-api-v1-and-bearer-transport.md).
+
+| Capability | Where |
+|---|---|
+| Sign-in, sign-out, session listing and revocation, password change | Better Auth's endpoints under `/api/auth` (`src/app/api/auth/[...all]/route.ts`). All other Better Auth endpoints, including public sign-up, answer 404. |
+| Verified principal and permission checks for server code | `getPrincipal`, `requirePrincipal`, `requirePermission` in `src/modules/auth/principal.ts`; roles and permissions in `permissions.ts`. The role is read from PostgreSQL on every request. |
+| Audit actor for an authenticated user | `actorFor(principal)`; ledger rows and order events then record the user's id. No other code path creates a user actor, and no request field can name one. |
+| Losing access | Disabling a user (`user_access.disabled_at`) or removing the access row deletes all of that user's sessions at once (migration `0005`). |
+| Bearer tokens for non-browser clients | Only on `/api/v1` and Better Auth's own endpoints; never accepted by browser-side code, never sent to a browser. |
+| First admin account | `npm run auth:bootstrap-owner` (below). |
+| Lost admin password, local installation | `npm run auth:reset-owner-password` (below). Not a production recovery path. |
+
+## Creating the first admin account
+
+```
+npm run auth:bootstrap-owner
+```
+
+It works only in an interactive terminal, only against the local `babysunray_dev` database (the same checks as `db:migrate`), and only while no account exists. It asks for the email and display name, then the password twice without showing it (15 to 128 characters). Nothing is passed on the command line or written to a log. Creates the user, its credential and the `owner` access row in one transaction under an exclusive lock, so concurrent runs create at most one account.
+
+## Resetting a lost password on a local installation
+
+```
+npm run auth:reset-owner-password
+```
+
+The same restrictions as the bootstrap apply: interactive terminal only, local `babysunray_dev` only, no value on the command line. Before asking anything it checks that the installation has exactly one active admin account; it then asks for that account's email and the new password twice without showing it. In one transaction, under locks that also serialise a concurrent reset or bootstrap, it replaces that credential's hash (Better Auth's scrypt) and deletes every session of the account, so all signed-in browsers and Bearer tokens stop working at once. Any failure rolls the whole change back. It prints only how many sessions were signed out. **Limits:** whoever can run it against the database can take over the account; that is already true of anyone with write access to the authentication tables, so local database and operator access is the trust boundary. There is no HTTP or email reset.
+
+## Known limits
+
+- No production account recovery: password reset over HTTP, email verification and any email sending are disabled. No 2FA.
+- No native app exists. A non-browser client can obtain a Bearer token; it lasts as long as a browser session.
+- Sign-in rate limiting is stored in PostgreSQL (3 attempts per 10 seconds per client). No client header is trusted for the client address, so locally every request counts as one client, and in production all clients would share the limit until a proxy setup is chosen with hosting.
+- Tested locally only. Production cookie, proxy, secret rotation and database-role settings wait for the hosting decision.
