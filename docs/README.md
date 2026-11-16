@@ -29,6 +29,7 @@ Each document starts with a status line. Most are **Draft — Founder Review**: 
 | Document | What it covers |
 |---|---|
 | [API guide](api/README.md) | Endpoints, Bearer authentication, writes and idempotency, errors, pagination, limits, versioning and compatibility |
+| [Customer-facing API](api/public-api.md) | The dormant public catalogue, quote and checkout handlers and the live tracking endpoints: contract, visibility rule, abuse limits, what must happen before they open |
 
 The machine-readable contract is served by the application at `/api/v1/openapi.json`.
 

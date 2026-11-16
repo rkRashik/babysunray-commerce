@@ -40,8 +40,8 @@ export function publicCheckoutGate(facts: LaunchFacts): PublicCheckoutGate {
   blockers.push({
     id: "publication_rule",
     requirement: "I-6, open decision 4",
-    reason: "No rule for publishing products is approved and no public catalogue exists; every product is a draft.",
-    next: "Founder decides what makes a product publishable; a later gate builds published-only reads.",
+    reason: "No rule for publishing products is approved, so no product can be published and the published-only catalogue (built, not routed) shows nothing.",
+    next: "Founder decides what makes a product publishable (I-6); a later gate puts the approved rule in code.",
   });
   if (facts.reviewedProducts === 0) {
     blockers.push({ id: "no_reviewed_products", requirement: "engineering default", reason: "No product has a current internal review.", next: "Review products in Product reviews." });
@@ -49,11 +49,11 @@ export function publicCheckoutGate(facts: LaunchFacts): PublicCheckoutGate {
   blockers.push({
     id: "abuse_protection",
     requirement: "S-15, API-11, open decision 1",
-    reason: "An anonymous order holds stock for 24 hours. Without a per-client limit, which needs a trusted proxy from the hosting decision, one visitor could hold all stock.",
+    reason: "An anonymous order holds stock for 24 hours. Without a per-client limit, which needs a trusted proxy from the hosting decision, one visitor could hold all stock; the storewide limit on submissions per minute only slows that down.",
     next: "Choose hosting; then design and test per-client limits for checkout.",
   });
   blockers.push({ id: "hosting", requirement: "G-8, open decision 1", reason: "No production host is chosen or verified for commercial use, limits and restore.", next: "Founder chooses hosting (C-1 to C-3)." });
   blockers.push({ id: "recovery_objectives", requirement: "K-9, G-6, open decision 6", reason: "No RPO or RTO is approved, so no backup schedule or off-device copy can be set.", next: "Founder approves RPO and RTO." });
-  blockers.push({ id: "transport", requirement: "S-17", reason: "No public checkout endpoint exists; the guest checkout service is built and tested but nothing calls it.", next: "Built only in the gate that opens checkout." });
+  blockers.push({ id: "transport", requirement: "S-17", reason: "No public catalogue or checkout endpoint exists; their services and transports are built and tested but not routed.", next: "Built only in the gate that opens checkout." });
   return { open: false, blockers };
 }

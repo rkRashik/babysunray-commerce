@@ -74,6 +74,8 @@ Built and tested, not reachable; design in [ADR-0007](../adr/0007-guest-checkout
 
 Any other field is refused. Result: `{ replayed, order: { reference, orderStatus, placedAt, deliveryZone, items, subtotalPaisa, deliveryChargePaisa, totalPaisa }, trackingToken }` with no contact data; `trackingToken` only in the first answer. Errors: `INVALID_INPUT` (with field names and codes), `INSUFFICIENT_STOCK`, `VARIANT_NOT_FOUND`, `VARIANT_NOT_ORDERABLE`, `DELIVERY_ZONE_UNAVAILABLE`, `QUOTE_CHANGED`, `IDEMPOTENCY_KEY_REUSED`; none creates anything.
 
+Over HTTP (the unrouted transport) at most 20 well-formed submissions a minute are accepted from all customers together; the 21st gets `429 rate_limited`. That bounds a flood but anyone can use it up: a per-client limit needs hosting. The full customer-facing contract, with the published-only catalogue and quote: [public-api.md](../api/public-api.md).
+
 If a customer's first answer is lost, a retry with the same key shows the order as received but cannot show the tracking link again (only its digest is stored). The Owner, who verifies every order by phone, Messenger or WhatsApp anyway, creates a new link on the order page; that revokes any earlier one.
 
 ## 6. Founder decisions this depends on

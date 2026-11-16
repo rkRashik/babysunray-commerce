@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import * as z from "zod";
 import { getDb } from "@/db/client";
 import { type Db, pgErrorCode } from "@/db/database";
@@ -36,6 +37,18 @@ export async function trackingRequest<S extends z.ZodType<{ token: string }>>(
   schema: S,
   run: (db: Db, orderId: string, body: z.output<S>) => Promise<GuestView | null>,
 ): Promise<Response> {
+  const requestId = randomUUID();
+  const response = await track(request, schema, run, requestId);
+  response.headers.set("x-request-id", requestId);
+  return response;
+}
+
+async function track<S extends z.ZodType<{ token: string }>>(
+  request: Request,
+  schema: S,
+  run: (db: Db, orderId: string, body: z.output<S>) => Promise<GuestView | null>,
+  requestId: string,
+): Promise<Response> {
   try {
     if (request.headers.get("origin") !== getAuth().options.baseURL) return answer(403, { error: "forbidden" });
     if (!/^application\/json\s*(;\s*charset\s*=\s*"?utf-8"?\s*)?$/i.test(request.headers.get("content-type") ?? "")) return answer(415, { error: "unsupported_media_type" });
@@ -62,7 +75,7 @@ export async function trackingRequest<S extends z.ZodType<{ token: string }>>(
     }
     if (error instanceof DomainError && error.code === "INVALID_INPUT") return answer(400, { error: "bad_request" });
     // Name and SQL state only: never the message (it can hold query parameters) and never the body (the token).
-    console.error(JSON.stringify({ level: "error", event: "tracking_failed", errorName: error instanceof Error ? error.name : typeof error, sqlState: pgErrorCode(error) ?? null }));
+    console.error(JSON.stringify({ level: "error", event: "tracking_failed", requestId, errorName: error instanceof Error ? error.name : typeof error, sqlState: pgErrorCode(error) ?? null }));
     return answer(500, { error: "internal" });
   }
 }

@@ -50,6 +50,15 @@ describe("guest checkout is not reachable", () => {
     expect(importers).toEqual(["src/api/guest-checkout.ts"]);
   });
 
+  it("no page, layout, route or Server Action imports the public catalogue service or its transport", () => {
+    const app = files("src/app").filter((f) => /\.(ts|tsx)$/.test(f));
+    const offenders = app.filter((f) => /from "[^"]*(api\/public-catalogue|storefront\/public-catalogue)"/.test(readFileSync(path.join(ROOT, f), "utf8")));
+    expect(offenders).toEqual([]);
+    // Only the transport (itself unrouted) uses the service.
+    const importers = files("src").filter((f) => f !== "src/modules/storefront/public-catalogue.ts" && /from "[^"]*storefront\/public-catalogue"/.test(readFileSync(path.join(ROOT, f), "utf8")));
+    expect(importers).toEqual(["src/api/public-catalogue.ts"]);
+  });
+
   it("the guest service cannot reach the authentication module or the Owner operations", () => {
     const source = readFileSync(path.join(ROOT, "src/modules/orders/guest-checkout.ts"), "utf8");
     const imports = [...source.matchAll(/from "([^"]+)"/g)].map((m) => m[1]);

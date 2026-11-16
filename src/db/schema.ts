@@ -778,9 +778,10 @@ export const orderTrackingTokens = pgTable(
   ],
 );
 
-// Public tracking request counters (src/modules/orders/tracking.ts, TRACKING_LIMITS). No client address is
-// trusted, so the keys are 'failure' (unknown, revoked or expired tokens, all clients) and 'link:<link id>'
-// (one per live link, migration 0010); a per-client limit waits for the hosting and proxy decision.
+// Anonymous request counters (src/modules/rate-limit/service.ts, consumePublicLimit). No client address is trusted,
+// so the keys are 'failure' (unknown, revoked or expired tracking tokens, all clients), 'link:<link id>' (one per
+// live tracking link, migration 0010) and 'checkout' (guest checkout submissions, all clients, migration 0015); a
+// per-client limit waits for the hosting and proxy decision.
 export const trackingRateLimits = pgTable(
   "tracking_rate_limits",
   {
@@ -791,7 +792,7 @@ export const trackingRateLimits = pgTable(
   (t) => [
     check(
       "tracking_rate_limits_bucket_valid",
-      sql`${t.bucket} = 'failure' or ${t.bucket} ~ '^link:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'`,
+      sql`${t.bucket} in ('failure', 'checkout') or ${t.bucket} ~ '^link:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'`,
     ),
     check("tracking_rate_limits_count_positive", sql`${t.count} >= 1`),
   ],

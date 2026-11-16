@@ -1,7 +1,9 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { type Db, pgErrorCode } from "@/db/database";
 import { DomainError } from "@/modules/domain-error";
 import { GuestCheckoutInvalid, placeGuestOrder } from "@/modules/orders/guest-checkout";
+import { consumePublicLimit } from "@/modules/rate-limit/service";
 import { ApiProblem, readBody } from "./v1/http";
 
 // The future public checkout transport, prepared but NOT ROUTED: no file under src/app imports this module (a test
@@ -38,7 +40,21 @@ const BUSINESS: Partial<Record<DomainError["code"], [number, string, string]>> =
   IDEMPOTENCY_KEY_REUSED: [422, "key_reused", "This checkout was already used for a different order. Start the checkout again."],
 };
 
+/**
+ * Guest checkout submissions accepted per minute from all clients together (a technical bound, not policy): it
+ * limits how many anonymous orders, and so 24-hour stock holds, a flood can create. Anyone can use it up, which
+ * blocks checkout for everyone until the minute ends; a per-client limit needs a trusted proxy (decision 1).
+ */
+export const GUEST_CHECKOUTS_PER_MINUTE = 20;
+
 export async function guestCheckoutResponse(request: Request, deps: CheckoutDeps): Promise<Response> {
+  const requestId = randomUUID();
+  const response = await respond(request, deps, requestId);
+  response.headers.set("x-request-id", requestId);
+  return response;
+}
+
+async function respond(request: Request, deps: CheckoutDeps, requestId: string): Promise<Response> {
   if (request.method !== "POST") return refusal(405, "method_not_allowed", "Use POST.");
   if (!deps.gate().open) return refusal(503, "checkout_closed", "Online ordering is not open yet. Please contact the shop to order.");
   if (request.headers.get("origin") !== deps.baseUrl) return refusal(403, "forbidden", "This request is not allowed.");
@@ -53,6 +69,11 @@ export async function guestCheckoutResponse(request: Request, deps: CheckoutDeps
       if (error instanceof ApiProblem && error.code === "PAYLOAD_TOO_LARGE") return refusal(413, "too_large", "The order is too large.");
       return refusal(400, "bad_request", "The order could not be read.");
     }
+    // Counted only for well-formed requests, so malformed traffic (refused above without any database work) cannot
+    // use up the minute's submissions.
+    if (!(await consumePublicLimit(deps.db, "checkout", GUEST_CHECKOUTS_PER_MINUTE))) {
+      return answer(429, { error: "rate_limited", message: "Many orders are being placed right now. Please try again in a minute. Your order was not placed." }, { "retry-after": "60" });
+    }
     const result = await placeGuestOrder(deps.db, key[1] ?? key[2], body);
     return answer(result.replayed ? 200 : 201, { data: { order: result.order, trackingToken: result.trackingToken } }, { "idempotent-replayed": String(result.replayed) });
   } catch (error) {
@@ -61,7 +82,7 @@ export async function guestCheckoutResponse(request: Request, deps: CheckoutDeps
       const [status, code, message] = BUSINESS[error.code] as [number, string, string];
       return refusal(status, code, message);
     }
-    console.error(JSON.stringify({ level: "error", event: "guest_checkout_failed", errorName: error instanceof Error ? error.name : typeof error, sqlState: pgErrorCode(error) ?? null }));
+    console.error(JSON.stringify({ level: "error", event: "guest_checkout_failed", requestId, errorName: error instanceof Error ? error.name : typeof error, sqlState: pgErrorCode(error) ?? null }));
     return refusal(500, "internal", "Your order was not recorded. Please try again, or contact the shop.");
   }
 }

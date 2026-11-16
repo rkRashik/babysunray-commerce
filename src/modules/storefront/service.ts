@@ -1,19 +1,20 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import type { Db } from "@/db/database";
 import { deliveryZones, inventoryBalances, productCategories, productMedia, products, variants } from "@/db/schema";
 import { assertPermission, type Principal } from "../auth/principal";
 import { normalizeSearch } from "../catalogue/rules";
-import { getProductWithVariants, type ProductDetail } from "../catalogue/service";
+import { getProductWithVariants, type Product, type ProductDetail } from "../catalogue/service";
+import { publishedProduct } from "../catalogue/visibility";
 import { DomainError } from "../domain-error";
 import { checkCustomerDetails, DELIVERY_ZONES, type DeliveryZone, type DetailsError } from "../orders/rules";
 import { type CartLine, validateCartLines } from "./cart";
 
-// The private storefront preview's reads, cart quote and checkout simulation. Every function requires the
-// `storefront:preview` permission (Owner only) because it shows DRAFT products: none of them may ever serve an
-// anonymous visitor. A public storefront would need separate reads limited to published products, which do
-// not exist (requirement I-6 is not approved). Nothing here writes: reads run in read-only snapshots, and the
-// checkout simulation never calls submitOrder, reserves stock or sends anything.
+// The storefront's reads and cart quote, in two scopes: the private preview (every product that is not archived,
+// drafts included; each exported preview function requires `storefront:preview`) and customers (published
+// products only, public-catalogue.ts). The scope decides which products a query can see at all, so a public read
+// never touches a draft. Nothing here writes: reads run in read-only snapshots, and the checkout simulation never
+// calls submitOrder, reserves stock or sends anything.
 
 const SNAPSHOT = { isolationLevel: "repeatable read", accessMode: "read only" } as const;
 export const PREVIEW_PAGE_SIZE = 24;
@@ -35,15 +36,21 @@ export type ProductCard = {
 export type Facets = { categories: { slug: string; nameEn: string | null; nameBn: string | null }[]; sizes: string[]; colours: string[] };
 
 const available = sql<number>`(${inventoryBalances.onHand} - ${inventoryBalances.reserved})::int`;
-const sellable = sql`${products.status} <> 'archived' and exists (select 1 from ${variants} where ${variants.productId} = ${products.id} and ${variants.status} = 'active')`;
+/** Which products a reader may see (`visible`, SQL on `products`) and order (by product status). */
+export type CatalogueScope = { visible: SQL; orderable: (status: Product["status"]) => boolean };
+export const PREVIEW_SCOPE: CatalogueScope = { visible: sql`${products.status} <> 'archived'`, orderable: (s) => s !== "archived" };
+export const PUBLIC_SCOPE: CatalogueScope = { visible: publishedProduct, orderable: (s) => s === "published" };
+
+const sellable = (scope: CatalogueScope) =>
+  sql`${scope.visible} and exists (select 1 from ${variants} where ${variants.productId} = ${products.id} and ${variants.status} = 'active')`;
 const escapeLike = (term: string) => `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
-function filterCondition(f: PreviewFilters) {
+function filterCondition(f: PreviewFilters, scope: CatalogueScope) {
   const term = f.q === undefined ? null : normalizeSearch(f.q);
   const variantWith = (cond: ReturnType<typeof sql>) =>
     sql`exists (select 1 from ${variants} vv join ${inventoryBalances} bb on bb.variant_id = vv.id where vv.product_id = ${products.id} and vv.status = 'active' and ${cond})`;
   return and(
-    sellable,
+    sellable(scope),
     term ? sql`(normalize(${products.nameEn}, NFC) ilike ${escapeLike(term)} or normalize(${products.nameBn}, NFC) ilike ${escapeLike(term)})` : undefined,
     f.category ? sql`exists (select 1 from ${productCategories} c where c.id = ${products.categoryId} and c.slug = ${f.category})` : undefined,
     f.size ? variantWith(sql`vv.size = ${f.size}`) : undefined,
@@ -55,12 +62,17 @@ function filterCondition(f: PreviewFilters) {
 /** One page of products for the preview: featured first, then newest. Four queries per page, never one per product. */
 export async function listPreviewProducts(db: Db, principal: Principal, filters: PreviewFilters): Promise<{ items: ProductCard[]; hasMore: boolean; page: number }> {
   assertPermission(principal, "storefront:preview");
+  return listProductCards(db, filters, PREVIEW_SCOPE);
+}
+
+/** One page of product cards in `scope`. */
+export async function listProductCards(db: Db, filters: PreviewFilters, scope: CatalogueScope): Promise<{ items: ProductCard[]; hasMore: boolean; page: number }> {
   const page = Number.isSafeInteger(filters.page) && (filters.page ?? 0) >= 1 && (filters.page ?? 0) <= 500 ? (filters.page as number) : 1;
   return db.transaction(async (tx) => {
     const rows = await tx
       .select({ id: products.id, slug: products.slug, nameEn: products.nameEn, nameBn: products.nameBn, featured: products.featured })
       .from(products)
-      .where(filterCondition(filters))
+      .where(filterCondition(filters, scope))
       .orderBy(desc(products.featured), desc(products.createdAt), desc(products.id))
       .limit(PREVIEW_PAGE_SIZE + 1)
       .offset((page - 1) * PREVIEW_PAGE_SIZE);
@@ -102,18 +114,23 @@ export async function listPreviewProducts(db: Db, principal: Principal, filters:
 /** Categories that have products to show, and the sizes and colours on sale, for the filters. */
 export async function previewFacets(db: Db, principal: Principal): Promise<Facets> {
   assertPermission(principal, "storefront:preview");
+  return catalogueFacets(db, PREVIEW_SCOPE);
+}
+
+/** The filter options of `scope`: categories with products to show, and the sizes and colours on sale. */
+export async function catalogueFacets(db: Db, scope: CatalogueScope): Promise<Facets> {
   return db.transaction(async (tx) => {
     const categories = await tx
       .selectDistinct({ slug: productCategories.slug, nameEn: productCategories.nameEn, nameBn: productCategories.nameBn })
       .from(productCategories)
       .innerJoin(products, eq(products.categoryId, productCategories.id))
-      .where(sellable)
+      .where(sellable(scope))
       .orderBy(productCategories.slug);
     const options = await tx
       .selectDistinct({ size: variants.size, colour: variants.colour })
       .from(variants)
       .innerJoin(products, eq(products.id, variants.productId))
-      .where(and(eq(variants.status, "active"), ne(products.status, "archived")));
+      .where(and(eq(variants.status, "active"), scope.visible));
     const unique = (values: (string | null)[]) => [...new Set(values.filter((v): v is string => v !== null))].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
     return { categories, sizes: unique(options.map((o) => o.size)), colours: unique(options.map((o) => o.colour)) };
   }, SNAPSHOT);
@@ -126,9 +143,14 @@ export type PreviewProduct = { product: ProductDetail; variants: PreviewVariant[
 /** A draft product by slug with its active SKUs, what is available of each, and the configured delivery rates. */
 export async function getPreviewProduct(db: Db, principal: Principal, slug: string): Promise<PreviewProduct | null> {
   assertPermission(principal, "storefront:preview");
+  return productBySlug(db, slug, PREVIEW_SCOPE);
+}
+
+/** A product of `scope` by slug (null if it is not visible there), its active SKUs and the delivery rates. */
+export async function productBySlug(db: Db, slug: string, scope: CatalogueScope): Promise<PreviewProduct | null> {
   if (typeof slug !== "string" || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) || slug.length > 100) return null;
   return db.transaction(async (tx) => {
-    const [row] = await tx.select({ id: products.id }).from(products).where(and(eq(products.slug, slug), ne(products.status, "archived")));
+    const [row] = await tx.select({ id: products.id }).from(products).where(and(eq(products.slug, slug), scope.visible));
     if (!row) return null;
     const product = await getProductWithVariants(tx, row.id);
     const ids = product.variants.map((v) => v.id);
@@ -181,6 +203,14 @@ export type Quote = {
  */
 export async function quoteCart(db: Db, principal: Principal, input: { lines: unknown; zone?: unknown }): Promise<Quote> {
   assertPermission(principal, "storefront:preview");
+  return quoteLines(db, input, PREVIEW_SCOPE);
+}
+
+/**
+ * quoteCart in `scope`. For customers (`PUBLIC_SCOPE`) a SKU the scope cannot see is read as if it did not exist,
+ * so no name, price or photo of an unpublished product is ever loaded into a public answer.
+ */
+export async function quoteLines(db: Db, input: { lines: unknown; zone?: unknown }, scope: CatalogueScope): Promise<Quote> {
   const lines = validateCartLines(input.lines);
   const zone = DELIVERY_ZONES.includes(input.zone as DeliveryZone) ? (input.zone as DeliveryZone) : null;
   return db.transaction(async (tx) => {
@@ -202,7 +232,7 @@ export async function quoteCart(db: Db, principal: Principal, input: { lines: un
           .from(variants)
           .innerJoin(products, eq(products.id, variants.productId))
           .innerJoin(inventoryBalances, eq(inventoryBalances.variantId, variants.id))
-          .where(inArray(variants.sku, lines.map((l) => l.sku)))
+          .where(and(inArray(variants.sku, lines.map((l) => l.sku)), scope === PUBLIC_SCOPE ? scope.visible : undefined))
       : [];
     const productIds = [...new Set(rows.map((r) => r.productId))];
     const photos = productIds.length
@@ -215,7 +245,7 @@ export async function quoteCart(db: Db, principal: Principal, input: { lines: un
     const quoted = lines.map((line: CartLine): QuotedLine => {
       const r = rows.find((x) => x.sku === line.sku);
       if (!r) return { ...line, status: "unknown", available: 0, unitPricePaisa: null, lineTotalPaisa: null, productSlug: null, nameEn: null, nameBn: null, size: null, colour: null, photo: null };
-      const orderable = r.variantStatus === "active" && r.productStatus !== "archived";
+      const orderable = r.variantStatus === "active" && scope.orderable(r.productStatus);
       const free = Math.max(0, r.available);
       const lineTotal = r.pricePaisa * line.quantity;
       if (!Number.isSafeInteger(lineTotal)) throw new DomainError("INVALID_INPUT", "The cart total is too large.");

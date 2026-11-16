@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { guestCheckoutResponse } from "../../src/api/guest-checkout";
+import { GUEST_CHECKOUTS_PER_MINUTE, guestCheckoutResponse } from "../../src/api/guest-checkout";
 import type { Db } from "../../src/db/database";
 import type { Principal } from "../../src/modules/auth/principal";
 import { createProduct, createVariant, updateProduct, updateVariant } from "../../src/modules/catalogue/service";
@@ -373,6 +373,25 @@ describe("guest checkout transport (unrouted, test harness only)", () => {
     const changed = await post(request([{ ...line(a), unitPricePaisa: a.pricePaisa - 1 }], { totalPaisa: a.pricePaisa - 1 + DHAKA }));
     expect(changed.status).toBe(409);
     expect(await changed.json()).toMatchObject({ error: "quote_changed" });
+  });
+
+  it("accepts at most GUEST_CHECKOUTS_PER_MINUTE well-formed submissions a minute from everyone together", async () => {
+    const a = await publishedSku(3);
+    await pool.query("delete from tracking_rate_limits where bucket = 'checkout'");
+    // Malformed requests are refused before the counter and do not use it up.
+    for (let i = 0; i < 3; i += 1) expect((await post("{not json")).status).toBe(400);
+    expect(await count(pool, "select count(*) from tracking_rate_limits where bucket = 'checkout'")).toBe(0);
+    await pool.query("insert into tracking_rate_limits (bucket, window_start, count) values ('checkout', date_trunc('minute', now()), $1)", [GUEST_CHECKOUTS_PER_MINUTE - 1]);
+    const before = await counts();
+    const last = await post(request([line(a)]));
+    expect(last.status).toBe(201);
+    const limited = await post(request([line(a)]));
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("60");
+    expect(limited.headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
+    expect(await limited.json()).toMatchObject({ error: "rate_limited" });
+    expect(await counts()).toMatchObject({ orders: before.orders + 1, holds: before.holds + 1 });
+    await pool.query("delete from tracking_rate_limits where bucket = 'checkout'");
   });
 
   it("an unexpected failure says the order was not recorded and logs no customer data or token", async () => {

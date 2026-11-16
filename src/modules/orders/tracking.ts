@@ -5,6 +5,7 @@ import type { Db } from "@/db/database";
 import { orderItems, orders, orderTrackingTokens } from "@/db/schema";
 import type { Actor } from "../actor";
 import { DomainError } from "../domain-error";
+import { consumePublicLimit } from "../rate-limit/service";
 import { addEvent, lockOrder, type OrderActor } from "./internal";
 import { allowedActions, formatOrderNumber, maskName, maskPhone, trackingLinkLive, ZONE_LABELS } from "./rules";
 import { customerCancel, requestCancellation } from "./service";
@@ -154,13 +155,6 @@ export const TRACKING_LIMITS = { failure: 30, link: 30 } as const;
 export type TrackingBucket = "failure" | `link:${string}`;
 
 /** Counts one request in a fixed one-minute window; false once the bucket is over its limit this minute. */
-export async function consumeTrackingLimit(db: Db, bucket: TrackingBucket): Promise<boolean> {
-  const { rows } = await db.execute<{ count: number }>(sql`
-    insert into tracking_rate_limits as r (bucket, window_start, count)
-    values (${bucket}, date_trunc('minute', now()), 1)
-    on conflict (bucket) do update set
-      count = case when r.window_start = excluded.window_start then r.count + 1 else 1 end,
-      window_start = excluded.window_start
-    returning count`);
-  return rows[0].count <= (bucket === "failure" ? TRACKING_LIMITS.failure : TRACKING_LIMITS.link);
+export function consumeTrackingLimit(db: Db, bucket: TrackingBucket): Promise<boolean> {
+  return consumePublicLimit(db, bucket, bucket === "failure" ? TRACKING_LIMITS.failure : TRACKING_LIMITS.link);
 }
