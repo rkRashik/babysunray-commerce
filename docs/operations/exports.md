@@ -37,7 +37,7 @@ A filter a dataset does not support is refused, never ignored.
 | `orders` | order, with item totals read in the same snapshot | submission time | yes | **yes** (name, phone, address, note) |
 | `order_items` | order line (price snapshot) | order submission | yes | no |
 | `order_events` | order history row | when recorded | yes | no |
-| `payments` | COD collection, settlement or refund entry | the payment date entered | yes | no |
+| `payments` | COD collection, settlement, courier deduction or refund entry | the payment date entered | yes | no |
 | `returns` | return or exchange, with value and refunds | request time | yes | no |
 | `quarantine` | returned or RTO line in inspection | received time | yes | no |
 | `delivery_zones` | zone | none | no | no |

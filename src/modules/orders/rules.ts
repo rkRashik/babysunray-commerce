@@ -125,6 +125,8 @@ export type OrderState = {
   totalPaisa: number;
   codCollectedPaisa: number;
   codSettledPaisa: number;
+  /** Kept by the courier from the collected money, as the Owner recorded it (migration 0016). */
+  codDeductedPaisa: number;
   openCancellationRequest: boolean;
   openReturn: boolean;
   awaitingInspection: boolean;
@@ -143,6 +145,7 @@ export const ORDER_ACTIONS = [
   "review_cancellation",
   "record_collection",
   "record_settlement",
+  "record_deduction",
   "create_return",
   "customer_cancel",
   "customer_request_cancellation",
@@ -183,17 +186,24 @@ export function allowedActions(s: OrderState, now: Date): Set<OrderAction> {
     // A delivered order is closed only after its return window, so closing (or settling) never ends the
     // customer's right to ask for a return (engineering default, order-policy-decisions.md section 3).
     const closable = s.fulfilmentStatus === "rto_received" || (s.fulfilmentStatus === "delivered" && s.deliveredAt !== null && !windowOpen);
-    if (closable && s.codSettledPaisa === s.codCollectedPaisa && !s.openReturn && !s.awaitingInspection) allowed.add("close");
+    if (closable && accounted(s) === s.codCollectedPaisa && !s.openReturn && !s.awaitingInspection) allowed.add("close");
   }
-  if (s.codSettledPaisa < s.codCollectedPaisa && s.orderStatus !== "cancelled") allowed.add("record_settlement");
+  // Collected money still with the courier: neither settled to the Owner nor recorded as deducted.
+  if (accounted(s) < s.codCollectedPaisa && s.orderStatus !== "cancelled") allowed.add("record_settlement").add("record_deduction");
   return allowed;
 }
 
-/** Payment status is a function of the amounts (the database checks the same rule). */
-export function paymentStatusFor(totalPaisa: number, collected: number, settled: number) {
+/** Collected money the courier has accounted for: settled to the Owner or recorded as deducted. */
+const accounted = (s: Pick<OrderState, "codSettledPaisa" | "codDeductedPaisa">) => s.codSettledPaisa + s.codDeductedPaisa;
+
+/**
+ * Payment status is a function of the amounts (the database checks the same rule). 'settled' means every collected
+ * taka is settled to the Owner or recorded as deducted by the courier.
+ */
+export function paymentStatusFor(totalPaisa: number, collected: number, settled: number, deducted: number) {
   if (collected === 0) return "unpaid" as const;
   if (collected < totalPaisa) return "partially_collected" as const;
-  return settled < collected ? ("collected" as const) : ("settled" as const);
+  return settled + deducted < collected ? ("collected" as const) : ("settled" as const);
 }
 
 /** A tracking link works until it is revoked, or until 30 days after the order was closed. */

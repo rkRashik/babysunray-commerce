@@ -121,7 +121,7 @@ describe("Office order actions", () => {
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" }).format(new Date());
     expect((await submit(actions.recordPaymentAction, { orderId, version: String(await version(orderId)), kind: "collected", amountTaka: "100.55", occurredOn: today })).redirect).toContain("done=payment");
     const bad = await submit(actions.recordPaymentAction, { orderId, version: String(await version(orderId)), kind: "settled", amountTaka: "100.56", occurredOn: today });
-    expect(bad.state?.error).toMatch(/more settled than the courier has collected/);
+    expect(bad.state?.error).toMatch(/more settled and deducted than the courier has collected/);
     expect((await pool.query("select cod_collected_paisa, payment_status from orders where id = $1", [orderId])).rows[0]).toEqual({ cod_collected_paisa: "10055", payment_status: "partially_collected" });
   });
 

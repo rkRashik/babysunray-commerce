@@ -18,7 +18,7 @@ export const MAX_LOW_STOCK_THRESHOLD = 100_000;
 
 export type QueueOrder = Pick<
   typeof orders.$inferSelect,
-  "id" | "number" | "createdAt" | "orderStatus" | "fulfilmentStatus" | "paymentStatus" | "totalPaisa" | "codCollectedPaisa" | "codSettledPaisa" | "verificationExpiresAt"
+  "id" | "number" | "createdAt" | "orderStatus" | "fulfilmentStatus" | "paymentStatus" | "totalPaisa" | "codCollectedPaisa" | "codSettledPaisa" | "codDeductedPaisa" | "verificationExpiresAt"
 >;
 export type QuarantineRow = { id: string; orderId: string; orderNumber: number; sku: string; quantity: number; receivedAt: Date };
 export type StockRow = { variantId: string; sku: string; nameEn: string | null; nameBn: string | null; onHand: number; reserved: number; available: number };
@@ -51,6 +51,7 @@ const QUEUE_COLUMNS = {
   totalPaisa: orders.totalPaisa,
   codCollectedPaisa: orders.codCollectedPaisa,
   codSettledPaisa: orders.codSettledPaisa,
+  codDeductedPaisa: orders.codDeductedPaisa,
   verificationExpiresAt: orders.verificationExpiresAt,
 };
 

@@ -9,7 +9,8 @@ import { type DateRange, rangeInstants } from "./dates";
 //   - money: COD payment entries by the date the Owner recorded for them (occurred_on) in the range;
 //   - "outstanding": the state of every order as of now, not limited to the range;
 //   - stock: ledger rows by the time they were written (created_at) in the range.
-// Order totals are not sales, revenue or profit: no cost of goods, courier fee, discount or tax is recorded.
+// Order totals are not sales, revenue or profit: no cost of goods, discount or tax is recorded, and courier fees
+// appear only as the deductions the Owner recorded from the courier's statements.
 // Amounts are integer paisa, summed by PostgreSQL as exact integers. Everything is read in one read-only
 // REPEATABLE READ transaction, so the sections are mutually consistent.
 
@@ -27,7 +28,7 @@ export type PeriodReport = {
     byFulfilmentStatus: Record<string, Bucket>;
     byPaymentStatus: Record<string, Bucket>;
   };
-  money: { collected: Bucket; settled: Bucket; refunded: Bucket };
+  money: { collected: Bucket; settled: Bucket; deducted: Bucket; refunded: Bucket };
   costs: { rtoCharges: Bucket; returnShippingBusiness: Bucket; returnShippingCustomer: Bucket };
   stock: { receipts: Bucket; dispatches: Bucket; adjustmentsIn: Bucket; adjustmentsOut: Bucket; returnRestocks: Bucket };
   outstanding: Outstanding;
@@ -38,11 +39,11 @@ export type Outstanding = {
   verifiedNotDispatched: Bucket;
   /** Dispatched or delivered confirmed orders: total minus collected. */
   awaitingCollection: Bucket;
-  /** Collected by the courier, not yet settled to the Owner: collected minus settled, every order. */
+  /** Collected by the courier and not yet accounted for: collected minus settled minus deducted, every order. */
   heldByCourier: Bucket;
   /** All-time sums of the payment entries, and the same sums from the orders' running totals. */
-  ledger: { collectedPaisa: number; settledPaisa: number; refundedPaisa: number };
-  orderTotals: { collectedPaisa: number; settledPaisa: number; refundedPaisa: number };
+  ledger: { collectedPaisa: number; settledPaisa: number; deductedPaisa: number; refundedPaisa: number };
+  orderTotals: { collectedPaisa: number; settledPaisa: number; deductedPaisa: number; refundedPaisa: number };
   /** True when the entries and the running totals agree (they are written in one transaction). */
   reconciled: boolean;
 };
@@ -71,18 +72,20 @@ export async function getOutstanding(tx: Db): Promise<Outstanding> {
       coalesce(sum(total_paisa) filter (where order_status = 'confirmed' and fulfilment_status in ('unfulfilled', 'packed')), 0) as vnd_amount,
       count(*) filter (where order_status = 'confirmed' and fulfilment_status in ('dispatched', 'delivered') and cod_collected_paisa < total_paisa) as ac_count,
       coalesce(sum(total_paisa - cod_collected_paisa) filter (where order_status = 'confirmed' and fulfilment_status in ('dispatched', 'delivered')), 0) as ac_amount,
-      count(*) filter (where cod_settled_paisa < cod_collected_paisa) as held_count,
-      coalesce(sum(cod_collected_paisa - cod_settled_paisa), 0) as held_amount,
+      count(*) filter (where cod_settled_paisa + cod_deducted_paisa < cod_collected_paisa) as held_count,
+      coalesce(sum(cod_collected_paisa - cod_settled_paisa - cod_deducted_paisa), 0) as held_amount,
       coalesce(sum(cod_collected_paisa), 0) as o_collected,
       coalesce(sum(cod_settled_paisa), 0) as o_settled,
+      coalesce(sum(cod_deducted_paisa), 0) as o_deducted,
       coalesce(sum(refunded_paisa), 0) as o_refunded,
       (select coalesce(sum(amount_paisa) filter (where kind = 'collected'), 0) from payment_entries) as l_collected,
       (select coalesce(sum(amount_paisa) filter (where kind = 'settled'), 0) from payment_entries) as l_settled,
+      (select coalesce(sum(amount_paisa) filter (where kind = 'deducted'), 0) from payment_entries) as l_deducted,
       (select coalesce(sum(amount_paisa) filter (where kind = 'refunded'), 0) from payment_entries) as l_refunded
     from orders`);
   const r = rows[0];
-  const ledger = { collectedPaisa: exactInteger(r.l_collected), settledPaisa: exactInteger(r.l_settled), refundedPaisa: exactInteger(r.l_refunded) };
-  const orderTotals = { collectedPaisa: exactInteger(r.o_collected), settledPaisa: exactInteger(r.o_settled), refundedPaisa: exactInteger(r.o_refunded) };
+  const ledger = { collectedPaisa: exactInteger(r.l_collected), settledPaisa: exactInteger(r.l_settled), deductedPaisa: exactInteger(r.l_deducted), refundedPaisa: exactInteger(r.l_refunded) };
+  const orderTotals = { collectedPaisa: exactInteger(r.o_collected), settledPaisa: exactInteger(r.o_settled), deductedPaisa: exactInteger(r.o_deducted), refundedPaisa: exactInteger(r.o_refunded) };
   return {
     verifiedNotDispatched: bucket({ count: r.vnd_count, amount: r.vnd_amount }),
     awaitingCollection: bucket({ count: r.ac_count, amount: r.ac_amount }),
@@ -92,8 +95,9 @@ export async function getOutstanding(tx: Db): Promise<Outstanding> {
     reconciled:
       ledger.collectedPaisa === orderTotals.collectedPaisa &&
       ledger.settledPaisa === orderTotals.settledPaisa &&
+      ledger.deductedPaisa === orderTotals.deductedPaisa &&
       ledger.refundedPaisa === orderTotals.refundedPaisa &&
-      exactInteger(r.held_amount) === ledger.collectedPaisa - ledger.settledPaisa,
+      exactInteger(r.held_amount) === ledger.collectedPaisa - ledger.settledPaisa - ledger.deductedPaisa,
   };
 }
 
@@ -137,7 +141,7 @@ export async function getPeriodReport(db: Db, range: DateRange): Promise<PeriodR
         byFulfilmentStatus: await grouped(tx, "fulfilment_status", start, end),
         byPaymentStatus: await grouped(tx, "payment_status", start, end),
       },
-      money: { collected: byKind("collected"), settled: byKind("settled"), refunded: byKind("refunded") },
+      money: { collected: byKind("collected"), settled: byKind("settled"), deducted: byKind("deducted"), refunded: byKind("refunded") },
       costs: {
         rtoCharges: bucket(rto[0]),
         returnShippingBusiness: bucket(shipping.find((s) => s.paid_by === "business")),
@@ -159,6 +163,7 @@ export type CodRow = {
   totalPaisa: number;
   collectedPaisa: number;
   settledPaisa: number;
+  deductedPaisa: number;
   refundedPaisa: number;
   awaitingCollectionPaisa: number;
   heldByCourierPaisa: number;
@@ -167,19 +172,20 @@ export type CodRow = {
 export const COD_LIST_LIMIT = 200;
 
 /**
- * Orders with COD money still open (awaiting collection after dispatch, or collected and not settled), oldest
+ * Orders with COD money still open (awaiting collection after dispatch, or collected and neither settled nor
+ * recorded as deducted: the difference to resolve with the courier), oldest
  * first, with the totals over all of them. No customer name, phone or address (routine report, D-10).
  */
 export async function getCodReconciliation(db: Db): Promise<{ generatedAt: Date; rows: CodRow[]; truncated: boolean; outstanding: Outstanding }> {
   return db.transaction(async (tx) => {
     const { rows: now } = await tx.execute<{ now: string }>(sql`select now() as now`);
     const { rows } = await tx.execute<Record<string, string>>(sql`
-      select id, number, created_at, fulfilment_status, payment_status, total_paisa, cod_collected_paisa, cod_settled_paisa, refunded_paisa,
+      select id, number, created_at, fulfilment_status, payment_status, total_paisa, cod_collected_paisa, cod_settled_paisa, cod_deducted_paisa, refunded_paisa,
              case when order_status = 'confirmed' and fulfilment_status in ('dispatched', 'delivered') then total_paisa - cod_collected_paisa else 0 end as awaiting,
-             cod_collected_paisa - cod_settled_paisa as held
+             cod_collected_paisa - cod_settled_paisa - cod_deducted_paisa as held
         from orders
        where (order_status = 'confirmed' and fulfilment_status in ('dispatched', 'delivered') and cod_collected_paisa < total_paisa)
-          or cod_settled_paisa < cod_collected_paisa
+          or cod_settled_paisa + cod_deducted_paisa < cod_collected_paisa
        order by created_at, id
        limit ${COD_LIST_LIMIT + 1}`);
     return {
@@ -194,6 +200,7 @@ export async function getCodReconciliation(db: Db): Promise<{ generatedAt: Date;
         totalPaisa: exactInteger(r.total_paisa),
         collectedPaisa: exactInteger(r.cod_collected_paisa),
         settledPaisa: exactInteger(r.cod_settled_paisa),
+        deductedPaisa: exactInteger(r.cod_deducted_paisa),
         refundedPaisa: exactInteger(r.refunded_paisa),
         awaitingCollectionPaisa: exactInteger(r.awaiting),
         heldByCourierPaisa: exactInteger(r.held),

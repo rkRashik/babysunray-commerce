@@ -198,8 +198,8 @@ function orderPaths() {
     "/orders/{orderId}/payments": {
       post: orderWrite({
         operationId: "recordPayment",
-        summary: "Record a courier collection or a settlement",
-        description: "Manual COD accounting: collection after dispatch, at most the expected COD in total; settlement at most what was collected. Partial amounts are allowed.",
+        summary: "Record a courier collection, a settlement or a courier deduction",
+        description: "Manual COD accounting: collection after dispatch, at most the expected COD in total; settlement (money the Owner received) and deduction (what the courier kept from the collected money, from its statement; no amount is assumed) together at most what was collected. Partial amounts are allowed.",
         permission: "payments:record",
         parameters: [orderId],
         request: { schemaId: "PaymentRequest", required: true },

@@ -62,7 +62,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
   const current = openReturn(order);
   const itemBy = new Map(order.items.map((i) => [i.id, i]));
   const reservedBy = new Map(order.reservations.filter((r) => r.status === "active").map((r) => [r.variantId, r.quantity]));
-  const unsettled = order.codCollectedPaisa - order.codSettledPaisa;
+  const unsettled = order.codCollectedPaisa - order.codSettledPaisa - order.codDeductedPaisa;
   const receivable = order.totalPaisa - order.codCollectedPaisa;
   const today = dhakaToday(now);
   const windowEnd = order.deliveredAt ? returnWindowEnd(order.deliveredAt) : null;
@@ -121,7 +121,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
         {(order.fulfilmentStatus === "delivered" || order.fulfilmentStatus === "rto_received") && order.orderStatus === "confirmed" && !allowed.has("close") ? (
           <p className="text-sm text-gray-700" data-testid="close-hint">
             {windowEnd && now.getTime() <= windowEnd.getTime() ? `Can be closed after ${formatTime(windowEnd)}, when the 7-day return window has ended. ` : null}
-            Closing needs every collected amount settled, no open return and nothing awaiting inspection.
+            Closing needs every collected amount settled or recorded as kept by the courier, no open return and nothing awaiting inspection.
           </p>
         ) : null}
       </Section>
@@ -200,9 +200,11 @@ export default async function OrderPage({ params, searchParams }: Props) {
           <dd className="text-right tabular-nums">{bdt(order.codCollectedPaisa)}</dd>
           <dt className="text-gray-600">Settled to you</dt>
           <dd className="text-right tabular-nums">{bdt(order.codSettledPaisa)}</dd>
+          <dt className="text-gray-600">Kept by courier (deductions)</dt>
+          <dd className="text-right tabular-nums">{bdt(order.codDeductedPaisa)}</dd>
           <dt className="text-gray-600">Still to collect</dt>
           <dd className="text-right tabular-nums">{bdt(order.fulfilmentStatus === "dispatched" || order.fulfilmentStatus === "delivered" ? receivable : 0)}</dd>
-          <dt className="text-gray-600">Collected, not settled</dt>
+          <dt className="text-gray-600">Collected, not settled or deducted</dt>
           <dd className="text-right tabular-nums">{bdt(unsettled)}</dd>
           <dt className="text-gray-600">Refunded</dt>
           <dd className="text-right tabular-nums">{bdt(order.refundedPaisa)}</dd>
@@ -222,9 +224,10 @@ export default async function OrderPage({ params, searchParams }: Props) {
               options={[
                 ...(allowed.has("record_collection") ? [{ value: "collected", label: "Courier collected" }] : []),
                 ...(allowed.has("record_settlement") ? [{ value: "settled", label: "Settled to me" }] : []),
+                ...(allowed.has("record_deduction") ? [{ value: "deducted", label: "Kept by the courier (fee or deduction on its statement)" }] : []),
               ]}
             />
-            <Field name="amountTaka" label="Amount (BDT)" required inputMode="decimal" hint={`Up to ${formatPaisa(allowed.has("record_collection") ? receivable : unsettled)} for this step; partial amounts are fine.`} />
+            <Field name="amountTaka" label="Amount (BDT)" required inputMode="decimal" hint={`Up to ${formatPaisa(receivable)} to collect, and up to ${formatPaisa(unsettled)} collected and not yet settled or recorded as kept by the courier; partial amounts are fine.`} />
             <Field name="occurredOn" label="Date" required defaultValue={today} hint="YYYY-MM-DD, not in the future." />
             <Field name="reference" label="Reference" maxLength={100} hint="Optional, for example the courier's statement number." />
           </ActionForm>
@@ -239,7 +242,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
             {order.payments.map((p) => (
               <li key={p.id} className="flex flex-wrap justify-between gap-2 py-1">
                 <span>
-                  {p.kind === "collected" ? "Courier collected" : p.kind === "settled" ? "Settled" : `Refunded (${p.method === "bank_transfer" ? "bank transfer" : p.method})`} on {p.occurredOn}
+                  {p.kind === "collected" ? "Courier collected" : p.kind === "settled" ? "Settled" : p.kind === "deducted" ? "Kept by courier" : `Refunded (${p.method === "bank_transfer" ? "bank transfer" : p.method})`} on {p.occurredOn}
                   {p.reference ? ` · ${p.reference}` : ""}
                 </span>
                 <span className="tabular-nums">{bdt(p.amountPaisa)}</span>

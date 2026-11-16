@@ -27,23 +27,27 @@ async function lockVersioned(tx: Db, orderId: string, expectedVersion: number): 
 }
 
 /**
- * Records money the courier collected or the Owner received (settlement). Partial amounts are allowed; the
- * running totals can never pass the expected COD (collection) or what was collected (settlement).
+ * Records money the courier collected, the Owner received (settlement) or the courier kept from what it collected
+ * (deduction: its fees or other amounts on its statement, entered by the Owner; none is assumed). Partial amounts
+ * are allowed; the running totals can never pass the expected COD (collection), and settled plus deducted can never
+ * pass what was collected. Collected is never treated as settled.
  */
 export async function recordPayment(
   tx: Db,
   orderId: string,
   expectedVersion: number,
-  input: { kind: "collected" | "settled"; amountPaisa: number; occurredOn: string; reference?: string | null },
+  input: { kind: "collected" | "settled" | "deducted"; amountPaisa: number; occurredOn: string; reference?: string | null },
   actor: Actor,
 ): Promise<{ order: Order; entry: PaymentEntry }> {
-  const { order } = await lockForAction(tx, orderId, input.kind === "collected" ? "record_collection" : "record_settlement", expectedVersion);
+  const action = input.kind === "collected" ? "record_collection" : input.kind === "settled" ? "record_settlement" : "record_deduction";
+  const { order } = await lockForAction(tx, orderId, action, expectedVersion);
   const amount = validateAmountPaisa(input.amountPaisa);
   const occurredOn = validatePastDate(input.occurredOn, "occurredOn");
   const collected = order.codCollectedPaisa + (input.kind === "collected" ? amount : 0);
   const settled = order.codSettledPaisa + (input.kind === "settled" ? amount : 0);
+  const deducted = order.codDeductedPaisa + (input.kind === "deducted" ? amount : 0);
   if (collected > order.totalPaisa) throw new DomainError("PAYMENT_LIMIT_EXCEEDED", "That would record more collected than the order's expected COD.");
-  if (settled > collected) throw new DomainError("PAYMENT_LIMIT_EXCEEDED", "That would record more settled than the courier has collected.");
+  if (settled + deducted > collected) throw new DomainError("PAYMENT_LIMIT_EXCEEDED", "That would record more settled and deducted than the courier has collected.");
   const [entry] = await tx
     .insert(paymentEntries)
     .values({ orderId, kind: input.kind, amountPaisa: amount, occurredOn, reference: optionalReference(input.reference), actorUserId: actor.ref })
@@ -51,9 +55,10 @@ export async function recordPayment(
   const updated = await updateOrder(tx, orderId, {
     codCollectedPaisa: collected,
     codSettledPaisa: settled,
-    paymentStatus: paymentStatusFor(order.totalPaisa, collected, settled),
+    codDeductedPaisa: deducted,
+    paymentStatus: paymentStatusFor(order.totalPaisa, collected, settled, deducted),
   });
-  await addEvent(tx, orderId, input.kind === "collected" ? "cod_collected" : "cod_settled", actor, { amountPaisa: amount, paymentEntryId: entry.id });
+  await addEvent(tx, orderId, `cod_${input.kind}`, actor, { amountPaisa: amount, paymentEntryId: entry.id });
   return { order: updated, entry };
 }
 

@@ -34,7 +34,7 @@ Stored as four separate columns on `orders` (O-1). Order source (`website`, `mes
 |---|---|
 | Order status (commercial) | `pending_verification`, `verification_expired`, `confirmed`, `cancelled`, `closed` |
 | Fulfilment status | `unfulfilled`, `packed`, `dispatched`, `delivered`, `rto` (returning to the business), `rto_received` |
-| Payment status (COD) | `unpaid`, `partially_collected`, `collected` (fully collected, not fully settled), `settled`; always derived from the recorded amounts (a database check enforces it) |
+| Payment status (COD) | `unpaid`, `partially_collected`, `collected` (fully collected, not fully accounted for), `settled` (every collected taka settled to the Owner or recorded as kept by the courier, since Gate H.36); always derived from the recorded amounts (a database check enforces it) |
 | Return status | `none`, `requested`, `in_progress`, `resolved` |
 
 Allowed transitions (anything else is refused with `INVALID_TRANSITION`):
@@ -54,7 +54,7 @@ Allowed transitions (anything else is refused with `INVALID_TRANSITION`):
 | Deliver | dispatched | delivered | None |
 | Mark RTO | dispatched | rto | None |
 | Receive RTO | rto | rto_received | Every line enters quarantine; nothing becomes sellable |
-| Close | confirmed; fulfilment rto_received, or delivered **and its 7-day return window has ended**; everything collected is settled, no open return and nothing awaiting inspection | closed | None |
+| Close | confirmed; fulfilment rto_received, or delivered **and its 7-day return window has ended**; everything collected is settled or recorded as a courier deduction, no open return and nothing awaiting inspection | closed | None |
 
 Cancellation and closing set `closed_at`; the tracking link stops working 30 days later.
 
@@ -68,6 +68,7 @@ Chosen to implement section 1 where it leaves a technical detail open. They make
 | Enforcing expiry without a scheduler | Logical correctness does not depend on a scheduler: submission, stock adjustment and confirmation release overdue reservations first, so an expired hold never blocks a fresh order or counts as valid. Physical cleanup of all overdue orders is a repeatable batch (`expireOverdueVerifications`), run by `npm run orders:expire-verification` locally. **No scheduler runs it in production**; when hosting is chosen, the host's scheduler (or an equivalent) should run the same command every few minutes. |
 | Dispatch while a cancellation request is open | Refused until the Owner decides the request. |
 | Payment collection | Recorded only after dispatch, at most the expected COD in total; settlement at most what was collected; partial amounts allowed. |
+| Courier deductions (Gate H.36) | What the courier kept from the money it collected (its fee or another amount on its statement) is recorded by the Owner as its own entry, `deducted`, with the statement reference; no amount or fee is assumed. Settled plus deducted never exceeds collected. A deduction is not a refund and does not change what the customer paid or the order total. Without it, an order whose courier kept a fee could never be fully accounted for or closed. Chosen to implement rule J's separate buckets; Draft — Founder Review. |
 | Refunds | Only for an approved return, at most the money collected minus earlier refunds, and at most the returned items' value. Method is bKash, Nagad or bank transfer. The 7-working-day deadline is shown, not computed, because the working-day calendar (weekends, public holidays) is not defined. |
 | Exchanges | Request, receipt, inspection and Owner decision are recorded. **Executing** an exchange (sending the replacement) is not automated: the Owner creates a new assisted order for the replacement, which reserves stock normally. Who pays for the replacement's delivery and how a price difference is handled are **not decided** (section 4). |
 | Return window | Up to 7 × 24 hours after the recorded delivery time, that moment included. |

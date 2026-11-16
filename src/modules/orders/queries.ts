@@ -112,7 +112,7 @@ export function queueCondition(queue: OrderQueue): SQL {
     case "awaiting_collection":
       return sql`(${confirmed} and ${orders.fulfilmentStatus} in ('dispatched', 'delivered') and ${orders.codCollectedPaisa} < ${orders.totalPaisa})`;
     case "unsettled":
-      return sql`(${orders.codSettledPaisa} < ${orders.codCollectedPaisa})`;
+      return sql`(${orders.codSettledPaisa} + ${orders.codDeductedPaisa} < ${orders.codCollectedPaisa})`;
   }
 }
 

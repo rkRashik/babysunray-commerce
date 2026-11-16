@@ -24,6 +24,7 @@ const base: OrderState = {
   totalPaisa: 10_000,
   codCollectedPaisa: 0,
   codSettledPaisa: 0,
+  codDeductedPaisa: 0,
   openCancellationRequest: false,
   openReturn: false,
   awaitingInspection: false,
@@ -52,7 +53,14 @@ describe("allowedActions (the transition table in order-policy-decisions.md)", (
     const deliveredAt = new Date(NOW.getTime() - 2 * HOUR);
     expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "delivered", deliveredAt })).toEqual(["create_return", "record_collection"]);
     expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "delivered", deliveredAt: new Date(NOW.getTime() - 7 * 24 * HOUR - 1) })).not.toContain("create_return");
-    expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "delivered", deliveredAt, codCollectedPaisa: 10_000, codSettledPaisa: 5_000 })).toEqual(["create_return", "record_settlement"]);
+    expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "delivered", deliveredAt, codCollectedPaisa: 10_000, codSettledPaisa: 5_000 })).toEqual(["create_return", "record_deduction", "record_settlement"]);
+    // Settled plus the courier's recorded deduction accounts for everything collected: nothing more to record.
+    expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "delivered", deliveredAt, codCollectedPaisa: 10_000, codSettledPaisa: 9_700, codDeductedPaisa: 300 })).toEqual(["create_return"]);
+    const after = new Date(NOW.getTime() - 7 * 24 * HOUR - 1);
+    expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "delivered", deliveredAt: after, codCollectedPaisa: 10_000, codSettledPaisa: 9_700, codDeductedPaisa: 300 })).toEqual(["close"]);
+    expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "delivered", deliveredAt: after, codCollectedPaisa: 10_000, codSettledPaisa: 9_700 })).not.toContain("close");
+    expect(paymentStatusFor(10_000, 10_000, 9_700, 300)).toBe("settled");
+    expect(paymentStatusFor(10_000, 10_000, 9_700, 299)).toBe("collected");
     expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "delivered", deliveredAt, openReturn: true })).not.toContain("close");
     expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "rto_received", awaitingInspection: true })).toEqual(["record_rto_charge"]);
     expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "rto_received" })).toEqual(["close", "record_rto_charge"]);
@@ -101,7 +109,7 @@ describe("Bangladesh phone numbers", () => {
 
 describe("money, dates, references and masking", () => {
   it("derives payment status from the amounts", () => {
-    expect([paymentStatusFor(100, 0, 0), paymentStatusFor(100, 40, 40), paymentStatusFor(100, 100, 40), paymentStatusFor(100, 100, 100)]).toEqual([
+    expect([paymentStatusFor(100, 0, 0, 0), paymentStatusFor(100, 40, 40, 0), paymentStatusFor(100, 100, 40, 0), paymentStatusFor(100, 100, 100, 0)]).toEqual([
       "unpaid",
       "partially_collected",
       "collected",

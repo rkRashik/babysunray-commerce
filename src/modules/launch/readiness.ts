@@ -170,7 +170,7 @@ export async function launchReadiness(db: Db, principal: Principal): Promise<Lau
       next: "When hosting is chosen, schedule the batch there and test it.",
       source: "O-12, rule D",
     },
-    { id: "cod", label: "Cash on delivery: expected, collected, settled", status: "ready", evidence: "Built and tested for Owner-recorded collection and settlement. Courier fees and statement reconciliation are not recorded (OF-8).", next: null, source: "OF-3, rule J", href: "/office/reports" },
+    { id: "cod", label: "Cash on delivery: expected, collected, settled", status: "ready", evidence: "Built and tested for Owner-recorded collection, settlement and courier deductions, with a reconciliation report. Importing courier statements is not built (OF-8).", next: null, source: "OF-3, rule J", href: "/office/reports" },
     { id: "returns", label: "Returns, refunds and RTO with inspection", status: "ready", evidence: "Built and tested. Exchange execution (replacement charge, price difference) is not decided.", next: null, source: "O-13, O-14, rules E to G, M" },
     {
       id: "tracking",

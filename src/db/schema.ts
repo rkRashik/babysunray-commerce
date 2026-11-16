@@ -450,6 +450,10 @@ export const orders = pgTable(
     // Running totals of payment_entries, updated in the same transaction as each entry.
     codCollectedPaisa: bigint("cod_collected_paisa", { mode: "number" }).notNull().default(0),
     codSettledPaisa: bigint("cod_settled_paisa", { mode: "number" }).notNull().default(0),
+    // What the courier kept from the collected COD (its fees or other deductions), as the Owner recorded it from
+    // the courier's statement (migration 0016). No amount is assumed. Collected money is accounted for once it is
+    // either settled to the Owner or recorded as deducted.
+    codDeductedPaisa: bigint("cod_deducted_paisa", { mode: "number" }).notNull().default(0),
     refundedPaisa: bigint("refunded_paisa", { mode: "number" }).notNull().default(0),
     rtoChargePaisa: bigint("rto_charge_paisa", { mode: "number" }),
     verificationExpiresAt: timestamp("verification_expires_at", { withTimezone: true }).notNull(),
@@ -482,16 +486,17 @@ export const orders = pgTable(
       sql`${t.fulfilmentStatus} in ('unfulfilled', 'packed', 'dispatched', 'delivered', 'rto', 'rto_received')`,
     ),
     check("orders_return_status_valid", sql`${t.returnStatus} in ('none', 'requested', 'in_progress', 'resolved')`),
-    // Money actually handled: never more settled than collected, never more collected than expected, never
-    // more refunded than collected (founder rules J and M).
+    // Money actually handled: never more settled and deducted than collected, never more collected than expected,
+    // never more refunded than collected (founder rules J and M; deductions since migration 0016).
     check(
       "orders_cod_amounts_valid",
-      sql`${t.codSettledPaisa} >= 0 and ${t.codSettledPaisa} <= ${t.codCollectedPaisa} and ${t.codCollectedPaisa} <= ${t.totalPaisa} and ${t.refundedPaisa} >= 0 and ${t.refundedPaisa} <= ${t.codCollectedPaisa}`,
+      sql`${t.codSettledPaisa} >= 0 and ${t.codDeductedPaisa} >= 0 and ${t.codSettledPaisa} + ${t.codDeductedPaisa} <= ${t.codCollectedPaisa} and ${t.codCollectedPaisa} <= ${t.totalPaisa} and ${t.refundedPaisa} >= 0 and ${t.refundedPaisa} <= ${t.codCollectedPaisa}`,
     ),
-    // Payment status is a function of the amounts, so it can never disagree with them.
+    // Payment status is a function of the amounts, so it can never disagree with them. 'settled' means every
+    // collected taka is settled to the Owner or recorded as deducted by the courier.
     check(
       "orders_payment_status_derived",
-      sql`${t.paymentStatus} = case when ${t.codCollectedPaisa} = 0 then 'unpaid' when ${t.codCollectedPaisa} < ${t.totalPaisa} then 'partially_collected' when ${t.codSettledPaisa} < ${t.codCollectedPaisa} then 'collected' else 'settled' end`,
+      sql`${t.paymentStatus} = case when ${t.codCollectedPaisa} = 0 then 'unpaid' when ${t.codCollectedPaisa} < ${t.totalPaisa} then 'partially_collected' when ${t.codSettledPaisa} + ${t.codDeductedPaisa} < ${t.codCollectedPaisa} then 'collected' else 'settled' end`,
     ),
     check("orders_rto_charge_valid", sql`${t.rtoChargePaisa} >= 0 and ${t.rtoChargePaisa} <= 1000000`),
     // Cross-dimension consistency: only confirmed orders move physically; cancellation happens before dispatch.
@@ -728,8 +733,9 @@ export const quarantineItems = pgTable(
   ],
 );
 
-// Append-only COD money record (trigger, migration 0008): courier collection, settlement to the Owner, and
-// manual refunds (founder rules J and M). orders keeps the running totals, updated in the same transaction.
+// Append-only COD money record (trigger, migration 0008): courier collection, settlement to the Owner, courier
+// deductions from the collected money (migration 0016) and manual refunds (founder rules J and M). orders keeps the
+// running totals, updated in the same transaction.
 export const paymentEntries = pgTable(
   "payment_entries",
   {
@@ -737,7 +743,7 @@ export const paymentEntries = pgTable(
     orderId: uuid("order_id")
       .notNull()
       .references(() => orders.id, { onDelete: "restrict" }),
-    kind: text("kind", { enum: ["collected", "settled", "refunded"] }).notNull(),
+    kind: text("kind", { enum: ["collected", "settled", "deducted", "refunded"] }).notNull(),
     amountPaisa: bigint("amount_paisa", { mode: "number" }).notNull(),
     occurredOn: date("occurred_on", { mode: "string" }).notNull(),
     method: text("method", { enum: ["bkash", "nagad", "bank_transfer"] }),
@@ -748,7 +754,7 @@ export const paymentEntries = pgTable(
   },
   (t) => [
     index("payment_entries_order_id_idx").on(t.orderId),
-    check("payment_entries_kind_valid", sql`${t.kind} in ('collected', 'settled', 'refunded')`),
+    check("payment_entries_kind_valid", sql`${t.kind} in ('collected', 'settled', 'deducted', 'refunded')`),
     check("payment_entries_amount_valid", sql`${t.amountPaisa} > 0 and ${t.amountPaisa} <= 9007199254740991`),
     check(
       "payment_entries_refund_consistent",

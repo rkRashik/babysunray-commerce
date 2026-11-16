@@ -106,6 +106,7 @@ const EXPECTED_DEFAULTS: Record<string, string> = {
   "public.orders.id": "gen_random_uuid()",
   "public.orders.cod_collected_paisa": "0",
   "public.orders.cod_settled_paisa": "0",
+  "public.orders.cod_deducted_paisa": "0",
   "public.orders.refunded_paisa": "0",
   "public.orders.version": "1",
   "public.orders.created_at": "now()",

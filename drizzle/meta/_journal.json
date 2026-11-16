@@ -113,6 +113,13 @@
       "when": 1794848142612,
       "tag": "0015_public_checkout_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794848666316,
+      "tag": "0016_cod_courier_deductions",
+      "breakpoints": true
     }
   ]
 }

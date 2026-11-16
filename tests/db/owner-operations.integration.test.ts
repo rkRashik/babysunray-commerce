@@ -125,7 +125,7 @@ describe("period report and COD reconciliation", () => {
     // Equation: collected − settled = held by the courier; entries agree with the running totals.
     const o = after.outstanding;
     expect(o.reconciled).toBe(true);
-    expect(o.heldByCourier.amountPaisa).toBe(o.ledger.collectedPaisa - o.ledger.settledPaisa);
+    expect(o.heldByCourier.amountPaisa).toBe(o.ledger.collectedPaisa - o.ledger.settledPaisa - o.ledger.deductedPaisa);
     expect(o.heldByCourier.amountPaisa - before.outstanding.heldByCourier.amountPaisa).toBe(total - 50_000);
 
     const cod = await getCodReconciliation(db);

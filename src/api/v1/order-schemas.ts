@@ -13,7 +13,7 @@ const paisa = (description = "Integer paisa (1 BDT = 100 paisa).") => z.int().mi
 const version = z.int().min(1).meta({ description: "Changes with every update. Send it back as `version` with the next change." });
 const orderStatus = z.enum(["pending_verification", "verification_expired", "confirmed", "cancelled", "closed"]);
 const fulfilmentStatus = z.enum(["unfulfilled", "packed", "dispatched", "delivered", "rto", "rto_received"]);
-const paymentStatus = z.enum(["unpaid", "partially_collected", "collected", "settled"]).meta({ description: "Derived from the collected and settled amounts." });
+const paymentStatus = z.enum(["unpaid", "partially_collected", "collected", "settled"]).meta({ description: "Derived from the collected, settled and deducted amounts: settled means every collected taka was settled to the Owner or recorded as kept by the courier (it can be all deducted)." });
 const returnStatus = z.enum(["none", "requested", "in_progress", "resolved"]);
 const zone = z.enum(["dhaka_city", "outside_dhaka"]);
 const source = z.enum(["website", "messenger", "whatsapp", "other"]);
@@ -49,6 +49,7 @@ export const orderSchema = orderSummarySchema
     deliveryChargePaisa: paisa("Snapshotted from the zone's configured charge at submission."),
     codCollectedPaisa: paisa(),
     codSettledPaisa: paisa(),
+    codDeductedPaisa: paisa("Kept by the courier from the collected COD, as the Owner recorded it (since 1.5.0)."),
     refundedPaisa: paisa(),
     rtoChargePaisa: z.int().min(0).nullable(),
     confirmedAt: timestamp.nullable(),
@@ -107,7 +108,7 @@ export const orderSchema = orderSummarySchema
     payments: z.array(
       z.object({
         id: z.int().min(1),
-        kind: z.enum(["collected", "settled", "refunded"]),
+        kind: z.enum(["collected", "settled", "deducted", "refunded"]),
         amountPaisa: paisa(),
         occurredOn: z.iso.date(),
         method: z.enum(["bkash", "nagad", "bank_transfer"]).nullable(),
@@ -186,7 +187,7 @@ export const cancellationReviewRequest = z
   .register(apiRegistry, { id: "CancellationReviewRequest" });
 
 export const paymentRequest = z
-  .strictObject({ kind: z.enum(["collected", "settled"]), amountPaisa: amount, occurredOn: date, reference: z.string().max(100).nullable().optional(), version: expectedVersion })
+  .strictObject({ kind: z.enum(["collected", "settled", "deducted"]), amountPaisa: amount, occurredOn: date, reference: z.string().max(100).nullable().optional(), version: expectedVersion })
   .register(apiRegistry, { id: "PaymentRequest" });
 
 export const rtoChargeRequest = z.strictObject({ chargePaisa: z.int().min(0).max(1_000_000), version: expectedVersion }).register(apiRegistry, { id: "RtoChargeRequest" });
@@ -259,6 +260,7 @@ export const toOrderDto = (o: OrderDetail): z.infer<typeof orderSchema> => ({
   deliveryChargePaisa: o.deliveryChargePaisa,
   codCollectedPaisa: o.codCollectedPaisa,
   codSettledPaisa: o.codSettledPaisa,
+  codDeductedPaisa: o.codDeductedPaisa,
   refundedPaisa: o.refundedPaisa,
   rtoChargePaisa: o.rtoChargePaisa,
   confirmedAt: isoOrNull(o.confirmedAt),

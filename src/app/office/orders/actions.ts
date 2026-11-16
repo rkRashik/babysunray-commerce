@@ -115,7 +115,7 @@ export async function recordPaymentAction(_: FormState, form: FormData): Promise
   try {
     await recordPaymentOnce(getDb(), principal, text(form, "idempotencyKey"), {
       ...orderRef(form),
-      kind: oneOf(text(form, "kind"), ["collected", "settled"] as const, "payment kind"),
+      kind: oneOf(text(form, "kind"), ["collected", "settled", "deducted"] as const, "payment kind"),
       amountPaisa: taka(form, "amountTaka", "Amount"),
       occurredOn: text(form, "occurredOn"),
       reference: optional(form, "reference"),

@@ -106,7 +106,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                             : q.queue === "awaiting_collection"
                               ? `${bdt(o.totalPaisa - o.codCollectedPaisa)} to collect`
                               : q.queue === "unsettled"
-                                ? `${bdt(o.codCollectedPaisa - o.codSettledPaisa)} held by courier`
+                                ? `${bdt(o.codCollectedPaisa - o.codSettledPaisa - o.codDeductedPaisa)} held by courier`
                                 : `placed ${formatTime(o.createdAt)}`}
                         </span>
                       </li>

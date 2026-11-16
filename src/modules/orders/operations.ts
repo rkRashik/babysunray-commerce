@@ -120,7 +120,7 @@ export async function recordPaymentOnce(
   db: Db,
   principal: Principal,
   key: string,
-  input: { orderId: string; expectedVersion: number; kind: "collected" | "settled"; amountPaisa: number; occurredOn: string; reference?: string | null },
+  input: { orderId: string; expectedVersion: number; kind: "collected" | "settled" | "deducted"; amountPaisa: number; occurredOn: string; reference?: string | null },
 ): Promise<Once<OrderDetail>> {
   const user = assertPermission(principal, "payments:record");
   const request = { ...input, reference: input.reference ?? null };

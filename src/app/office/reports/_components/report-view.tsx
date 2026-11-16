@@ -54,12 +54,12 @@ export function OutstandingView({ o }: { o: Outstanding }) {
         rows={[
           ["Verified, not dispatched yet (expected, not money)", o.verifiedNotDispatched],
           ["Dispatched or delivered: still to be collected", o.awaitingCollection],
-          ["Collected by the courier, not settled to you", o.heldByCourier],
+          ["Collected by the courier, not settled to you or recorded as kept by it", o.heldByCourier],
         ]}
       />
       <p className="text-sm">
-        All recorded entries: collected {bdt(o.ledger.collectedPaisa)} − settled {bdt(o.ledger.settledPaisa)} = held by the courier{" "}
-        {bdt(o.ledger.collectedPaisa - o.ledger.settledPaisa)}. Refunds recorded: {bdt(o.ledger.refundedPaisa)} (paid by you, separate from collection
+        All recorded entries: collected {bdt(o.ledger.collectedPaisa)} − settled {bdt(o.ledger.settledPaisa)} − kept by the courier{" "}
+        {bdt(o.ledger.deductedPaisa)} = held by the courier {bdt(o.ledger.collectedPaisa - o.ledger.settledPaisa - o.ledger.deductedPaisa)}. Refunds recorded: {bdt(o.ledger.refundedPaisa)} (paid by you, separate from collection
         and settlement).
       </p>
       <p className={`text-sm ${o.reconciled ? "text-green-900" : "font-semibold text-red-800"}`} data-testid="reconciled">
@@ -90,6 +90,7 @@ export function PeriodReportView({ r }: { r: PeriodReport }) {
           rows={[
             ["Collected by the courier", r.money.collected],
             ["Settled to you", r.money.settled],
+            ["Kept by the courier (recorded deductions)", r.money.deducted],
             ["Refunded to customers", r.money.refunded],
           ]}
         />
@@ -138,6 +139,9 @@ export function CodTable({ rows, links = true }: { rows: CodRow[]; links?: boole
               Settled
             </th>
             <th scope="col" className="text-right">
+              Kept by courier
+            </th>
+            <th scope="col" className="text-right">
               To collect
             </th>
             <th scope="col" className="text-right">
@@ -153,6 +157,7 @@ export function CodTable({ rows, links = true }: { rows: CodRow[]; links?: boole
               <td className="text-right tabular-nums">{bdt(r.totalPaisa)}</td>
               <td className="text-right tabular-nums">{bdt(r.collectedPaisa)}</td>
               <td className="text-right tabular-nums">{bdt(r.settledPaisa)}</td>
+              <td className="text-right tabular-nums">{bdt(r.deductedPaisa)}</td>
               <td className="text-right tabular-nums">{bdt(r.awaitingCollectionPaisa)}</td>
               <td className="text-right tabular-nums">{bdt(r.heldByCourierPaisa)}</td>
             </tr>

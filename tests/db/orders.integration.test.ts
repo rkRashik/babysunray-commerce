@@ -30,6 +30,7 @@ import {
 } from "../../src/modules/orders/operations";
 import { getOrderDetail } from "../../src/modules/orders/queries";
 import { dhakaToday } from "../../src/modules/orders/rules";
+import { getOutstanding } from "../../src/modules/reports/summary";
 import { expireOverdueVerifications } from "../../src/modules/orders/service";
 import { guestCancel, guestView } from "../../src/modules/orders/tracking";
 import { clearAuthState, count, createTestAuth, createVerifiedOwner } from "../support/auth";
@@ -295,6 +296,30 @@ describe("verification, expiry and confirmation", () => {
     expect((await getOrderDetail(db, value.id)).events.filter((e) => e.event === "verification_expired")).toHaveLength(1);
   });
 
+  it("two expiry batches at once expire each order once and skip an order another session holds", async () => {
+    const a = await newSku(3);
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i += 1) ids.push((await submit([{ sku: a.sku, quantity: 1 }])).value.id);
+    for (const id of ids) await overdue(id);
+    const { db: other, pool: otherPool } = await createTestDb(4);
+    const holder = await pool.connect();
+    const expiries = async (id: string) => (await getOrderDetail(db, id)).events.filter((e) => e.event === "verification_expired").length;
+    try {
+      await holder.query("begin");
+      await holder.query("select id from orders where id = $1 for update", [ids[0]]);
+      await Promise.all([expireOverdueVerifications(db), expireOverdueVerifications(other), expireOverdueVerifications(other)]);
+      expect((await getOrderDetail(db, ids[0])).orderStatus).toBe("pending_verification");
+      expect([await expiries(ids[1]), await expiries(ids[2])]).toEqual([1, 1]);
+      await holder.query("commit");
+      await Promise.all([expireOverdueVerifications(db), expireOverdueVerifications(other)]);
+      expect(await Promise.all(ids.map(expiries))).toEqual([1, 1, 1]);
+      expect(await level(a.sku)).toMatchObject({ reserved: 0, available: 3 });
+    } finally {
+      holder.release();
+      await otherPool.end();
+    }
+  });
+
   it("14. an overdue hold that no runner has released yet never blocks a fresh order", async () => {
     const a = await newSku(1);
     const { value } = await submit([{ sku: a.sku, quantity: 1 }]);
@@ -478,6 +503,37 @@ describe("COD money", () => {
     expect(await pay("collected", total - 50_000)).toMatchObject({ paymentStatus: "collected" });
     expect(await pay("settled", total - 20_000)).toMatchObject({ paymentStatus: "settled", codSettledPaisa: total });
     expect(await count(pool, "select count(*) from payment_entries where order_id = $1", [id])).toBe(4);
+  });
+
+  it("a courier deduction accounts for collected money without being settled; the order then closes", async () => {
+    const a = await newSku(1, 100_000);
+    const id = await delivered(a.sku);
+    const total = 106_000;
+    const pay = async (kind: "collected" | "settled" | "deducted", amountPaisa: number, k = key()) =>
+      (await recordPaymentOnce(db, owner, k, { orderId: id, expectedVersion: await v(id), kind, amountPaisa, occurredOn: today, reference: "Statement 12" })).value;
+    // Nothing to deduct from before the courier has collected.
+    expect(await errorCodeOf(pay("deducted", 1))).toBe("INVALID_TRANSITION");
+    await pay("collected", total);
+    // The courier kept its fee (fictional amount) and remitted the rest: collected is never treated as settled.
+    expect(await pay("settled", total - 2_500)).toMatchObject({ paymentStatus: "collected", codSettledPaisa: total - 2_500, codDeductedPaisa: 0 });
+    expect(await errorCodeOf(pay("deducted", 2_501))).toBe("PAYMENT_LIMIT_EXCEEDED");
+    const k = key();
+    expect(await pay("deducted", 2_500, k)).toMatchObject({ paymentStatus: "settled", codSettledPaisa: total - 2_500, codDeductedPaisa: 2_500 });
+    // A retry of the same entry counts once.
+    expect((await recordPaymentOnce(db, owner, k, { orderId: id, expectedVersion: (await v(id)) - 1, kind: "deducted", amountPaisa: 2_500, occurredOn: today, reference: "Statement 12" })).replayed).toBe(true);
+    expect(await errorCodeOf(pay("deducted", 1))).toBe("INVALID_TRANSITION");
+    expect(await errorCodeOf(pay("settled", 1))).toBe("INVALID_TRANSITION");
+    expect((await getOrderDetail(db, id)).events.map((e) => e.event)).toContain("cod_deducted");
+    // The database refuses totals that disagree, even from a direct write.
+    expect(await errorCodeOf(pool.query("update orders set cod_deducted_paisa = cod_deducted_paisa + 1 where id = $1", [id]))).toBe("23514");
+    expect(await errorCodeOf(pool.query("update orders set cod_deducted_paisa = 0 where id = $1", [id]))).toBe("23514");
+    // Fully accounted: closes after the return window like a fully settled order.
+    await pool.query("update orders set delivered_at = now() - interval '7 days 1 minute' where id = $1", [id]);
+    expect((await step(closeOrderOnce, id)).value).toMatchObject({ orderStatus: "closed", paymentStatus: "settled" });
+    const outstanding = await getOutstanding(db);
+    expect(outstanding.reconciled).toBe(true);
+    expect(outstanding.ledger.deductedPaisa).toBe(outstanding.orderTotals.deductedPaisa);
+    expect(outstanding.ledger.deductedPaisa).toBeGreaterThanOrEqual(2_500);
   });
 
   it("24. a repeated money entry never counts twice: same key replays, a stale screen is refused", async () => {
