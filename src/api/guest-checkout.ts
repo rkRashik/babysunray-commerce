@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { type Db, pgErrorCode } from "@/db/database";
 import { DomainError } from "@/modules/domain-error";
-import { GuestCheckoutInvalid, placeGuestOrder } from "@/modules/orders/guest-checkout";
+import { GuestCheckoutInvalid, placeGuestOrder, validateGuestCheckout } from "@/modules/orders/guest-checkout";
 import { consumePublicLimit } from "@/modules/rate-limit/service";
 import { ApiProblem, readBody } from "./v1/http";
 
@@ -69,8 +69,10 @@ async function respond(request: Request, deps: CheckoutDeps, requestId: string):
       if (error instanceof ApiProblem && error.code === "PAYLOAD_TOO_LARGE") return refusal(413, "too_large", "The order is too large.");
       return refusal(400, "bad_request", "The order could not be read.");
     }
-    // Counted only for well-formed requests, so malformed traffic (refused above without any database work) cannot
-    // use up the minute's submissions.
+    // Counted only for requests that pass every field check, so malformed or invalid traffic (refused here without
+    // any database work) cannot use up the minute's submissions. A retry of an earlier submission counts too.
+    const checked = validateGuestCheckout(body);
+    if (!checked.ok) return answer(400, { error: "invalid", message: "Please check the highlighted details.", errors: checked.errors });
     if (!(await consumePublicLimit(deps.db, "checkout", GUEST_CHECKOUTS_PER_MINUTE))) {
       return answer(429, { error: "rate_limited", message: "Many orders are being placed right now. Please try again in a minute. Your order was not placed." }, { "retry-after": "60" });
     }

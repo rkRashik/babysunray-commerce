@@ -16,7 +16,7 @@ The Owner API (`/api/v1`, Bearer, RFC 9457 problems) is described in [the API gu
 | Price a cart | `{ kind: "quote" }` (POST) | `quotePublicCart` | No |
 | Place an order | `guestCheckoutResponse` in `src/api/guest-checkout.ts` | `placeGuestOrder` (`src/modules/orders/guest-checkout.ts`) | No |
 
-The handlers take `deps = { db, baseUrl, gate }`. A route file would pass the real gate, which answers `503 shop_closed` (catalogue) or `503 checkout_closed` (checkout) before any database work. The tests pass an open gate to prove the behaviour behind it.
+The handlers take `deps = { db, baseUrl, gate }`. A route file must pass the real gate (`publicCheckoutGate`); the injectable gate exists for the tests, and a route that passed an open gate would be a reviewed code change, not a setting. With the real gate, the handlers answer `503 shop_closed` (catalogue) or `503 checkout_closed` (checkout) before any database work. The tests pass an open gate to prove the behaviour behind it.
 
 ## Common rules
 
@@ -33,7 +33,7 @@ The handlers take `deps = { db, baseUrl, gate }`. A route file would pass the re
 | product (by slug) | none | `{ slug, name, description, category, fabric, care, sizeGuidance, measurements: [{ size, point, valueMm }], photos: [{ id, width, height, alt }], variants: [{ sku, size, colour, pricePaisa, inStock }], deliveryZones: [{ code, chargePaisa }] }`, or `404 not_found` |
 | facets | none | `{ categories: [{ slug, name }], sizes, colours }`: only what published products have |
 
-Unknown or repeated parameters are refused (`400 bad_request`). `fabric` is `null` until the Owner confirmed the statement (S-11). Stock is shown only as in or out of stock: whether customers see exact quantities is a business decision. `deliveryZones` lists only zones with an active Owner-set charge. Photos are metadata only: **no public image URL exists** (photo storage and serving depend on hosting, decision 14).
+Unknown or repeated parameters are refused (`400 bad_request`). `fabric` is `null` until the Owner confirmed the statement (S-11). Stock is shown only as in or out of stock. A client can still infer how many units are available by quoting larger quantities (any "is this quantity available" check allows that); whether that matters, and whether customers may see exact quantities, is a business decision. `deliveryZones` lists only zones with an active Owner-set charge. Photos are metadata only: **no public image URL exists** (photo storage and serving depend on hosting, decision 14).
 
 ## Quote (POST, not routed)
 
@@ -64,7 +64,7 @@ No client address is trusted until hosting provides a trusted proxy (decision 1)
 | Guessing tracking links | 256-bit random tokens; unknown tokens share a 30-per-minute global limit; each live link has its own 30 per minute |
 | Holding all stock with anonymous orders | At most 20 guest checkout submissions per minute from everyone together (`GUEST_CHECKOUTS_PER_MINUTE`), counted only for well-formed requests; every order still waits for the Owner's verification and expires after 24 hours (rule D) |
 | Large bodies | Bytes counted while streaming: tracking 2 KiB, quote 8 KiB, checkout 64 KiB |
-| Expensive searches | Search text ≤ 100 characters, bound as a parameter; at most page 100 of 24 |
+| Expensive searches | Search text ≤ 100 characters, bound as a parameter; at most page 100 of 24. **No rate limit on catalogue reads and quotes yet**: one is needed before they are routed |
 | Finding orders by number or phone | Not possible: an order is reachable only by its random token |
 | Exhausting database connections | A request waits at most 10 s for a connection; PostgreSQL cancels a statement after 60 s ([runbook](../operations/runbook.md), section 4) |
 

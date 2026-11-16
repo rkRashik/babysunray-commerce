@@ -107,13 +107,20 @@ export async function createVariant(db: Db, input: NewVariant): Promise<Variant>
 
 /** Marks a variant inactive. Variants are never deleted (requirement I-11). */
 export async function deactivateVariant(db: Db, variantId: string): Promise<Variant> {
-  const [variant] = await db
-    .update(variants)
-    .set({ status: "inactive", version: sql`${variants.version} + 1`, updatedAt: sql`now()` })
-    .where(eq(variants.id, validateId(variantId, "variantId")))
-    .returning();
-  if (!variant) throw new DomainError("VARIANT_NOT_FOUND", "Variant not found.");
-  return variant;
+  const id = validateId(variantId, "variantId");
+  return db.transaction(async (tx) => {
+    // The product row first (FOR SHARE), like every other change to a product's content, so a deactivation never
+    // overlaps a review or a publication. A published product's SKU may still be deactivated: it stops being sold.
+    const [owner] = await tx.select({ productId: variants.productId }).from(variants).where(eq(variants.id, id));
+    if (!owner) throw new DomainError("VARIANT_NOT_FOUND", "Variant not found.");
+    await tx.select({ id: products.id }).from(products).where(eq(products.id, owner.productId)).for("share");
+    const [variant] = await tx
+      .update(variants)
+      .set({ status: "inactive", version: sql`${variants.version} + 1`, updatedAt: sql`now()` })
+      .where(eq(variants.id, id))
+      .returning();
+    return variant;
+  });
 }
 
 /**
@@ -287,12 +294,17 @@ export async function updateVariant(db: Db, variantId: string, expectedVersion: 
   if (changes.pricePaisa !== undefined) set.pricePaisa = validatePricePaisa(changes.pricePaisa);
   if (Object.keys(set).length === 0) throw new DomainError("INVALID_INPUT", "Nothing to change: send at least one field.");
   return db.transaction(async (tx) => {
+    // Lock order for every content change: the product row first, then the variant. A single join FOR UPDATE could
+    // lock the variant first and deadlock with deactivateVariant, which locks the product first.
+    const [owner] = await tx.select({ productId: variants.productId }).from(variants).where(eq(variants.id, id));
+    if (!owner) throw new DomainError("VARIANT_NOT_FOUND", "Variant not found.");
+    await tx.select({ id: products.id }).from(products).where(eq(products.id, owner.productId)).for("share");
     const [current] = await tx
       .select({ variant: variants, productStatus: products.status })
       .from(variants)
       .innerJoin(products, eq(products.id, variants.productId))
       .where(eq(variants.id, id))
-      .for("update");
+      .for("update", { of: variants });
     if (!current) throw new DomainError("VARIANT_NOT_FOUND", "Variant not found.");
     if (current.productStatus !== "draft") throw new DomainError("VARIANT_NOT_EDITABLE", "A variant of an archived or published product cannot be edited.");
     if (current.variant.status !== "active") throw new DomainError("VARIANT_NOT_EDITABLE", "An inactive variant cannot be edited.");

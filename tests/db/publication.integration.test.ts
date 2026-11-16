@@ -157,6 +157,36 @@ describe("publishing under a rule (test-only rule)", () => {
     }
   });
 
+  it("a price change committed while a publication waits for the product is seen, and the publication is refused", async () => {
+    const p = await draft();
+    await reviewNow(db, owner, p.productId);
+    const digest = await contentDigestOf(db, p.productId);
+    const { db: racingDb, pool: racingPool } = await createTestDb(2);
+    const writer = await pool.connect();
+    try {
+      // What updateVariant does: lock the product (not update it), then change a variant.
+      await writer.query("begin");
+      await writer.query("select id from products where id = $1 for share", [p.productId]);
+      await writer.query("update variants set price_paisa = price_paisa + 100, version = version + 1 where id = $1", [p.variantId]);
+      const attempt = racingDb.transaction((tx) => publishProduct(tx, p.productId, digest, TEST_PUBLICATION_RULE, actorFor(owner))).then(
+        () => "ok",
+        (error: unknown) => (error as { code?: string }).code,
+      );
+      const deadline = Date.now() + 10_000;
+      while ((await count(pool, "select count(*) from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'")) < 1) {
+        if (Date.now() > deadline) throw new Error("The publication was not blocked.");
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      await writer.query("commit");
+      expect(await attempt).toBe("VERSION_CONFLICT");
+      expect(await statusOf(p.productId)).toBe("draft");
+      expect(await events(p.productId)).toBe(0);
+    } finally {
+      writer.release();
+      await racingPool.end();
+    }
+  });
+
   it("two simultaneous publications publish once and record one event", async () => {
     const p = await draft();
     await reviewNow(db, owner, p.productId);

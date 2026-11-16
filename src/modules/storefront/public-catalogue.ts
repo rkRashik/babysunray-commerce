@@ -8,8 +8,9 @@ import { catalogueFacets, type Facets, listProductCards, type PhotoRef, PREVIEW_
 
 // Customer-facing catalogue reads (Gate H.33): published products only (PUBLIC_SCOPE in service.ts, the same rule
 // as the guest checkout, src/modules/catalogue/visibility.ts). These take no principal: anyone may call them, so
-// each answer is an explicit allowlist: no ids except photo ids, no versions, no user ids, no exact stock counts
-// (whether to show them is a business decision; only in or out of stock is shown), and the fabric statement only
+// each answer is an explicit allowlist: no ids except photo ids, no versions, no user ids, no stock counts (only in
+// or out of stock; a client can still infer how many are available by quoting larger quantities, as any "is this
+// quantity available" check allows: whether that matters is a business decision), and the fabric statement only
 // once the Owner confirmed it (S-11). No product can be published while no publication rule is approved, so today
 // every list is empty and every slug unknown. Not routed: the dormant transport is src/api/public-catalogue.ts.
 

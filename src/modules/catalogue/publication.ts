@@ -46,9 +46,17 @@ export function publicationBlockers(input: { status: Product["status"]; items: R
 
 const SHA256 = /^[0-9a-f]{64}$/;
 
+/**
+ * Locks the product row, then reads its state and content digest in a second statement. The order matters: under
+ * READ COMMITTED a statement reads the snapshot taken when it started, so a digest computed in the statement that
+ * waited for the lock would miss a variant, measurement or photo change committed by the transaction it waited for
+ * (those lock the product but do not update its row). After the lock, every content writer is blocked, and the
+ * fresh statement sees everything they committed.
+ */
 async function lockWithDigest(tx: Db, productId: string) {
-  const [locked] = await tx.select({ status: products.status, version: products.version, digest: contentDigest() }).from(products).where(eq(products.id, productId)).for("update");
-  if (!locked) throw new DomainError("PRODUCT_NOT_FOUND", "Product not found.");
+  const [exists] = await tx.select({ id: products.id }).from(products).where(eq(products.id, productId)).for("update");
+  if (!exists) throw new DomainError("PRODUCT_NOT_FOUND", "Product not found.");
+  const [locked] = await tx.select({ status: products.status, version: products.version, digest: contentDigest() }).from(products).where(eq(products.id, productId));
   return locked;
 }
 

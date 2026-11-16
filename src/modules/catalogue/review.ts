@@ -86,8 +86,11 @@ export async function recordProductReview(tx: Db, productId: string, expectedCon
   const reviewer = validateActor(actor);
   if (typeof expectedContentSha256 !== "string" || !SHA256.test(expectedContentSha256)) throw new DomainError("INVALID_INPUT", "contentSha256 must be 64 lowercase hexadecimal characters.");
   const id = validateId(productId, "productId");
-  const [locked] = await tx.select({ status: products.status, digest: contentDigest() }).from(products).where(eq(products.id, id)).for("update");
-  if (!locked) throw new DomainError("PRODUCT_NOT_FOUND", "Product not found.");
+  // Lock first, then read the digest in a fresh statement: a digest computed by the statement that waited for the
+  // lock would miss content committed by the transaction it waited for (publication.ts, lockWithDigest).
+  const [exists] = await tx.select({ id: products.id }).from(products).where(eq(products.id, id)).for("update");
+  if (!exists) throw new DomainError("PRODUCT_NOT_FOUND", "Product not found.");
+  const [locked] = await tx.select({ status: products.status, digest: contentDigest() }).from(products).where(eq(products.id, id));
   if (locked.status !== "draft") throw new DomainError("PRODUCT_NOT_REVIEWABLE", "An archived product cannot be reviewed.");
   if (locked.digest !== expectedContentSha256) {
     throw new DomainError("VERSION_CONFLICT", "This product changed after you loaded it. Reload it, check its content and review it again.");

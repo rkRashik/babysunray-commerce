@@ -380,6 +380,9 @@ describe("guest checkout transport (unrouted, test harness only)", () => {
     await pool.query("delete from tracking_rate_limits where bucket = 'checkout'");
     // Malformed requests are refused before the counter and do not use it up.
     for (let i = 0; i < 3; i += 1) expect((await post("{not json")).status).toBe(400);
+    // Well-formed JSON that fails the field checks does not count either.
+    for (let i = 0; i < 3; i += 1) expect((await post({})).status).toBe(400);
+    for (let i = 0; i < 3; i += 1) expect((await post({})).status).toBe(400);
     expect(await count(pool, "select count(*) from tracking_rate_limits where bucket = 'checkout'")).toBe(0);
     await pool.query("insert into tracking_rate_limits (bucket, window_start, count) values ('checkout', date_trunc('minute', now()), $1)", [GUEST_CHECKOUTS_PER_MINUTE - 1]);
     const before = await counts();
