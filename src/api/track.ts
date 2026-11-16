@@ -5,6 +5,7 @@ import { type Db, pgErrorCode } from "@/db/database";
 import { getAuth } from "@/modules/auth/server";
 import { DomainError } from "@/modules/domain-error";
 import { consumeTrackingLimit, findLiveLink, type GuestView, wellFormedToken } from "@/modules/orders/tracking";
+import { ApiProblem, readBody } from "./v1/http";
 
 // Transport for the public guest-tracking endpoints (/api/track, /api/track/cancel; founder rule K, S-15).
 // The token travels only in a same-origin POST body, never in a URL, so it cannot reach access logs, history
@@ -38,12 +39,12 @@ export async function trackingRequest<S extends z.ZodType<{ token: string }>>(
   try {
     if (request.headers.get("origin") !== getAuth().options.baseURL) return answer(403, { error: "forbidden" });
     if (!/^application\/json\s*(;\s*charset\s*=\s*"?utf-8"?\s*)?$/i.test(request.headers.get("content-type") ?? "")) return answer(415, { error: "unsupported_media_type" });
-    const raw = await request.text();
-    if (raw.length > MAX_BODY) return answer(413, { error: "too_large" });
+    // Bytes counted while the body streams, so an anonymous caller cannot make the server hold a large body.
     let json: unknown;
     try {
-      json = JSON.parse(raw);
-    } catch {
+      json = JSON.parse((await readBody(request, MAX_BODY)) ?? "");
+    } catch (error) {
+      if (error instanceof ApiProblem && error.code === "PAYLOAD_TOO_LARGE") return answer(413, { error: "too_large" });
       return answer(400, { error: "bad_request" });
     }
     const parsed = schema.safeParse(json);

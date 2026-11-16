@@ -69,7 +69,11 @@ export async function archiveProduct(db: Db, productId: string): Promise<Product
   return product;
 }
 
-/** Creates a sellable SKU and its zero inventory balance in one transaction. */
+/**
+ * Creates a sellable SKU and its zero inventory balance in one transaction, for a draft product only: an archived
+ * (or published) product's SKUs are not changed here. The product row is locked FOR SHARE, so it cannot be
+ * archived, reviewed or published while the SKU is being added.
+ */
 export async function createVariant(db: Db, input: NewVariant): Promise<Variant> {
   const values = {
     productId: validateId(input.productId, "productId"),
@@ -80,6 +84,9 @@ export async function createVariant(db: Db, input: NewVariant): Promise<Variant>
   };
   try {
     return await db.transaction(async (tx) => {
+      const [product] = await tx.select({ status: products.status }).from(products).where(eq(products.id, values.productId)).for("share");
+      if (!product) throw new DomainError("PRODUCT_NOT_FOUND", "Product not found.");
+      if (product.status !== "draft") throw new DomainError("PRODUCT_NOT_EDITABLE", "Only a draft product can get a new variant.");
       const [variant] = await tx.insert(variants).values(values).returning();
       await tx.insert(inventoryBalances).values({ variantId: variant.id });
       return variant;

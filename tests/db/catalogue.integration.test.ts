@@ -160,6 +160,13 @@ describe("variants", () => {
     }
   });
 
+  it("adds no variant to an archived product", async () => {
+    const product = await createProduct(db, { slug: "cat-archived-sku", nameEn: "Test Romper" });
+    await archiveProduct(db, product.id);
+    expect(await errorCodeOf(createVariant(db, { productId: product.id, sku: "CAT-ARCH-NEW", pricePaisa: 100 }))).toBe("PRODUCT_NOT_EDITABLE");
+    expect((await pool.query("select count(*)::int as n from variants where product_id = $1", [product.id])).rows[0].n).toBe(0);
+  });
+
   it("requires an existing product", async () => {
     expect(await errorCodeOf(createVariant(db, { productId: randomUUID(), sku: "CAT-ORPHAN", pricePaisa: 100 }))).toBe(
       "PRODUCT_NOT_FOUND",

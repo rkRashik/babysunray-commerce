@@ -194,6 +194,22 @@ describe("guest tracking endpoints", () => {
       expect((await post(trackRoute, "/api/track", "{bad")).status).toBe(400);
       expect((await post(trackRoute, "/api/track", { token, extra: 1 })).status).toBe(400);
       expect((await post(trackRoute, "/api/track", { token: "x".repeat(3000) })).status).toBe(413);
+      // Bytes, not characters: 700 Bangla letters are 2,100 bytes.
+      expect((await post(trackRoute, "/api/track", { token: "ক".repeat(700) })).status).toBe(413);
+      for (const route of [trackRoute, cancelRoute]) {
+        // A streamed body with no Content-Length is refused once it passes the limit, not read to the end.
+        let sent = 0;
+        const stream = new ReadableStream<Uint8Array>({
+          pull(controller) {
+            sent += 1024;
+            controller.enqueue(new Uint8Array(1024).fill(32));
+            if (sent >= 1_000_000) controller.close();
+          },
+        });
+        const request = new Request(`${BASE_URL}/api/track`, { method: "POST", headers: { origin: BASE_URL, "content-type": "application/json" }, body: stream, duplex: "half" } as RequestInit);
+        expect((await route.POST(request)).status).toBe(413);
+        expect(sent).toBeLessThan(16_384);
+      }
       for (const spy of [errors, logs]) for (const callArgs of spy.mock.calls) expect(JSON.stringify(callArgs)).not.toContain(token);
     } finally {
       errors.mockRestore();

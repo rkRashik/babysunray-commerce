@@ -155,13 +155,13 @@ export function parsePath<S extends z.ZodType>(params: unknown, schema: S): z.ou
 }
 
 /**
- * Reads at most MAX_BODY_BYTES. A declared Content-Length above the limit is refused before reading; a body
- * without one (or with a false one) is counted while it streams and refused as soon as it passes the limit.
- * Returns undefined for an empty body.
+ * Reads at most `maxBytes` (default MAX_BODY_BYTES). A declared Content-Length above the limit is refused before
+ * reading; a body without one (or with a false one) is counted while it streams and refused as soon as it passes
+ * the limit. Returns undefined for an empty body.
  */
-export async function readBody(request: Request): Promise<string | undefined> {
+export async function readBody(request: Request, maxBytes = MAX_BODY_BYTES): Promise<string | undefined> {
   const declared = request.headers.get("content-length");
-  if (declared !== null && /^[0-9]+$/.test(declared) && Number(declared) > MAX_BODY_BYTES) throw new ApiProblem("PAYLOAD_TOO_LARGE");
+  if (declared !== null && /^[0-9]+$/.test(declared) && Number(declared) > maxBytes) throw new ApiProblem("PAYLOAD_TOO_LARGE");
   if (!request.body) return undefined;
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -170,7 +170,7 @@ export async function readBody(request: Request): Promise<string | undefined> {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > MAX_BODY_BYTES) {
+    if (size > maxBytes) {
       await reader.cancel();
       throw new ApiProblem("PAYLOAD_TOO_LARGE");
     }

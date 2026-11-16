@@ -66,7 +66,7 @@ The token is a session: it expires with it, and sign-out, `revoke-session` or di
 
 - Products and variants carry a `version` (a whole number that grows with every change, including archive and deactivate). An edit sends the `version` it last read; if the row changed since, nothing is saved and the answer is `409 VERSION_CONFLICT`: read it again, check the values and retry with a new key. Of two edits based on the same version, exactly one wins.
 - Partial update: a field left out keeps its value; `null` or `""` clears an optional text. A product must keep at least one name.
-- A product can be edited only while it is a draft (`409 PRODUCT_NOT_EDITABLE` once archived; archiving is never undone here). A variant can be edited only while it is active and its product is a draft (`409 VARIANT_NOT_EDITABLE`).
+- A product can be edited only while it is a draft (`409 PRODUCT_NOT_EDITABLE` once archived; archiving is never undone here). A variant can be edited only while it is active and its product is a draft (`409 VARIANT_NOT_EDITABLE`). A new variant can be added only to a draft product (`409 PRODUCT_NOT_EDITABLE`).
 - Never changed by an edit: ids, slug, SKU, status and stock. Those fields are refused as unknown.
 - A retried edit with the same key and body returns the first result and does not edit again, even if the version has moved on since.
 

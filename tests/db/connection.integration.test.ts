@@ -1,6 +1,7 @@
-import type { Client } from "pg";
+import { type Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { connectTestClient, lockTestDatabase } from "../support/test-database";
+import { POOL_LIMITS, poolConfig } from "../../src/db/client";
+import { assertConnectedToTestDatabase, assertSafeTestDatabaseUrl, connectTestClient, lockTestDatabase } from "../support/test-database";
 
 let client: Client;
 
@@ -26,6 +27,20 @@ describe("PostgreSQL connection", () => {
     expect(rows[0].db).toMatch(/_test$/);
     expect(rows[0].version_num).toBeGreaterThanOrEqual(180000);
     expect(rows[0].is_super).toBe("off");
+  });
+});
+
+describe("application pool limits", () => {
+  it("waits at most 10 s for a connection, and PostgreSQL cancels a statement (or lock wait) after 60 s", async () => {
+    expect(POOL_LIMITS.connectionTimeoutMillis).toBe(10_000);
+    const pool = new Pool({ ...poolConfig(assertSafeTestDatabaseUrl(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL)), max: 1 });
+    try {
+      await assertConnectedToTestDatabase(pool);
+      const { rows } = await pool.query<{ statement_timeout: string }>("show statement_timeout");
+      expect(rows[0].statement_timeout).toBe("1min");
+    } finally {
+      await pool.end();
+    }
   });
 });
 

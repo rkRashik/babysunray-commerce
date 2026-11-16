@@ -67,6 +67,8 @@ Contact details and colours are optional; without them no contact is shown and t
 
 Only apply migrations with `npm run db:migrate`. Take a backup first (section 8) once real data exists.
 
+The application's connection pool fails fast rather than hanging (`src/db/client.ts`): a request that cannot get a connection within 10 seconds fails with a generic error, and PostgreSQL cancels any statement, including a wait for a locked row, after 60 seconds (set per session; PostgreSQL's own configuration is not changed). Up to 10 connections per application process. These are fixed values to revisit with the hosting decision. A burst of such errors means the database is overloaded or a lock is held: check `select pid, state, wait_event_type, now() - xact_start as age from pg_stat_activity where datname = current_database();`.
+
 ## 5. Verification expiry and retries
 
 - `npm run orders:expire-verification` releases the stock of orders still Pending Verification 24 hours after submission and marks them Verification Expired. It is safe to run any number of times, also while the app runs: each order is handled in its own short transaction and skipped if another operation holds it. Correctness never depends on it (submissions, adjustments and confirmations release overdue holds themselves). No scheduler runs it.
