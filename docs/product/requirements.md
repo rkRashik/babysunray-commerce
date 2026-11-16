@@ -353,6 +353,15 @@ What batch H.25–H.28 built, as of 16 Nov 2026. Basis labels are unchanged; not
 | K-2, K-6 | Recovery check added | `npm run recovery:check` compares a restored database with a photo backup and a restored folder; rehearsed on fictional data by `npm run media:drill`; the backup drill now covers guest submissions, reviews and policy drafts. Not run against real backups. |
 | EN-6 | Performance measured | `npm run perf:bench` on 5,000 products and 20,000 fictional orders; no index needed at that size. |
 
+### 9.4 Implementation status (Gate H.30)
+
+As of 16 Nov 2026. Basis labels are unchanged; no design is approved and nothing is public.
+
+| ID | Status | Notes |
+|---|---|---|
+| S-2, S-13, BR-6 | Third prototype, not approved | Concept C, a proposed hybrid of A and B, with a proposed design system; tested on a 360-pixel screen for fit, 44-pixel targets and axe in both languages ([storefront-concepts.md](../design/storefront-concepts.md)). No usability test with people (G-9). |
+| S-14, S-17, I-5, I-6, O-8 | Decisions collected | The decisions the public storefront still needs, with recommendations: [storefront-launch-decisions.md](storefront-launch-decisions.md). None is implemented as policy. |
+
 ## 10. Phasing (proposed)
 
 | Phase | Outcome | Basis |
@@ -414,6 +423,7 @@ Also out of scope: a separate backend server, Express, microservices, a monorepo
 | Founder instruction, batch H.4–H.6 (15 Nov 2026) | Operation idempotency; stock and draft-catalogue write API; API limits, CORS policy and rate limits; a minimal functional Owner Office (not a UI design) | Approves the named scope only; basis labels unchanged. |
 | Founder instruction, batch H.13–H.16 (15 Nov 2026) | Dashboard, reports, exports, stock reconciliation, print, local backup and recovery tooling | Approves the named engineering scope only; basis labels unchanged; no schedule, retention, off-device copy or RPO/RTO decided. |
 | Founder instruction, batch H.21–H.24 (15 Nov 2026) | Bulk catalogue import, catalogue preparation, media backup and restore tooling, storefront preview improvements, installation configuration and rehearsal | Approves the named engineering scope only; basis labels unchanged; no publication, public checkout, hosting, backup schedule or RPO/RTO approved. |
+| Founder instruction, Gate H.30 (16 Nov 2026) | Storefront design research, a proposed hybrid concept, customer-journey review, one launch decision document | Approves the named engineering scope only; final design approval stays with the founder; no public storefront, checkout or policy approved. |
 | Founder instruction, batch H.25–H.28 (16 Nov 2026) | Inactive guest checkout service, launch gate and readiness, private policy drafts, internal product review, two storefront design concepts, performance and recovery work, launch rehearsal | Approves the named engineering scope only; basis labels unchanged; no public checkout, publication, hosting, design, policy text, RPO/RTO or customer accounts approved. |
 | Founder instruction, batch H.17–H.20 (15 Nov 2026) | Order and tracking fixes, product content and readiness, local development media, an Owner-only storefront preview with cart and checkout simulation, test and readiness work | Approves the named engineering scope only; basis labels unchanged; no publication, public checkout, customer accounts, hosting or final design approved. |
 | Original BabySunray brand and business documents on the G: drive | Not read for this draft | Should be checked against sections 1 and 8 during review. |

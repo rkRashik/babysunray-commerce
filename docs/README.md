@@ -67,6 +67,7 @@ These record the business's own requirements, decisions and plans. They are not 
 |---|---|
 | [Product requirements](product/requirements.md) | What the product must do, open decisions, implementation status |
 | [Order policy decisions](product/order-policy-decisions.md) | The approved order rules, lifecycle states and engineering defaults |
+| [Storefront launch decisions](product/storefront-launch-decisions.md) | Every decision still needed before the public storefront opens: approved, recommended, open |
 | [Launch readiness](operations/launch-readiness.md) | The launch gate, readiness page, policy drafting, product reviews, guest checkout contract |
 | [Storefront concepts](design/storefront-concepts.md) | The two design concepts, customer wording awaiting approval, customer sign-in options |
 | [Public-release privacy audit](private/public-release-privacy-audit.md) | What must be reviewed before any part of this repository is made public |
