@@ -35,7 +35,7 @@ ADR-0002 deferred idempotency because a unique key on each ledger row would suit
 ## Not decided
 
 - Retention, expiry and key reuse after expiry.
-- Order submission (O-3) will use the same mechanism when orders exist; nothing for orders is built.
+- Order submission (O-3) will use the same mechanism when orders exist; nothing for orders is built. *(Since Gate H.10–H.12 Owner-assisted orders use it. An anonymous customer has no user id, so the inactive guest checkout uses its own record, `guest_checkout_submissions`: [ADR-0007](0007-guest-checkout-foundation.md).)*
 
 ## Alternatives considered
 

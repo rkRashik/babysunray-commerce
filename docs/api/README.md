@@ -137,3 +137,5 @@ npm run test:contract   # OpenAPI validity, plus every endpoint against the docu
 ## Not available yet
 
 Public catalogue, public checkout and website orders, online payments, courier integrations, client SDKs and native apps. Retention of idempotency records. A per-client (IP) limit for unauthenticated traffic waits for the hosting and proxy decision.
+
+Prepared but not routed (Gate H.25): a guest checkout transport (`src/api/guest-checkout.ts`) outside `/api/v1`, with its own JSON errors, an `Idempotency-Key` of 32 to 128 characters and the launch gate checked first. No route file uses it, so it is not part of this API or its OpenAPI document; its contract is in [launch-readiness.md](../operations/launch-readiness.md) section 5. Policy drafts, product reviews and launch readiness are Owner Office features only; their operations are shared services ready for `/api/v1` endpoints in a later gate.

@@ -8,6 +8,7 @@ import type { Db } from "../../src/db/database";
 import type { Principal } from "../../src/modules/auth/principal";
 import { createMediaBackupFile, MediaBackupError, mediaRecords, restoreMediaBackupFile, verifyMediaBackupFile } from "../../src/modules/media/backup";
 import { mediaHealthy, verifyMediaStore } from "../../src/modules/media/manifest";
+import { compareBackupPair } from "../../src/modules/media/pair";
 import { uploadPhotoOnce } from "../../src/modules/media/operations";
 import { localMediaStore, type MediaStore } from "../../src/modules/media/storage";
 import { clearAuthState, createTestAuth, createVerifiedOwner } from "../support/auth";
@@ -153,4 +154,24 @@ it("refuses an inconsistent source: a missing file, a changed file, or records c
   };
   await attempt("racing", racing);
   expect(mediaHealthy(await verifyMediaStore(db, store))).toBe(false); // the orphan from the first test is still reported
+});
+
+it("pairs a database and a photo backup: consistent when taken back to back, and names a photo added in between", async () => {
+  // The drill's database plays the restored database; its records are what a restored copy would hold.
+  const file = path.join(work, "pair.bsmedia");
+  const databaseBackup = { createdAt: new Date().toISOString(), database: "babysunray_test" };
+  await rm(path.join(source, `${"c".repeat(32)}.png`), { force: true });
+  await createMediaBackupFile(db, store, PASS, file, { database: "babysunray_test" });
+  const { header, manifest } = await verifyMediaBackupFile(file, PASS);
+  const together = compareBackupPair({ databaseBackup, photoBackup: { ...header, files: manifest.files }, restoredRecords: await mediaRecords(db) });
+  expect(together).toMatchObject({ consistent: true, sameDatabase: true, missingFromPhotoBackup: [], notInDatabase: [], differing: [] });
+
+  // A photo uploaded after the photo backup: the restored records point at a file the backup does not have.
+  const product = (await createTestVariant(db, "mdrill")).product.id;
+  await uploadPhotoOnce(db, owner, randomUUID(), { productId: product, expectedVersion: await version(product), bytes: await testImage("png", 320, 240, { colour: 200 }), altEn: "Fictional late photo", altBn: "কাল্পনিক" }, store);
+  const late = (await mediaRecords(db)).find((r) => r.productId === product);
+  const apart = compareBackupPair({ databaseBackup, photoBackup: { ...header, files: manifest.files }, restoredRecords: await mediaRecords(db) });
+  expect(apart.consistent).toBe(false);
+  expect(apart.missingFromPhotoBackup).toEqual([late?.storageKey]);
+  expect(apart.notes.join(" ")).toMatch(/not in the photo backup/);
 });

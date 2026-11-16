@@ -42,6 +42,8 @@ npm run backup:create -- --out <dir>  # encrypted backup of babysunray_dev, inte
 npm run backup:verify -- <file>       # decrypt and check a backup without touching a database
 npm run backup:restore -- <file>      # restore into an empty babysunray_restore only
 npm run backup:drill  # backup and restore drill on fictional data in babysunray_test
+npm run recovery:check -- <db backup> <photo backup> [--folder <dir>]  # read-only: does a restored babysunray_restore match a photo backup? interactive
+npm run perf:bench   # performance benchmark on 5,000 fictional products and 20,000 orders in babysunray_test (docs/operations/performance.md)
 ```
 
 `npm run test:db` fails, rather than skipping, when `TEST_DATABASE_URL` is missing or PostgreSQL is unreachable. Before it changes anything it checks that:

@@ -10,7 +10,12 @@ import { parseSafeDatabaseUrl, TEST_TARGET } from "../../src/db/connection-guard
 import type { Db } from "../../src/db/database";
 import * as schema from "../../src/db/schema";
 import type { Principal } from "../../src/modules/auth/principal";
+import { reviewProductOnce } from "../../src/modules/catalogue/operations";
+import { reviewStates } from "../../src/modules/catalogue/review";
+import { createProduct, createVariant } from "../../src/modules/catalogue/service";
 import { createExport } from "../../src/modules/exports/service";
+import { placeGuestOrder } from "../../src/modules/orders/guest-checkout";
+import { savePolicyDraftOnce } from "../../src/modules/policies/drafts";
 import { getStockCount } from "../../src/modules/inventory/counts";
 import { applyStockCountOnce, recordCountsOnce, startStockCountOnce } from "../../src/modules/inventory/operations";
 import { receiveStock } from "../../src/modules/inventory/service";
@@ -126,13 +131,21 @@ async function seedFictionalBusiness() {
   await recordCountsOnce(db, owner, key(), { countId: count.id, expectedVersion: count.version, entries: [{ variantId: a.id, counted: 18 }] });
   await applyStockCountOnce(db, owner, key(), { countId: count.id, expectedVersion: (await getStockCount(db, count.id)).version, reason: "Drill count" });
   for await (const chunk of (await createExport(db, owner, { dataset: "orders", format: "json", filters: {} })).chunks) void chunk;
-  return { bangla: "পরীক্ষামূলক রম্পার" };
+
+  // Launch preparation (Gate H.25-H.26): a reviewed product, an order through the inactive guest service, a policy draft.
+  const p = await createProduct(db, { slug: "drill-guest", nameEn: "Drill Guest Romper", nameBn: "ড্রিল রম্পার", descriptionEn: "Fictional.", descriptionBn: "কাল্পনিক।" });
+  const g = await createVariant(db, { productId: p.id, sku: "DRILL-GUEST-1", size: "0-3M", colour: "Ivory", pricePaisa: 60_000 });
+  await receiveStock(db, { sku: g.sku, quantity: 2, actor: TEST_ACTOR });
+  await reviewProductOnce(db, owner, key(), { productId: p.id, contentSha256: (await reviewStates(db, [p.id])).get(p.id)?.contentSha256 ?? "" });
+  await placeGuestOrder(db, key(), { customer: { name: "Drill Guest", phone: "01711000124", address: "House 10, Drill Road" }, deliveryZone: "dhaka_city", items: [{ sku: g.sku, quantity: 1, unitPricePaisa: 60_000 }], deliveryChargePaisa: 6_000, totalPaisa: 66_000 });
+  await savePolicyDraftOnce(db, owner, key(), { kind: "delivery", expectedVersion: 0, bodyEn: "Fictional drill draft.", bodyBn: "কাল্পনিক খসড়া।" });
+  return { bangla: "পরীক্ষামূলক রম্পার", reviewedProductId: p.id };
 }
 
 it("backs up, verifies, restores into an emptied babysunray_test and finds everything intact", async () => {
   const conn = parseSafeDatabaseUrl(url, TEST_TARGET);
   const started = Date.now();
-  const { bangla } = await seedFictionalBusiness();
+  const { bangla, reviewedProductId } = await seedFictionalBusiness();
   const { rows: version } = await pool.query<{ v: string }>("show server_version_num");
   const pgDumpVersion = await assertToolsMatch(Math.floor(Number(version[0].v) / 10000));
 
@@ -202,6 +215,14 @@ it("backs up, verifies, restores into an emptied babysunray_test and finds every
     expect((await q("select count(*)::int as n from orders where customer_phone = '01711000123'")).n).toBeGreaterThanOrEqual(3);
     // Append-only rules survive the restore, and new rows continue the sequences.
     await expect(after.query("delete from order_events")).rejects.toThrow(/append-only/);
+    await expect(after.query("delete from guest_checkout_submissions")).rejects.toThrow(/not allowed/);
+    // A review stays current after the restore: the content digest does not depend on the database it is computed in.
+    const { db: restoredDb, pool: restoredPool } = await createTestDb(1);
+    try {
+      expect((await reviewStates(restoredDb, [reviewedProductId])).get(reviewedProductId)?.current).toBe(true);
+    } finally {
+      await restoredPool.end();
+    }
     const maxBefore = Number((await q("select max(number) as n from orders")).n);
     await after.query("begin");
     const next = await after.query<{ n: string }>("select nextval('orders_number_seq') as n");

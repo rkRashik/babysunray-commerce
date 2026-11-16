@@ -2,7 +2,7 @@
 
 **Status:** Draft — Founder Review (revision A.6)
 **Purpose:** The single source of truth for what BabySunray's website and Owner Office must do. Technology choices live in [ADR-0001](../adr/0001-application-stack.md). Visual design is not specified here.
-**Last updated:** 2026-11-15
+**Last updated:** 2026-11-16
 
 ## How to read this document
 
@@ -338,6 +338,21 @@ What batch H.17–H.20 built, as of 15 Nov 2026. Basis labels are unchanged: imp
 | S-14 | Still undecided | The preview has product search and filters so the founder can judge them; customer search at launch, accounts, wishlists and reviews remain undecided. |
 | S-15, G-4 | Hardened, not complete | The tracking page removes the token from the address bar and the tab's history and keeps it in memory only. Limits per live link and a global limit for unknown tokens that never blocks a live link. A per-client limit and flood protection still need a trusted proxy (decision 1). |
 
+### 9.3 Implementation status (Gate H.25–H.28)
+
+What batch H.25–H.28 built, as of 16 Nov 2026. Basis labels are unchanged; nothing here publishes a product, opens checkout or approves a design. Details: [launch-readiness.md](../operations/launch-readiness.md), [ADR-0007](../adr/0007-guest-checkout-foundation.md), [storefront-concepts.md](../design/storefront-concepts.md), [performance.md](../operations/performance.md).
+
+| ID | Status | Notes |
+|---|---|---|
+| S-3, S-4, O-3, G-1, G-2 | Guest checkout service built and tested, not reachable | An anonymous order through the same order domain, with its own idempotency record (no customer data stored), a customer audit actor, a refusal when shown prices or the delivery charge changed, and the tracking link returned once. No route calls it. Tested against PostgreSQL for the last unit, multi-SKU shortfall, lost response, retry during the first transaction, changed payload and injected failure. |
+| S-17, G-7 | Enforced | A central launch gate refuses public activation and lists why; no switch exists. Private bilingual policy drafts (empty, drafted, reviewed by the Owner; never published) with an audit trail. No policy is approved or published. |
+| I-6 | Not decided; internal review built | An Owner review of a draft product's current content, outdated by any later content change. It publishes nothing; the inactive guest service orders only reviewed products (engineering default, Draft — Founder Review). |
+| OF-1, OF-2 | Extended | Launch readiness page with live catalogue, integrity and policy checks; product review queue. |
+| S-1, S-2, S-12, S-13, BR-6 | Two design prototypes, not approved | Concept A (Editorial Boutique) and Concept B (Modern Family Shop) in the Owner-only preview; axe in both languages and a phone test. A failed final step now says the order was not placed (S-12). No usability test with people (G-9). |
+| S-14 | Still undecided | Customer sign-in options compared in storefront-concepts.md section 3; nothing built. |
+| K-2, K-6 | Recovery check added | `npm run recovery:check` compares a restored database with a photo backup and a restored folder; rehearsed on fictional data by `npm run media:drill`; the backup drill now covers guest submissions, reviews and policy drafts. Not run against real backups. |
+| EN-6 | Performance measured | `npm run perf:bench` on 5,000 products and 20,000 fictional orders; no index needed at that size. |
+
 ## 10. Phasing (proposed)
 
 | Phase | Outcome | Basis |
@@ -399,5 +414,6 @@ Also out of scope: a separate backend server, Express, microservices, a monorepo
 | Founder instruction, batch H.4–H.6 (15 Nov 2026) | Operation idempotency; stock and draft-catalogue write API; API limits, CORS policy and rate limits; a minimal functional Owner Office (not a UI design) | Approves the named scope only; basis labels unchanged. |
 | Founder instruction, batch H.13–H.16 (15 Nov 2026) | Dashboard, reports, exports, stock reconciliation, print, local backup and recovery tooling | Approves the named engineering scope only; basis labels unchanged; no schedule, retention, off-device copy or RPO/RTO decided. |
 | Founder instruction, batch H.21–H.24 (15 Nov 2026) | Bulk catalogue import, catalogue preparation, media backup and restore tooling, storefront preview improvements, installation configuration and rehearsal | Approves the named engineering scope only; basis labels unchanged; no publication, public checkout, hosting, backup schedule or RPO/RTO approved. |
+| Founder instruction, batch H.25–H.28 (16 Nov 2026) | Inactive guest checkout service, launch gate and readiness, private policy drafts, internal product review, two storefront design concepts, performance and recovery work, launch rehearsal | Approves the named engineering scope only; basis labels unchanged; no public checkout, publication, hosting, design, policy text, RPO/RTO or customer accounts approved. |
 | Founder instruction, batch H.17–H.20 (15 Nov 2026) | Order and tracking fixes, product content and readiness, local development media, an Owner-only storefront preview with cart and checkout simulation, test and readiness work | Approves the named engineering scope only; basis labels unchanged; no publication, public checkout, customer accounts, hosting or final design approved. |
 | Original BabySunray brand and business documents on the G: drive | Not read for this draft | Should be checked against sections 1 and 8 during review. |

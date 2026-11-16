@@ -135,9 +135,19 @@ The folder must exist, be empty and be outside the project; the photo folder in 
 
 ### Recovering the database and the photos together
 
-1. Restore the database backup into `babysunray_restore` (section 8) and the photo backup into a new empty folder (above).
-2. Point `DATABASE_URL` and `MEDIA_STORAGE_DIR` at the restored copies (a founder decision; check first), restart, and run `npm run media:verify`.
-3. The two backups are separate files taken at separate moments; nothing makes them one snapshot. They match when no photo was added, changed or removed between them. Check their times (each file name and header has one) and the result of `media:verify`: a photo uploaded after the photo backup shows as a missing file; a photo removed after the database backup shows as a file without a record. Take both backups back to back with no uploads in between.
+The database backup holds the photo **records**; the photo backup holds the **files** and its own copy of the records. They are two files taken at two moments; nothing makes them one snapshot. Take them back to back, with no uploads in between: `backup:create`, then `media:backup`.
+
+1. Restore the database backup into `babysunray_restore` (section 8) and the photo backup into a new empty folder (above). Both refuse a non-empty target, so nothing in use is overwritten; an interrupted restore leaves its target empty and says so.
+2. Check that the pair belongs together before anything else (read-only; asks both passphrases):
+
+   ```
+   npm run recovery:check -- D:/Backups/babysunray/babysunray_dev-....bsbackup D:/Backups/babysunray/babysunray_dev-photos-....bsmedia --folder D:/BabySunray-media-restored
+   ```
+
+   It verifies both files completely, shows both times and the gap between them, the restored database's migration count against this version's, and compares the restored database's photo records with the photo backup: photos recorded but not in the backup (uploaded after it), photos in the backup with no record (removed or added between the backups) and photos that differ (replaced in between). With `--folder` it also checks every restored file against the records. It ends with ✓ only when every recorded photo can be restored and nothing is left over; otherwise it lists the storage keys and exits with an error.
+3. Only then decide (founder) whether to point `DATABASE_URL` and `MEDIA_STORAGE_DIR` at the restored copies; after restarting, `npm run media:verify` shows the same comparison against the working configuration.
+
+`npm run media:drill` rehearses the pair check on fictional data (a matching pair, then a photo uploaded after the photo backup). `recovery:check` itself has not been run against real backups: `babysunray_restore` does not exist yet.
 
 No schedule, retention period or off-device destination is set up for either backup (decisions 6 and 15; K-4, K-5, K-8, K-9). `npm run media:drill` rehearses the photo backup and restore on fictional photos in `babysunray_test` and temporary folders (result 2026-11-16: passed, 5 photos).
 
