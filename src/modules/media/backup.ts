@@ -251,8 +251,29 @@ export async function restoreTarget(dir: string | undefined, projectRoot: string
  */
 export async function restoreMediaBackupFile(file: string, passphrase: string, targetDir: string, projectRoot: string): Promise<{ files: number; bytes: number }> {
   const target = await restoreTarget(targetDir, projectRoot);
+  return restoreInto(file, passphrase, localMediaStore(target));
+}
+
+/**
+ * Restores a photo backup into any MediaStore, for a drill against a separate test store or, once approved, a hosted
+ * one. It never overwrites: the store must be EMPTY, and the caller must repeat the target's label (`confirmedLabel`
+ * must equal `label`), so a restore cannot be pointed at a store holding photos, or at the wrong place, by accident.
+ * No command calls it for a hosted store yet: a production recovery action stays disabled until the founder approves
+ * one (docs/operations/backup-recovery.md).
+ */
+export async function restoreMediaBackupToStore(
+  file: string,
+  passphrase: string,
+  store: MediaStore,
+  target: { label: string; confirmedLabel: string },
+): Promise<{ files: number; bytes: number }> {
+  if (!target.label || target.confirmedLabel !== target.label) throw new MediaBackupError("The restore target was not confirmed. Nothing was changed.");
+  if ((await store.entries()).length) throw new MediaBackupError("The restore target already holds files. Restore only into an empty store; nothing was changed.");
+  return restoreInto(file, passphrase, store);
+}
+
+async function restoreInto(file: string, passphrase: string, store: MediaStore): Promise<{ files: number; bytes: number }> {
   await verifyMediaBackupFile(file, passphrase);
-  const store = localMediaStore(target);
   const written: string[] = [];
   try {
     const { header } = await readMediaBackup(createReadStream(file), passphrase, async (f, data) => {
