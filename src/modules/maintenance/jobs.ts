@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { Db } from "@/db/database";
+import { type Db, pgErrorCode } from "@/db/database";
 import { expireOverdueVerifications } from "../orders/service";
 
 // Maintenance jobs (Gate H.41) for `npm run maintenance:run` and, once hosting is chosen, a scheduler. Each job is
@@ -89,3 +89,54 @@ export async function healthReport(db: Db): Promise<HealthReport> {
 }
 
 export const integrityProblems = (h: HealthReport) => h.ledgerMismatch + h.reservedMismatch + h.strayHolds + h.unheldOrders + h.codMismatch;
+
+// One run of every job, for a scheduler that can only call an HTTP endpoint or a script (Gate H.44). Correctness never
+// depends on it running on time: an overdue verification is also released by every new reservation and by the Owner's
+// confirmation (orders/service.ts), so a late or missed run only leaves rows that read as expired a little longer.
+
+/** Session-independent lock (transaction scope, so it also works through a transaction-mode pooler): one run at a time. */
+export const MAINTENANCE_LOCK = [1651725938, 3] as const;
+/** A run starts no further job after this long, so it ends inside the host's function time limit. */
+export const MAX_RUN_MS = 45_000;
+
+export type JobResult = { job: string; ok: boolean; count?: number; error?: string };
+export type MaintenanceReport =
+  | { status: "busy" }
+  | { status: "ok" | "failed"; jobs: JobResult[]; integrityProblems: number; health: HealthReport | null; skipped: string[] };
+
+/** What may be logged or returned about a failure: the error's class and SQLSTATE, never its message (it can hold query parameters). */
+const describeFailure = (error: unknown) => `${error instanceof Error ? error.name : typeof error}${pgErrorCode(error) ? ` ${pgErrorCode(error)}` : ""}`;
+
+export async function runMaintenance(db: Db, now: () => number = Date.now): Promise<MaintenanceReport> {
+  const started = now();
+  return db.transaction(async (lock) => {
+    const { rows } = await lock.execute<{ ok: boolean }>(sql`select pg_try_advisory_xact_lock(${MAINTENANCE_LOCK[0]}, ${MAINTENANCE_LOCK[1]}) as ok`);
+    if (!rows[0].ok) return { status: "busy" } as const;
+    const jobs: JobResult[] = [];
+    const skipped: string[] = [];
+    const steps: [string, () => Promise<number>][] = [
+      ["verification_expiry", () => expireVerifications(db)],
+      ["expired_sessions", () => removeExpiredSessions(db)],
+      ["stale_rate_limit_windows", () => removeStaleRateLimitWindows(db)],
+    ];
+    for (const [job, work] of steps) {
+      if (now() - started > MAX_RUN_MS) {
+        skipped.push(job);
+        continue;
+      }
+      try {
+        jobs.push({ job, ok: true, count: await work() });
+      } catch (error) {
+        jobs.push({ job, ok: false, error: describeFailure(error) });
+      }
+    }
+    let health: HealthReport | null = null;
+    try {
+      health = await healthReport(db);
+    } catch (error) {
+      jobs.push({ job: "integrity_check", ok: false, error: describeFailure(error) });
+    }
+    const problems = health ? integrityProblems(health) : 0;
+    return { status: jobs.every((j) => j.ok) && problems === 0 && skipped.length === 0 ? "ok" : "failed", jobs, integrityProblems: problems, health, skipped } as const;
+  });
+}

@@ -59,16 +59,25 @@ describe("guest checkout is not reachable", () => {
     expect(importers).toEqual(["src/api/public-catalogue.ts"]);
   });
 
+  it("no page, layout, route or Server Action imports the public photo transport or its lookup", () => {
+    const app = files("src/app").filter((f) => /\.(ts|tsx)$/.test(f));
+    const offenders = app.filter((f) => /from "[^"]*(api\/public-media|media\/public)"/.test(readFileSync(path.join(ROOT, f), "utf8")));
+    expect(offenders).toEqual([]);
+    const importers = files("src").filter((f) => f !== "src/modules/media/public.ts" && /from "[^"]*media\/public"/.test(readFileSync(path.join(ROOT, f), "utf8")));
+    expect(importers).toEqual(["src/api/public-media.ts"]);
+  });
+
   it("the guest service cannot reach the authentication module or the Owner operations", () => {
     const source = readFileSync(path.join(ROOT, "src/modules/orders/guest-checkout.ts"), "utf8");
     const imports = [...source.matchAll(/from "([^"]+)"/g)].map((m) => m[1]);
     expect(imports.filter((i) => /auth|principal|operations|actor/.test(i))).toEqual([]);
   });
 
-  it("the only anonymous endpoints are guest tracking; the only public pages are the status page and tracking", () => {
+  it("the only anonymous endpoints are guest tracking, the two status probes and the secret-protected maintenance call; the only public pages are the status page and tracking", () => {
     const app = files("src/app");
     const routes = app.filter((f) => /\/route\.ts$/.test(f) && !f.startsWith("src/app/office/") && !f.startsWith("src/app/api/v1/") && !f.startsWith("src/app/api/auth/"));
-    expect(routes.sort()).toEqual(["src/app/api/track/cancel/route.ts", "src/app/api/track/route.ts"]);
+    // Gate H.44 added the probes (a status word only) and the maintenance call (404 unless MAINTENANCE_SECRET is set, then Bearer-only). No catalogue, checkout or photo route.
+    expect(routes.sort()).toEqual(["src/app/api/health/live/route.ts", "src/app/api/health/ready/route.ts", "src/app/api/internal/maintenance/route.ts", "src/app/api/track/cancel/route.ts", "src/app/api/track/route.ts"]);
     const pages = app.filter((f) => /\/page\.tsx$/.test(f) && !f.startsWith("src/app/office/"));
     expect(pages.sort()).toEqual(["src/app/page.tsx", "src/app/track/page.tsx"]);
     // No Server Action module outside the Office (each Office action checks the Owner session itself).
