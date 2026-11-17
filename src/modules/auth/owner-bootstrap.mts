@@ -85,6 +85,12 @@ export async function bootstrapFirstOwner(
       [userId, userId, passwordHash],
     );
     await client.query("insert into public.user_access (user_id, role) values ($1, 'owner')", [userId]);
+    // Recorded in the same transaction (migration 0017): an Owner never appears without its audit row. The access
+    // grant itself is recorded by the user_access trigger.
+    await client.query(
+      "insert into public.auth_events (event, actor_type, subject_user_id, transport, detail) values ('owner_created', 'operator', $1, 'cli', '{}'::jsonb)",
+      [userId],
+    );
     await client.query("commit");
     return { userId };
   } catch (error) {

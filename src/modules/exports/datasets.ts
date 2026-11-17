@@ -448,6 +448,31 @@ export const DATASETS: Dataset[] = [
       select x.id as export_request_id, ${iso("x.created_at")} as created_at, x.actor_user_id, x.dataset, x.format, x.scope, x.filters
         from export_requests x where ${where} order by x.id`,
   },
+  {
+    // The authentication audit (migration 0017). No address, password or token is stored, so none can be exported;
+    // a failed sign-in carries only the keyed digest of the address it tried.
+    name: "auth_events",
+    title: "Sign-in and access audit",
+    personalData: false,
+    dateColumn: { sql: sql`a.created_at`, description: "when the event was recorded", kind: "timestamp" },
+    orderFilters: false,
+    columns: [
+      n("auth_event_id"),
+      ts("created_at"),
+      t("event", "sign_in, sign_in_failed, session_ended, password_changed, owner_created, owner_password_reset or access_changed"),
+      t("actor_type", "user, anonymous, operator (local command) or system"),
+      t("actor_user_id"),
+      t("subject_user_id"),
+      t("session_id"),
+      t("transport"),
+      t("subject_digest", "Failed sign-ins only: a keyed digest of the address tried, never the address"),
+      { key: "detail", type: "json" },
+    ],
+    query: (where) => sql`
+      select a.id as auth_event_id, ${iso("a.created_at")} as created_at, a.event, a.actor_type, a.actor_user_id, a.subject_user_id, a.session_id,
+             a.transport, a.subject_digest, a.detail
+        from auth_events a where ${where} order by a.id`,
+  },
 ];
 
 export const findDataset = (name: unknown) => DATASETS.find((d) => d.name === name);

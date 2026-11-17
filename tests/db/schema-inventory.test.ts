@@ -79,6 +79,7 @@ describe("destructive reset statements", () => {
     expect(tableList.sort()).toEqual([
       '"public"."api_rate_limits"',
       '"public"."auth_accounts"',
+      '"public"."auth_events"',
       '"public"."auth_rate_limits"',
       '"public"."auth_sessions"',
       '"public"."auth_users"',
@@ -115,7 +116,7 @@ describe("destructive reset statements", () => {
       '"public"."variants"',
     ]);
     expect(fn).toBe(
-      'drop function if exists "public"."stock_movements_reject_change"(), "public"."user_access_revoke_sessions"(), "public"."append_only_reject_change"(), "public"."guest_checkout_submissions_guard"() restrict;',
+      'drop function if exists "public"."stock_movements_reject_change"(), "public"."user_access_revoke_sessions"(), "public"."append_only_reject_change"(), "public"."guest_checkout_submissions_guard"(), "public"."user_access_audit"() restrict;',
     );
     expect(history).toBe('drop table if exists "drizzle"."__drizzle_migrations" restrict;');
   });

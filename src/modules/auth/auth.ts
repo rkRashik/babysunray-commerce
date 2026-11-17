@@ -1,11 +1,12 @@
 import "server-only";
 import { APIError, BASE_ERROR_CODES, type BetterAuthPlugin, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { createAuthMiddleware } from "better-auth/api";
+import { createAuthMiddleware, isAPIError } from "better-auth/api";
 import { bearer } from "better-auth/plugins";
 import type { Db } from "@/db/database";
 import { authAccounts, authRateLimits, authSessions, authUsers, authVerifications } from "@/db/schema";
 import { findActiveRole } from "./access";
+import { type AuthTransport, logAuditFailure, recordFailedSignIn, recordPasswordChanged, recordSessionEnded, recordSignIn, sessionEndReason, subjectDigest } from "./audit";
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "./password-policy";
 import type { AuthSettings } from "./settings";
 
@@ -53,6 +54,9 @@ export const DISABLED_PATHS = [
 ];
 
 const SET_AUTH_TOKEN = "set-auth-token";
+
+const transportOf = (headers: Headers | undefined): AuthTransport => (isBrowserRequest(headers) ? "browser" : "native");
+const bodyField = (body: unknown, name: string): unknown => (typeof body === "object" && body !== null ? (body as Record<string, unknown>)[name] : undefined);
 
 // Browsers always send at least one of these (Sec-Fetch-* and Origin cannot be removed by page scripts).
 // Native clients send none of them.
@@ -135,6 +139,41 @@ export function createAuth(db: Db, settings: AuthSettings) {
       ipAddress: { ipAddressHeaders: [] },
     },
     telemetry: { enabled: false },
+    // Security audit (migration 0017, audit.ts). Runs after the endpoint, also when it failed (the error is in
+    // ctx.context.returned). Identities come only from Better Auth: the new session, or the request's session.
+    hooks: {
+      after: createAuthMiddleware(async (ctx) => {
+        const transport = transportOf(ctx.request?.headers ?? ctx.headers);
+        const returned = ctx.context.returned;
+        if (ctx.path === "/sign-in/email") {
+          const created = ctx.context.newSession;
+          if (isAPIError(returned) || !created) {
+            const status = isAPIError(returned) ? returned.statusCode : 0;
+            const code = isAPIError(returned) ? bodyField(returned.body, "code") : undefined;
+            await recordFailedSignIn(db, { digest: subjectDigest(settings.secret, bodyField(ctx.body, "email")), transport, status, code }).catch((error: unknown) =>
+              logAuditFailure("sign_in_failed", error),
+            );
+            return;
+          }
+          try {
+            await recordSignIn(db, { userId: created.user.id, sessionId: created.session.id, transport });
+          } catch (error) {
+            // No unaudited session stays usable: delete it, drop its cookie (and so the Bearer token the plugin
+            // would derive from it) and refuse the sign-in.
+            logAuditFailure("sign_in", error);
+            await ctx.context.internalAdapter.deleteSession(created.session.token);
+            ctx.context.responseHeaders?.delete("set-cookie");
+            throw APIError.from("INTERNAL_SERVER_ERROR", { code: "SIGN_IN_UNAVAILABLE", message: "Sign-in is not available right now. Try again later." });
+          }
+          return;
+        }
+        if (ctx.path === "/change-password" && !isAPIError(returned) && ctx.context.session) {
+          await recordPasswordChanged(db, { userId: ctx.context.session.user.id, transport, revokedOtherSessions: bodyField(ctx.body, "revokeOtherSessions") === true }).catch(
+            (error: unknown) => logAuditFailure("password_changed", error),
+          );
+        }
+      }),
+    },
     // Bearer transport for /api/v1 and future native clients (ADR-0004). requireSignature: only the signed
     // token is accepted; the raw token that get-session and list-sessions return in their JSON is not.
     // Order matters: the guard must run after the Bearer plugin's response hook.
@@ -148,6 +187,22 @@ export function createAuth(db: Db, settings: AuthSettings) {
             if ((await findActiveRole(db, session.userId)) === null) {
               throw APIError.from("UNAUTHORIZED", BASE_ERROR_CODES.INVALID_EMAIL_OR_PASSWORD);
             }
+          },
+        },
+        // Every session Better Auth deletes (sign-out, revocation, password change, expiry), once per session even
+        // when concurrent requests end the same ones. The deletion itself never waits on or fails with the audit.
+        delete: {
+          after: async (session, context) => {
+            const reason = sessionEndReason(context?.path);
+            const byUser = !["expired", "audit_unavailable", "other"].includes(reason);
+            await recordSessionEnded(db, {
+              sessionId: session.id,
+              userId: session.userId,
+              reason,
+              // The holder of the session (who proved its token) or the authenticated user of the request.
+              actorUserId: byUser ? (context?.context.session?.user.id ?? session.userId) : null,
+              transport: context ? transportOf(context.request?.headers ?? context.headers) : null,
+            }).catch((error: unknown) => logAuditFailure("session_ended", error));
           },
         },
       },

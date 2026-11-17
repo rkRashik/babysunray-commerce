@@ -74,6 +74,9 @@ describe("resetOwnerPassword", () => {
 
     expect(revokedSessions).toBe(2);
     expect(await count(pool, "select count(*) from auth_sessions")).toBe(0);
+    // Audited in the same transaction, with the number of sessions it ended (migration 0017).
+    const [reset] = (await pool.query("select actor_type, transport, detail from auth_events where event = 'owner_password_reset' order by id desc limit 1")).rows;
+    expect(reset).toEqual({ actor_type: "operator", transport: "cli", detail: { sessionsRevoked: 2 } });
     expect(await getPrincipal(auth, db, headersWith(cookie))).toBeNull();
     expect(await getBearerPrincipal(auth, db, bearer(token as string))).toBeNull();
     expect(await signInStatus(OLD, LEDGER_EMAIL)).toBe(401);
@@ -173,6 +176,14 @@ describe("resetOwnerPassword", () => {
     expect(await credentialHash(userId)).toBe(hash);
     expect(await getPrincipal(auth, db, headersWith(cookie))).not.toBeNull();
     expect(await signInStatus(OLD)).toBe(200);
+  });
+
+  it("does not reset the password when its audit row cannot be written", async () => {
+    const { userId, cookie } = await createVerifiedOwner(auth, db, pool, `audit-${EMAIL}`, OLD);
+    const hash = await credentialHash(userId);
+    await expect(withFailingInserts(pool, "auth_events", () => resetOwnerPassword(client, TEST_TARGET, { email: `audit-${EMAIL}`, password: NEW }))).rejects.toThrow("injected test failure");
+    expect(await credentialHash(userId)).toBe(hash);
+    expect(await getPrincipal(auth, db, headersWith(cookie))).not.toBeNull();
   });
 
   it("serialises concurrent resets: one password wins, one credential row remains, no session survives", async () => {

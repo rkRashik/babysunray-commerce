@@ -120,6 +120,13 @@
       "when": 1794848666316,
       "tag": "0016_cod_courier_deductions",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794887510623,
+      "tag": "0017_auth_events",
+      "breakpoints": true
     }
   ]
 }

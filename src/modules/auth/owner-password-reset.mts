@@ -68,6 +68,11 @@ export async function resetOwnerPassword(
     ]);
     if (updated.rowCount !== 1) throw new Error("The password could not be changed. Nothing was changed.");
     const revoked = await client.query("delete from public.auth_sessions where user_id = $1", [owner.userId]);
+    // Recorded in the same transaction (migration 0017): the reset and its audit row commit or roll back together.
+    await client.query(
+      "insert into public.auth_events (event, actor_type, subject_user_id, transport, detail) values ('owner_password_reset', 'operator', $1, 'cli', jsonb_build_object('sessionsRevoked', $2::int))",
+      [owner.userId, revoked.rowCount ?? 0],
+    );
     await client.query("commit");
     return { revokedSessions: revoked.rowCount ?? 0 };
   } catch (error) {

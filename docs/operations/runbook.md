@@ -46,6 +46,9 @@ Contact details and colours are optional; without them no contact is shown and t
 
 ## 3. Sign-in troubleshooting
 
+Who signed in, which attempts failed and which sessions ended are in the "Sign-in and access audit" export (Exports page). A burst of `sign_in_failed` rows with the same `subject_digest` means repeated attempts on one address; the digest cannot be turned back into the address. If sign-in answers 500 and the server log shows `auth_audit_failed`, the audit table cannot be written (check the database before anything else): sign-in stays refused until it can be.
+
+
 | Symptom | Cause and fix |
 |---|---|
 | The sign-in page says "Sign-in is not set up on this server yet" and names `BETTER_AUTH_SECRET` (development), or "Sign-in is not available right now" (production) | The secret is missing or invalid in `.env.local`. Generate one (`openssl rand -base64 32`), add it, restart `npm run dev`, run `npm run config:check`. Changing the secret signs everyone out; it does not change or delete any account. |

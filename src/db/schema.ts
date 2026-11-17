@@ -350,6 +350,50 @@ export const userAccess = pgTable(
   (t) => [check("user_access_role_valid", sql`${t.role} in ('owner')`)],
 );
 
+// Append-only security audit of authentication and access (migration 0017; src/modules/auth/audit.ts). Written by
+// Better Auth hooks (sign-in, failed sign-in, every ended session, password change), the local Owner commands and a
+// trigger on user_access (every grant, role change, disable, enable or removal). No password, token, cookie, email or
+// address is stored: a failed sign-in keeps only an HMAC of the address it tried, keyed by the installation's secret,
+// so attempts on the same address can be grouped but the address cannot be read back. User ids carry no foreign key,
+// so the history outlives an account. At most one sign_in and one session_ended row per session (unique indexes).
+export const authEvents = pgTable(
+  "auth_events",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    event: text("event", { enum: ["sign_in", "sign_in_failed", "session_ended", "password_changed", "owner_created", "owner_password_reset", "access_changed"] }).notNull(),
+    // user: an authenticated user acted; anonymous: an unauthenticated attempt; operator: a local command with
+    // database access; system: the database itself (access trigger) or the library (an expired session).
+    actorType: text("actor_type", { enum: ["user", "anonymous", "operator", "system"] }).notNull(),
+    actorUserId: uuid("actor_user_id"),
+    subjectUserId: uuid("subject_user_id"),
+    sessionId: uuid("session_id"),
+    transport: text("transport", { enum: ["browser", "native", "cli", "database"] }),
+    subjectDigest: text("subject_digest"),
+    detail: jsonb("detail").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("auth_events_created_at_idx").on(t.createdAt),
+    index("auth_events_subject_user_id_id_idx").on(t.subjectUserId, t.id),
+    uniqueIndex("auth_events_sign_in_session_key").on(t.sessionId).where(sql`${t.event} = 'sign_in'`),
+    uniqueIndex("auth_events_session_ended_session_key").on(t.sessionId).where(sql`${t.event} = 'session_ended'`),
+    check(
+      "auth_events_event_valid",
+      sql`${t.event} in ('sign_in', 'sign_in_failed', 'session_ended', 'password_changed', 'owner_created', 'owner_password_reset', 'access_changed')`,
+    ),
+    check("auth_events_actor_type_valid", sql`${t.actorType} in ('user', 'anonymous', 'operator', 'system')`),
+    check("auth_events_actor_consistent", sql`(${t.actorType} = 'user') = (${t.actorUserId} is not null)`),
+    check("auth_events_transport_valid", sql`${t.transport} in ('browser', 'native', 'cli', 'database')`),
+    check(
+      "auth_events_failed_sign_in_anonymous",
+      sql`(${t.event} = 'sign_in_failed') = (${t.actorType} = 'anonymous') and (${t.event} <> 'sign_in_failed' or ${t.subjectUserId} is null)`,
+    ),
+    check("auth_events_subject_digest_valid", sql`(${t.subjectDigest} is null or ${t.event} = 'sign_in_failed') and (${t.subjectDigest} is null or ${t.subjectDigest} ~ '^[0-9a-f]{64}$')`),
+    check("auth_events_session_required", sql`${t.event} not in ('sign_in', 'session_ended') or ${t.sessionId} is not null`),
+    check("auth_events_detail_object", sql`jsonb_typeof(${t.detail}) = 'object' and length(${t.detail}::text) <= 1000`),
+  ],
+);
+
 // Operation-level idempotency (src/modules/idempotency). One row per user and client-generated key: the row
 // is claimed by INSERT inside the business transaction, so it commits or rolls back with that operation,
 // and a concurrent request with the same key waits on the primary key until the first one finishes.

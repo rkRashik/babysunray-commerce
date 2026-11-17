@@ -44,6 +44,13 @@ describe("bootstrapFirstOwner", () => {
 
     const user = await pool.query("select id, email, name, email_verified from auth_users");
     expect(user.rows).toEqual([{ id: userId, email: OWNER.email, name: OWNER.name, email_verified: false }]);
+    // Audited in the same transaction: the operator's command and the access grant (migration 0017).
+    const events = await pool.query("select event, actor_type, subject_user_id, transport from auth_events where subject_user_id = $1 order by id", [userId]);
+    expect(events.rows).toEqual([
+      { event: "access_changed", actor_type: "system", subject_user_id: userId, transport: "database" },
+      { event: "owner_created", actor_type: "operator", subject_user_id: userId, transport: "cli" },
+    ]);
+    expect(JSON.stringify((await pool.query("select * from auth_events where subject_user_id = $1", [userId])).rows)).not.toMatch(/example.test|staple/i);
     const account = await pool.query("select account_id, provider_id, user_id, password from auth_accounts");
     expect(account.rows).toHaveLength(1);
     expect(account.rows[0]).toMatchObject({ account_id: userId, provider_id: "credential", user_id: userId });

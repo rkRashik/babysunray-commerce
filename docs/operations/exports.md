@@ -45,6 +45,7 @@ A filter a dataset does not support is refused, never ignored.
 | `policy_drafts` | saved policy draft kind: status (empty, drafted, reviewed; never published), version, English and Bangla text, who saved and reviewed (Gate H.26) | none | no | no |
 | `product_reviews` | internal product review: when, by whom, product, content digest, items still open (not publication) | review time | no | no |
 | `export_requests` | export audit row | request time | no | no |
+| `auth_events` | sign-in, failed sign-in, ended session, password change, Owner command or access change (Gate H.39); no address, password or token | event time | no | no |
 
 Column names, types and short descriptions are listed in every JSON file (`columns`) and defined in `src/modules/exports/datasets.ts`.
 
