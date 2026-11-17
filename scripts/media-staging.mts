@@ -5,7 +5,7 @@
 // or the bucket. The backup is refused, with nothing kept, if a recorded photo is missing or different, or the records
 // change while it runs. The founder runs them (the backup asks for a passphrase twice, without echo). Without the
 // staging settings they report NOT RUN and exit 2. Restoring a photo backup into a bucket has no command (disabled until
-// approved; docs/operations/backup-recovery.md). Gate H.47. Tested against a fake Storage only; a real bucket has not been used.
+// approved; docs/operations/runbook.md). Gate H.47. Tested against a fake Storage only; a real bucket has not been used.
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import path from "node:path";

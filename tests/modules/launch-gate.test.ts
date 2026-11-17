@@ -67,6 +67,11 @@ describe("guest checkout is not reachable", () => {
     expect(importers).toEqual(["src/api/public-media.ts"]);
   });
 
+  it("no code trusts a client-supplied address header, so no per-client limit is claimed or faked (needs a trusted proxy, open decision 1)", () => {
+    const readers = files("src").filter((f) => /.(ts|tsx|mts)$/.test(f) && /x-forwarded|x-real-ip|cf-connecting-ip|true-client-ip|forwarded/i.test(readFileSync(path.join(ROOT, f), "utf8")));
+    expect(readers).toEqual([]);
+  });
+
   it("the guest service cannot reach the authentication module or the Owner operations", () => {
     const source = readFileSync(path.join(ROOT, "src/modules/orders/guest-checkout.ts"), "utf8");
     const imports = [...source.matchAll(/from "([^"]+)"/g)].map((m) => m[1]);

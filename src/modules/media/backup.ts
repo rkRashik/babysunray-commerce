@@ -259,7 +259,7 @@ export async function restoreMediaBackupFile(file: string, passphrase: string, t
  * one. It never overwrites: the store must be EMPTY, and the caller must repeat the target's label (`confirmedLabel`
  * must equal `label`), so a restore cannot be pointed at a store holding photos, or at the wrong place, by accident.
  * No command calls it for a hosted store yet: a production recovery action stays disabled until the founder approves
- * one (docs/operations/backup-recovery.md).
+ * one (docs/operations/runbook.md).
  */
 export async function restoreMediaBackupToStore(
   file: string,
