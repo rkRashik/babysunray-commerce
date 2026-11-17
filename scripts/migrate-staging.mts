@@ -9,7 +9,7 @@
 // and a backup of this database from the last 24 hours exists (unless the database has no application tables yet).
 // The migrations run under the project's migration lock in ONE transaction (Drizzle's migrator): a failure applies
 // none of them. A JSON report (no secrets, no data) is written whatever the outcome. Node 22.18 or newer.
-import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -18,6 +18,7 @@ import pg from "pg";
 import { auditPrivileges } from "../src/db/hosted-security.mts";
 import { APP_ROLE, applicationTableCount, assertNotLocalDatabase, assertRecentBackup, assertStagingTarget, migrationState, parseStagingUrl } from "../src/db/hosted-target.mts";
 import { MIGRATION_LOCK } from "../src/db/migrate-verified.mts";
+import { outsideRepository, reportWriter } from "../src/db/hosted-report.mts";
 import { readStagingEnv } from "./staging-env.mts";
 import { askVisible, assertInteractiveTerminal } from "./prompt.mts";
 
@@ -42,26 +43,18 @@ const arg = (name: string) => {
   return i > 0 ? process.argv[i + 1] : undefined;
 };
 
-/** A file path outside the repository (reports and backups never land in it). */
-function outsideRepository(file: string | undefined, what: string): string {
-  if (!file || !path.isAbsolute(file)) throw new Error(`Give the ${what} as an absolute path outside the project.`);
-  const dir = realpathSync(path.dirname(file));
-  const rel = path.relative(realpathSync(ROOT).toLowerCase(), dir.toLowerCase());
-  if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) throw new Error(`The ${what} must be outside the project folder.`);
-  return path.join(dir, path.basename(file));
-}
-
 async function main(): Promise<void> {
   const env = readStagingEnv();
-  const reportFile = outsideRepository(arg("--report"), "report file");
+  const reportFile = outsideRepository(arg("--report"), "report file", ROOT);
   if (existsSync(reportFile)) throw new Error("The report file already exists. Choose a new name; nothing was changed.");
   const firstTime = process.argv.includes("--first-time");
-  const backupFile = firstTime ? undefined : outsideRepository(arg("--backup"), "backup file (from npm run backup:create:staging)");
+  const backupFile = firstTime ? undefined : outsideRepository(arg("--backup"), "backup file (from npm run backup:create:staging)", ROOT);
   const conn = parseStagingUrl(env, "STAGING_MIGRATION_DATABASE_URL", { pooled: false });
   assertNotLocalDatabase(conn, env);
 
   const report: Record<string, unknown> = { command: "db:migrate:staging", startedAt: new Date().toISOString(), target: { host: conn.host, port: conn.port, database: conn.database, user: conn.user }, result: "not started" };
-  const save = () => writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`, { flag: "w", mode: 0o600 });
+  const write = reportWriter(reportFile);
+  const save = () => write(report);
   const client = new pg.Client({ host: conn.host, port: conn.port, database: conn.database, user: conn.user, password: conn.password, ssl: conn.ssl, connectionTimeoutMillis: 10_000 });
   try {
     await client.connect();
