@@ -7,7 +7,7 @@ import { createCategoryOnce, replaceMeasurementsOnce, updateCategoryOnce } from 
 import { DomainError } from "@/modules/domain-error";
 import { removeUnreferencedFiles } from "@/modules/media/manifest";
 import { describePhotoOnce, movePhotoOnce, removePhotoOnce } from "@/modules/media/operations";
-import { getMediaStore } from "@/modules/media/storage";
+import { getMediaStore } from "@/modules/media/provider";
 import { formError, type FormState, optional, text, wholeNumber } from "./_lib/form";
 import { MEASUREMENT_LABELS } from "./_lib/labels";
 import { requireOffice } from "./_lib/session";

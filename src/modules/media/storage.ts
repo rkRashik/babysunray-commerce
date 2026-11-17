@@ -2,11 +2,9 @@ import "server-only";
 import { lstat, open, readdir, readFile, rename, rm } from "node:fs/promises";
 import { realpathSync, statSync } from "node:fs";
 import path from "node:path";
-import { DomainError } from "../domain-error";
 
 // Where product photo files live. One small interface, so a hosting-compatible store (object storage) can
-// replace the local folder later without touching the catalogue code. Only the local development adapter
-// exists: a folder the operator names in MEDIA_STORAGE_DIR, outside the repository (so photos are never
+// replace the local folder later without touching the catalogue code. The local adapter is here (supabase-store.ts holds the cloud one, provider.ts picks): a folder the operator names in MEDIA_STORAGE_DIR, outside the repository (so photos are never
 // committed or served as public files). Keys are random (newStorageKey), never a name a user typed, and every
 // key is checked against KEY before it touches the file system, so no path can escape the folder.
 
@@ -114,11 +112,4 @@ export function mediaStoreConfig(env: Record<string, string | undefined>, projec
     return { ok: false, problem: "Local media storage is refused in production unless MEDIA_LOCAL_STORAGE_IN_PRODUCTION=allow (only for a host whose disk is persistent and backed up)." };
   }
   return { ok: true, store: localMediaStore(dir), dir };
-}
-
-/** The application's store, from the environment; MEDIA_STORAGE_UNAVAILABLE (with the reason) without one. */
-export function getMediaStore(): MediaStore {
-  const config = mediaStoreConfig(process.env, process.cwd());
-  if (!config.ok) throw new DomainError("MEDIA_STORAGE_UNAVAILABLE", config.problem);
-  return config.store;
 }

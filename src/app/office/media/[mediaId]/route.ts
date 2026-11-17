@@ -4,7 +4,7 @@ import { getAuth } from "@/modules/auth/server";
 import { DomainError } from "@/modules/domain-error";
 import { cachedRendition, formatOf, RENDITION_WIDTHS } from "@/modules/media/images";
 import { getPhoto } from "@/modules/media/service";
-import { getMediaStore } from "@/modules/media/storage";
+import { getMediaStore } from "@/modules/media/provider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

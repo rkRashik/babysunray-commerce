@@ -5,7 +5,8 @@ import { getProductWithVariants, type ProductDetail } from "../catalogue/service
 import { type Once, runOnce, validateIdempotencyKey } from "../idempotency/service";
 import { newStorageKey, normalizeImage, uploadDigest } from "./images";
 import { type AltText, addPhoto, describePhoto, movePhoto, removePhoto } from "./service";
-import { getMediaStore, type MediaStore } from "./storage";
+import { getMediaStore } from "./provider";
+import type { MediaStore } from "./storage";
 
 // Photo operations for the Owner Office (catalog:write, once per idempotency key, ADR-0005). The order of work
 // keeps files and records in step: a new file is written before its record; if the record is not committed
