@@ -76,7 +76,7 @@ async function main(): Promise<number> {
     const passphrase = await askHidden("Photo backup passphrase (not shown): ");
     if ((await askHidden("Repeat the passphrase: ")) !== passphrase) throw new Error("The passphrases do not match. Nothing was written.");
     const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
-    const file = path.join(dir, `staging-${conn.database}-photos-${stamp}.bsmedia`);
+    const file = path.join(dir, `staging-${conn.database.replace(/[^\w.-]/g, "_")}-photos-${stamp}.bsmedia`);
     const result = await createMediaBackupFile(db, store, passphrase, file, { database: conn.database });
     const { header } = await verifyMediaBackupFile(file, passphrase);
     console.log(`Photo backup written and verified: ${file}`);

@@ -277,6 +277,8 @@ async function restoreInto(file: string, passphrase: string, store: MediaStore):
   const written: string[] = [];
   try {
     const { header } = await readMediaBackup(createReadStream(file), passphrase, async (f, data) => {
+      // A key that already exists is never ours to write, and so never ours to remove if the restore fails.
+      if (await store.read(f.storageKey)) throw new MediaBackupError(`The restore target already holds ${f.storageKey}. Nothing of it was changed.`);
       await store.put(f.storageKey, data);
       written.push(f.storageKey);
       const back = await store.read(f.storageKey);

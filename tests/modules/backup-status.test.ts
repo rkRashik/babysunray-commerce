@@ -35,7 +35,7 @@ const put = (folder: string, name: string, header: Record<string, unknown>) => {
 
 describe("readBackupHeader", () => {
   it("reads only the header, and refuses other files with fixed messages", () => {
-    expect(readBackupHeader(fake("a.bsbackup", database(hoursAgo(1), { host: "db.example.test" })))).toEqual({ kind: "database", database: "postgres", createdAt: hoursAgo(1), host: "db.example.test", files: null });
+    expect(readBackupHeader(fake("a.bsbackup", database(hoursAgo(1), { host: "db.example.test" })))).toMatchObject({ kind: "database", database: "postgres", createdAt: hoursAgo(1), host: "db.example.test", files: null });
     expect(readBackupHeader(fake("b.bsmedia", photos(hoursAgo(1))))).toMatchObject({ kind: "photos", files: 3 });
     writeFileSync(path.join(dir, "text.bsbackup"), "just some text that is long enough");
     expect(() => readBackupHeader(path.join(dir, "text.bsbackup"))).toThrow(/not a BabySunray backup/);
@@ -78,6 +78,17 @@ describe("backupStatus", () => {
     put(h, "a.bsbackup", database(hoursAgo(1), { host: "db.one.example.test" }));
     put(h, "a.bsmedia", photos(hoursAgo(1), { host: "db.two.example.test" }));
     expect(backupStatus(h, { maxAgeHours: 24, now: NOW }).problems.map((p) => p.code)).toEqual(["backups_of_different_databases"]);
+  });
+  it("flags a header-only (cut-off) file, and refuses an infinite age limit", () => {
+    const f = fresh();
+    const file = path.join(f, "cut.bsbackup");
+    const json = Buffer.from(JSON.stringify(database(hoursAgo(1))));
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(json.length);
+    writeFileSync(file, Buffer.concat([Buffer.from("BSRBAK01"), length, json]));
+    const codes = backupStatus(f, { maxAgeHours: 24, now: NOW, wantPhotos: false }).problems.map((p) => p.code);
+    expect(codes).toEqual(["unreadable_backup", "no_database_backup"]);
+    expect(() => backupStatus(f, { maxAgeHours: Infinity })).toThrow(/age limit/);
   });
   it("requires an age limit, deletes and changes nothing", () => {
     const f = fresh();

@@ -11,7 +11,7 @@ const MAGIC = "BSRBAK01";
 const MAX_HEADER = 16 * 1024; // the same limit the sealed format itself enforces
 
 export type BackupKind = "database" | "photos";
-export type BackupHeaderInfo = { kind: BackupKind; database: string; createdAt: string; host: string | null; files: number | null };
+export type BackupHeaderInfo = { kind: BackupKind; database: string; createdAt: string; host: string | null; files: number | null; headerEnd: number };
 
 /** Reads a backup file's readable header (never the whole file) without its passphrase; throws a fixed message. */
 export function readBackupHeader(file: string): BackupHeaderInfo {
@@ -36,7 +36,7 @@ export function readBackupHeader(file: string): BackupHeaderInfo {
     const header = JSON.parse(head.toString("utf8")) as { format?: unknown; database?: unknown; createdAt?: unknown; host?: unknown; files?: unknown };
     const kind = header.format === "babysunray-backup" ? "database" : header.format === "babysunray-media-backup" ? "photos" : null;
     if (!kind || typeof header.database !== "string" || typeof header.createdAt !== "string" || !Number.isFinite(Date.parse(header.createdAt))) throw new Error("shape");
-    return { kind, database: header.database, createdAt: header.createdAt, host: typeof header.host === "string" ? header.host : null, files: typeof header.files === "number" ? header.files : null };
+    return { kind, database: header.database, createdAt: header.createdAt, host: typeof header.host === "string" ? header.host : null, files: typeof header.files === "number" ? header.files : null, headerEnd: 12 + head.length };
   } catch {
     throw new Error("The backup file's header is not readable.");
   }
@@ -59,7 +59,7 @@ const MAX_PAIR_GAP_MINUTES = 15; // the same figure recovery:check uses (src/mod
  * and photo backup of different databases or hosts, or taken far apart.
  */
 export function backupStatus(dir: string, options: { maxAgeHours: number; now?: number; wantPhotos?: boolean }): BackupStatus {
-  if (!(options.maxAgeHours > 0)) throw new Error("Give the age limit in hours (a number above 0).");
+  if (!(options.maxAgeHours > 0) || !Number.isFinite(options.maxAgeHours)) throw new Error("Give the age limit in hours (a number above 0).");
   const now = options.now ?? Date.now();
   const problems: BackupProblem[] = [];
   const found: (BackupHeaderInfo & { file: string })[] = [];
@@ -69,9 +69,12 @@ export function backupStatus(dir: string, options: { maxAgeHours: number; now?: 
       problems.push({ severity: "medium", code: "unfinished_backup", file: name, message: "An unfinished backup file is left behind (an interrupted run). It is not a backup; delete it after checking." });
       continue;
     }
-    if (!/\.(bsbackup|bsmedia)$/.test(name) || !statSync(file).isFile()) continue;
+    if (!/\.(bsbackup|bsmedia)$/.test(name)) continue;
     try {
+      if (!statSync(file).isFile()) continue;
       const header = readBackupHeader(file);
+      // A sealed backup holds at least one record after its header (5 bytes of framing and a 16-byte tag): anything shorter is cut off.
+      if (statSync(file).size < header.headerEnd + 21) throw new Error("The backup file is cut short: it holds no content after its header.");
       const expected = name.endsWith(".bsbackup") ? "database" : "photos";
       if (header.kind !== expected) throw new Error("The backup file's type does not match its name.");
       found.push({ ...header, file: name });

@@ -15,7 +15,7 @@ const arg = (name: string) => {
 
 async function main(): Promise<number> {
   const maxAgeHours = Number(arg("--max-age-hours"));
-  if (!arg("--dir") || !(maxAgeHours > 0)) {
+  if (!arg("--dir") || !(maxAgeHours > 0) || !Number.isFinite(maxAgeHours)) {
     console.error("Use: npm run backup:status -- --dir <backup folder> --max-age-hours <hours> [--no-photos] [--json]");
     return 2;
   }

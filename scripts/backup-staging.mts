@@ -44,7 +44,7 @@ async function main(): Promise<void> {
   if ((await askHidden("Repeat the passphrase: ")) !== passphrase) throw new Error("The passphrases do not match. Nothing was written.");
 
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
-  const file = path.join(dir, `staging-${conn.database}-${stamp}.bsbackup`);
+  const file = path.join(dir, `staging-${conn.database.replace(/[^\w.-]/g, "_")}-${stamp}.bsbackup`);
   const { bytes } = await createBackupFile({ host: conn.host, port: conn.port, database: conn.database, user: conn.user, password: conn.password, sslMode: conn.sslMode, sslRootCert: conn.sslRootCert, schemas: ["public", "drizzle"] }, passphrase, file, { pgDumpVersion });
   const verified = await verifyBackupFile(file, passphrase);
   console.log(`Backup written and verified: ${file}`);

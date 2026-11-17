@@ -128,6 +128,19 @@ describe("backing up a Supabase Storage bucket", () => {
     expect(target.server.objects.get(midway)!.data.equals(appeared)).toBe(true);
   });
 
+  it("never writes or removes a key that already exists, even one that appears after the emptiness check", async () => {
+    const target = bucket();
+    const [existing] = keys;
+    const theirs = Buffer.from("someone else's photo");
+    target.server.objects.set(existing, { data: theirs, type: "image/png", updated: new Date().toISOString() });
+    // The store looks empty when asked for its entries (as if the object arrived a moment later).
+    const racing = { ...target.store, entries: async () => [] };
+    await expect(restoreMediaBackupToStore(backupFile("ok"), PASS, racing, { label: "t", confirmedLabel: "t" })).rejects.toThrow(/already holds/);
+    expect(target.server.objects.get(existing)!.data.equals(theirs)).toBe(true);
+    // Whatever this restore had written before it stopped is removed again; the other writer's object stays.
+    expect([...target.server.objects.keys()]).toEqual([existing]);
+  });
+
   it("refuses to back up, keeping nothing, when a recorded photo is missing, changed or cannot be downloaded", async () => {
     const [victim] = keys;
     const saved = source.server.objects.get(victim)!;

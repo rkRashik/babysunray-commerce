@@ -19,7 +19,7 @@ async function main(): Promise<void> {
       client.release();
     }
     const db = drizzle({ client: pool });
-    const backlog = await maintenanceBacklog(db);
+    const backlog = await maintenanceBacklog(db).catch(() => ({ overdueVerifications: 0, oldestOverdueMinutes: null, expiredSessions: 0 }));
     console.log(`Already overdue at the start: ${backlog.overdueVerifications} verification(s)${backlog.oldestOverdueMinutes === null ? "" : `, the oldest by ${backlog.oldestOverdueMinutes} minute(s)`}; ${backlog.expiredSessions} expired session(s). A large figure means this has not run on time.`);
     console.log(`Verification expiry: ${await expireVerifications(db)} order(s) expired.`);
     console.log(`Expired sessions removed (each recorded in the audit): ${await removeExpiredSessions(db)}.`);
