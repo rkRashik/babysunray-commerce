@@ -157,6 +157,14 @@ The database backup holds the photo **records**; the photo backup holds the **fi
 
 `npm run media:drill` rehearses the pair check on fictional data (a matching pair, then a photo uploaded after the photo backup). `recovery:check` itself has not been run against real backups: `babysunray_restore` does not exist yet.
 
+### Checking backups without a passphrase (Gate H.48C)
+
+`npm run backup:status -- --dir D:/Backups/babysunray --max-age-hours 24` reads only the readable headers in a folder: the age of the newest database and photo backup, whether they are of the same database and were taken close together, and any unreadable or unfinished (`.partial`) file. Exit 1 lists problems. It decrypts nothing and deletes nothing, and **does not verify content**: `backup:verify` and `media:backup:verify` do, and only a restore drill proves recovery. The age limit is yours to choose; no schedule or retention period is set.
+
+### Photos of a hosted (staging) project
+
+`npm run media:verify:staging` compares the staging database's photo records with the staging bucket (missing, changed, unreferenced, unexpected objects). `npm run media:backup:staging -- --out <folder>` writes the same encrypted `.bsmedia` backup from the bucket (founder only, interactive). Both only read. A hosted restore has **no command**: the tested function (`restoreMediaBackupToStore`) needs an empty target and a repeated target label, and stays unused until the founder approves a recovery action. Tested against a mocked Storage only (`docs/operations/staging-setup.md`).
+
 No schedule, retention period or off-device destination is set up for either backup (decisions 6 and 15; K-4, K-5, K-8, K-9). `npm run media:drill` rehearses the photo backup and restore on fictional photos in `babysunray_test` and temporary folders (result 2026-11-16: passed, 5 photos).
 
 ## 8. Backup and restore

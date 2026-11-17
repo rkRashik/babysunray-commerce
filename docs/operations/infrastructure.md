@@ -97,6 +97,7 @@ Not measured: how many concurrent requests Vercel puts on one instance, Supaviso
 | Concurrent calls | Allowed and safe: every job is a single statement or claims its rows with `SKIP LOCKED` and re-checks them under their own lock, so overlapping runs only find less to do. A run uses one connection at a time (H.44's run lock held a transaction open while the jobs took further connections, which waits for itself on a pool of one; removed in H.45) |
 | Replay | The jobs are idempotent; a repeated call finds nothing more to do |
 | Bounded | At most 1,000 rows per job per call; no job starts after 45 s; the rest are reported as `skipped` |
+| Lateness | Each run first reports the work already overdue when it started (`backlog`: overdue verifications, the oldest by minutes, expired sessions), so a late or missed scheduler shows in the next run. Nothing claims a scheduled call always runs on time |
 | Reporting | `200` when everything succeeded; `500` when a job failed, a job was skipped or an integrity check found a problem. Answers and logs carry counts and error class names only |
 | Timing is never relied on | An overdue verification is also released by every new reservation and by the Owner's confirmation; a missed run leaves rows reading as expired a little longer, nothing else |
 

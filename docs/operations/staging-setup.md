@@ -75,6 +75,16 @@ Create a file named `.env.staging.local` in the project folder. It is ignored by
 
 A connection string must not end with `?...` options; the commands refuse that (TLS comes from `STAGING_DATABASE_SSL`).
 
+**Direct or Session pooler for the administrator connection.** If the Direct connection is not reachable from your network (it is IPv6 only on the Free plan), use the **Session pooler** string (port 5432, user `postgres.<project-ref>`) for `STAGING_MIGRATION_DATABASE_URL`. Migrations and backups need a session; the **Transaction pooler** (port 6543) is refused for them and is used only for `STAGING_DATABASE_URL`.
+
+Check what is still missing, without connecting to anything and without printing a value:
+
+```
+npm run staging:preflight
+```
+
+It lists each setting as ok, MISSING or INVALID (wrong port, administrator user in the application setting, swapped keys, two projects mixed). It cannot see the staging marker, the application role or the bucket's privacy; the commands check those after connecting and refuse. All staging commands read the same settings file, `.env.staging.local`, or the file named by `STAGING_ENV_FILE`.
+
 ## 6. First migration
 
 Create a folder outside the project for reports and backups, for example `D:\BabySunray-staging`. Then:
@@ -125,7 +135,7 @@ Without the settings it prints **NOT RUN — awaiting founder setup**: that is n
    The command refuses without a staging backup of this same host and database from the last 24 hours.
 3. Restore drill: `npm run backup:restore` restores a staging backup into your local empty `babysunray_restore`, exactly like a local backup (runbook, section 8).
 
-**Photos in the bucket are not in these backups.** A bucket backup command is designed (it reuses the same encrypted photo-backup format, reading from the bucket) but not built; staging photos are fictional and disposable meanwhile.
+**Photos in the bucket are not in these backups.** Back them up with `npm run media:backup:staging -- --out D:BabySunray-staging` (same encrypted `.bsmedia` format; reads the database as `babysunray_app` and the bucket; changes neither) and compare with `npm run media:verify:staging`. Both were tested against a mocked Storage only. A restore into a bucket has no command yet. `npm run backup:status -- --dir D:BabySunray-staging --max-age-hours 24` shows how fresh the newest pair is.
 
 ## Never share or commit
 

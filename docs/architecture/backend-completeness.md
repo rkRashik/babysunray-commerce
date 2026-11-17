@@ -1,9 +1,22 @@
 # Backend completeness
 
 **Status:** Draft — Founder Review
-**Purpose:** Feature by feature: what the backend implements, how it is verified, what is built but inactive, what is missing, and what blocks it. As of Gate H.45 (2026-11-17).
+**Purpose:** Feature by feature: what the backend implements, how it is verified, what is built but inactive, what is missing, and what blocks it. As of Gate H.50 (2026-11-18).
 
 **Summary.** The backend is feature-complete for the scope the founder has approved: the internal business system and every customer-facing foundation that needs no further decision exist and are tested against PostgreSQL. It is **not production-ready**: production needs founder decisions (publication rule, published policies, recovery objectives, account recovery) and infrastructure (hosting, a trusted proxy, a scheduler, durable photo storage, an off-device backup). Nothing is deployed, and only guest tracking is reachable by customers.
+
+**Two different questions.** *Backend implementation completeness* asks whether every approved capability exists in code and is tested locally. *Production readiness* asks whether it can safely serve real customers; that also needs decisions, infrastructure and a real staging run. This backend is the first, and not the second.
+
+## Completion matrix
+
+| State | What belongs here |
+|---|---|
+| **Fully implemented and locally verified** | Everything in section 1 that is not marked "not run on Supabase": Owner system, catalogue, stock, orders, COD, reports and exports, `/api/v1`, tracking, auth and audit, local backups and drills, maintenance and its backlog report, backup freshness check (`backup:status`), hosted-backup logic against mocks |
+| **Implemented, awaiting real staging verification** | Supabase pool behaviour, `babysunray_app` grants and the privilege audit on Supabase, the Storage adapter and the staging photo commands against a real bucket, the staging migration and backup commands, Data API refusal, role-level statement timeout through the pooler. **REAL SUPABASE STAGING: NOT RUN — AWAITING FOUNDER CONFIGURATION** |
+| **Implemented but intentionally disabled** | Product publication (`APPROVED_PUBLICATION_RULE` is `null`), published-only catalogue, quote and guest checkout (unrouted), the public photo route (routed, answers `503` before touching data), Supabase as photo store, HTTP maintenance (off without a secret), hosted photo restore (function only, no command) |
+| **Still missing technical implementation** | A production migration and backup procedure, a bucket restore command (blocked below), per-client limits, a scheduler adapter, a caching policy for photos, Office screens for the audit and statement check |
+| **Blocked by founder decisions** | Section 4 |
+| **Blocked by production infrastructure** | Section 5 |
 
 "Verified" means automated tests in this repository ([testing.md](../testing.md)); no test covers production hosting, real data or real users.
 
@@ -24,8 +37,12 @@
 | Anonymous-load protection: bulkheads per process (anonymous reads, checkout, `/api/auth`), storewide checkout limit, streamed body limits | `src/modules/rate-limit` (Gate H.40; `/api/auth` added after the H.42 review) | bulkhead and auth-route unit tests; saturation tests per transport |
 | Database resilience: connection and statement limits, dropped idle connections, locked migrations | `src/db/client.ts`, `migrate-verified.mts` (Gate H.41) | connection and migrate-verified tests (each fails without its fix) |
 | Maintenance: expiry, expired sessions (audited), stale rate-limit windows, integrity checks | `npm run maintenance:run` | `maintenance.integration.test.ts`: concurrent runs, target guard |
-| Hosting compatibility, tested locally only: pool settings for a persistent server, serverless functions (default 2 connections, 1 to 20) and a transaction-mode pooler (TLS rules, no URL overrides, bulkheads sized from the pool, one shared anonymous bulkhead below 5), hosted configuration checks | `src/db/pool-settings.ts`, `src/db/client.ts`, `src/config/hosted.ts` (Gates H.44, H.45), [infrastructure.md](../operations/infrastructure.md) | pool-settings, hosted-config, `hosting-infrastructure` and `pool-one` integration tests: the last unit goes to one of eight simultaneous orders under the serverless and pooler settings; the main paths complete on a pool of ONE connection (no nested connection use; a control proves the check works). Not tested against Supabase or Vercel |
+| Hosting compatibility, tested locally only: pool settings for a persistent server, serverless functions (default 2 connections, 1 to 20) and a transaction-mode pooler (TLS rules, no URL overrides, bulkheads sized from the pool, separate sign-in bulkhead and one shared anonymous bulkhead below 5), hosted configuration checks | `src/db/pool-settings.ts`, `src/db/client.ts`, `src/config/hosted.ts` (Gates H.44, H.45), [infrastructure.md](../operations/infrastructure.md) | pool-settings, hosted-config, `hosting-infrastructure` and `pool-one` integration tests: the last unit goes to one of eight simultaneous orders under the serverless and pooler settings; the main paths complete on a pool of ONE connection (no nested connection use; a control proves the check works). Not tested against Supabase or Vercel |
 | Maintenance over HTTP (off unless `MAINTENANCE_SECRET`; Bearer only, concurrent calls safe, one connection at a time, bounded, replay-safe) and liveness and readiness probes (readiness also requires a private photo bucket) | `src/api/maintenance.ts`, `runMaintenance`, `src/api/health.ts` | maintenance-http, health and integration tests: unauthorised, wrong-method, browser-origin, skipped, failed, replayed and concurrent calls; no scheduler exists |
+| Staging readiness without a project: one settings loader for every staging command (honours `STAGING_ENV_FILE`, so tests never read the founder's file), `npm run staging:preflight` (which settings are missing or wrong, no network, no values), report files created exclusively (never overwritten) and only outside the project | `scripts/staging-env.mts`, `src/db/staging-preflight.mts`, `src/db/hosted-report.mts` (Gate H.46B) | `staging-preflight` and `hosted-report` unit tests; refusals with no connection. Fixes a defect: two commands ignored `STAGING_ENV_FILE` |
+| Photo backup, verification and restore for a hosted bucket: `media:verify:staging` and `media:backup:staging` (read the staging database and bucket, change neither), the same encrypted `.bsmedia` format, one photo in memory at a time, refusal of missing, changed, damaged or truncated data; a restore function that needs an empty store and a repeated target label | `scripts/media-staging.mts`, `src/modules/media/backup.ts` (Gate H.47) | `media-hosted-backup` integration test against a mocked Storage and fictional records: backup reads only, restore into a second bucket matches, non-empty and unconfirmed targets refused, a mid-restore collision never overwrites, transient download failures retried. **No real bucket used** |
+| Backup monitoring from headers: freshness, database and photo pairing, unreadable and unfinished files, no passphrase, no deletion | `npm run backup:status`, `src/db/backup-status.mts` (Gate H.48C) | `backup-status` unit tests per failure class. Does not verify content (`backup:verify` does). Header reads no longer load a whole backup into memory |
+| Maintenance reports the work already overdue when it started (verifications, expired sessions), so a late or missed scheduler is visible; no claim that a scheduled call runs on time | `src/modules/maintenance/jobs.ts` (Gate H.48B) | `hosting-infrastructure` integration test |
 | Photo store interface with a Supabase Storage adapter (contracts checked against Supabase Storage's source: strict answers, missing bucket is an error, bounded streamed downloads, key-type headers, uploads only into a confirmed-private bucket) and published-only photo lookup | `src/modules/media/supabase-store.ts`, `provider.ts`, `public.ts` | supabase-store unit tests against a contract-following fake, and photo operations on it (replace, remove, manifest check, failed upload). No real bucket was used |
 | Hosted database security boundary: privilege script (no access for Supabase's API roles, least-privilege `babysunray_app`), read-only privilege audit, staging guards (marker, TLS, no local or production target, migration-history check, backup check) | `db/hosted/privileges.sql`, `src/db/hosted-security.mts`, `src/db/hosted-target.mts`, [ADR-0009](../adr/0009-hosted-database-security-boundary.md) | hosted-target unit and integration tests on local PostgreSQL (the audit detects an owner role, the script runs and is rolled back, a production marker and a changed migration are refused). Not run on Supabase |
 | Staging commands and suite: `db:migrate:staging`, `backup:create:staging`, `test:staging` (12 checks against a real staging project) | `scripts/migrate-staging.mts`, `scripts/backup-staging.mts`, `scripts/staging-test.mts`, `tests/staging`, [staging-setup.md](../operations/staging-setup.md) | refusals tested locally (NOT RUN with exit 2 without settings; no connection without a target). **The suite itself has not run: no staging project exists** |
@@ -38,7 +55,7 @@
 |---|---|---|
 | Product publication (publish, withdraw, append-only history) | No publication rule (I-6) is approved: `APPROVED_PUBLICATION_RULE` is `null` and the operation refuses | Founder approves I-6; a gate puts the rule in code and adds the endpoints |
 | Published-only catalogue, filters, product page, cart quote | Launch gate closed; nothing is published; not routed | The gate that opens the shop routes `src/api/public-catalogue.ts` |
-| Published-only photo serving for customers (`src/api/public-media.ts`: only photos of published products, closed gate answered first, no signed URLs) | Not routed; no product can be published | The gate that opens the shop routes it; a caching policy needs hosting |
+| Published-only photo serving for customers (`GET /api/public/media/{id}`, `src/api/public-media.ts`: only photos of published products, no signed URLs) | **Routed but closed** (Gate H.49): the real launch gate answers `503` with no body before the database or storage is touched (`public-media-route` test, mocks that throw if reached). No product can be published | The founder-approved gate that opens the shop; a caching policy needs hosting |
 | Supabase Storage as the photo store (`MEDIA_STORAGE_PROVIDER=supabase`) | No hosting or bucket exists; not verified against a real bucket | Founder chooses hosting (decision 1, 14); a staging check |
 | Guest checkout (atomic order, reservation, one-time tracking link, anonymous idempotency) | S-17 and G-7 (policies not published), launch gate closed; not routed | Published policies, hosting with per-client limits, then a gate |
 
@@ -46,8 +63,9 @@
 
 Built nowhere yet, and not blocked only by a decision:
 
-- Routing of the published photo transport (built, not routed) and a caching policy for it.
-- A production migration and backup procedure (the staging commands refuse production by design), and a photo-bucket backup command (designed, not built).
+- A caching policy for published photos (depends on hosting).
+- A production migration and backup procedure (the staging commands refuse production by design). Shared path and report helpers exist; no production command does, by design.
+- A command to restore photos into a hosted bucket: the function exists and is tested on a mock, but no command calls it until the founder approves a recovery action (and a bucket restore needs a real-bucket check first).
 - A passing run of `npm run test:staging` on a real staging project.
 - Per-client rate limits (needs a trusted client address from the proxy, decision 1).
 - A scheduler that calls the maintenance endpoint (none is activated), and a host-specific adapter if the host cannot send `POST` with the secret.
@@ -70,7 +88,7 @@ Built nowhere yet, and not blocked only by a decision:
 
 ## 5. Blocked by production infrastructure
 
-Production hosting and database host (decision 1, G-8), a trusted reverse proxy (per-client limits, real client addresses in the audit), a scheduler for `maintenance:run`, durable photo storage and serving, secret management and rotation, connection pool sizing measured on the host, an off-device backup target. No deployment exists.
+Production hosting and database host (decision 1, G-8), a trusted reverse proxy (per-client limits, real client addresses in the audit), a scheduler for `maintenance:run` (the HTTP endpoint accepts `POST` with a Bearer secret only; a host whose scheduler can only send `GET` needs a reviewed adapter once hosting is chosen), durable photo storage and serving, secret management and rotation, connection pool sizing measured on the host, an off-device backup target. No deployment exists.
 
 ## Dependency map for a frontend team
 
@@ -82,7 +100,7 @@ The backend does not depend on the current screens; any new storefront, admin pa
 | Product listing, search, filters, product page, cart | `src/modules/storefront/public-catalogue.ts` through `src/api/public-catalogue.ts` ([public-api.md](../api/public-api.md)) | Built; answers `503 shop_closed` once routed until the launch gate opens |
 | Checkout | `src/api/guest-checkout.ts` | Built; closed (S-17, G-7) |
 | Order tracking | `POST /api/track`, `POST /api/track/cancel` | Live |
-| Product images | `src/api/public-media.ts` (published products only) | Built; not routed (closed gate, decision 14) |
+| Product images | `GET /api/public/media/{id}` (published products only) | Routed; answers `503` while the launch gate is closed (decision 14) |
 | Customer accounts | none | Not built (S-14) |
 | Shop identity (name, contact, colours) | `src/config/installation.ts` (`STORE_*`) | Ready |
 

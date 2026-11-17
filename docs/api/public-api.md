@@ -15,7 +15,7 @@ The Owner API (`/api/v1`, Bearer, RFC 9457 problems) is described in [the API gu
 | Filter options | `{ kind: "facets" }` | `publicFacets` | No |
 | Price a cart | `{ kind: "quote" }` (POST) | `quotePublicCart` | No |
 | Place an order | `guestCheckoutResponse` in `src/api/guest-checkout.ts` | `placeGuestOrder` (`src/modules/orders/guest-checkout.ts`) | No |
-| Product photo | `publicMediaResponse(request, mediaId, { db, store, gate })` in `src/api/public-media.ts` | `findPublicPhoto` (`src/modules/media/public.ts`) | No |
+| Product photo | `publicMediaResponse(request, mediaId, { db, store, gate })` in `src/api/public-media.ts` | `findPublicPhoto` (`src/modules/media/public.ts`) | Yes, closed: `GET /api/public/media/{id}[?w=320]` answers `503` with no body until the launch gate opens (Gate H.49) |
 
 The handlers take `deps = { db, baseUrl, gate }`. A route file must pass the real gate (`publicCheckoutGate`); the injectable gate exists for the tests, and a route that passed an open gate would be a reviewed code change, not a setting. With the real gate, the handlers answer `503 shop_closed` (catalogue) or `503 checkout_closed` (checkout) before any database work. The tests pass an open gate to prove the behaviour behind it.
 
