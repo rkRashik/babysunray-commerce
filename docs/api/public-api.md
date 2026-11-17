@@ -15,6 +15,7 @@ The Owner API (`/api/v1`, Bearer, RFC 9457 problems) is described in [the API gu
 | Filter options | `{ kind: "facets" }` | `publicFacets` | No |
 | Price a cart | `{ kind: "quote" }` (POST) | `quotePublicCart` | No |
 | Place an order | `guestCheckoutResponse` in `src/api/guest-checkout.ts` | `placeGuestOrder` (`src/modules/orders/guest-checkout.ts`) | No |
+| Product photo | `publicMediaResponse(request, mediaId, { db, store, gate })` in `src/api/public-media.ts` | `findPublicPhoto` (`src/modules/media/public.ts`) | No |
 
 The handlers take `deps = { db, baseUrl, gate }`. A route file must pass the real gate (`publicCheckoutGate`); the injectable gate exists for the tests, and a route that passed an open gate would be a reviewed code change, not a setting. With the real gate, the handlers answer `503 shop_closed` (catalogue) or `503 checkout_closed` (checkout) before any database work. The tests pass an open gate to prove the behaviour behind it.
 
@@ -33,7 +34,7 @@ The handlers take `deps = { db, baseUrl, gate }`. A route file must pass the rea
 | product (by slug) | none | `{ slug, name, description, category, fabric, care, sizeGuidance, measurements: [{ size, point, valueMm }], photos: [{ id, width, height, alt }], variants: [{ sku, size, colour, pricePaisa, inStock }], deliveryZones: [{ code, chargePaisa }] }`, or `404 not_found` |
 | facets | none | `{ categories: [{ slug, name }], sizes, colours }`: only what published products have |
 
-Unknown or repeated parameters are refused (`400 bad_request`). `fabric` is `null` until the Owner confirmed the statement (S-11). Stock is shown only as in or out of stock. A client can still infer how many units are available by quoting larger quantities (any "is this quantity available" check allows that); whether that matters, and whether customers may see exact quantities, is a business decision. `deliveryZones` lists only zones with an active Owner-set charge. Photos are metadata only: **no public image URL exists** (photo storage and serving depend on hosting, decision 14).
+Unknown or repeated parameters are refused (`400 bad_request`). `fabric` is `null` until the Owner confirmed the statement (S-11). Stock is shown only as in or out of stock. A client can still infer how many units are available by quoting larger quantities (any "is this quantity available" check allows that); whether that matters, and whether customers may see exact quantities, is a business decision. `deliveryZones` lists only zones with an active Owner-set charge. Photos are metadata only: **no public image URL exists**. The photo transport (`GET` a photo by id, optional `?w=320|640|1280`) is built and tested but not routed; it serves only photos of published products, answers `503` while the gate is closed, and the same refusal for unknown, draft and withdrawn photos. Storage and caching depend on hosting (decision 14; [infrastructure.md](../operations/infrastructure.md)).
 
 ## Quote (POST, not routed)
 
@@ -68,6 +69,8 @@ No client address is trusted until hosting provides a trusted proxy (decision 1)
 | Flooding the database with anonymous requests | A **bulkhead** per application process (`src/modules/rate-limit/bulkhead.ts`, Gate H.40): at most 4 anonymous reads (tracking, catalogue, quote) and, separately, 2 checkout submissions use the database at once; up to 16 (checkout 8) wait at most 2 s; the rest get `503 busy` with `Retry-After: 1` at once. Invalid input is refused before it takes a slot. Better Auth's `/api/auth` endpoints, which do database work for every request including refused ones, have their own bulkhead of 2. All three together use at most 8 of the pool's 10 connections, so the Office's pages and the Owner API keep working whatever anonymous traffic does |
 | Finding orders by number or phone | Not possible: an order is reachable only by its random token |
 | Exhausting database connections | The bulkhead above; a request waits at most 10 s for a connection; PostgreSQL cancels a statement after 60 s ([runbook](../operations/runbook.md), section 4) |
+
+**Per-process, not global:** in a serverless host each instance has its own bulkheads, sized from `DATABASE_POOL_MAX`, so they protect the database but do not limit the whole shop ([infrastructure.md](../operations/infrastructure.md), section 5).
 
 **Not covered without hosting:** a per-client limit. Without a trusted client address, one client can fill the anonymous slots or use up the storewide checkout minute, and other customers then get `503 busy` or `429` until it stops; the Owner and the database are protected, other customers are not. Also missing: bot detection and flood protection in front of the application. No limit is per-minute storewide for reads, on purpose: one visitor could otherwise lock every customer out for the rest of the minute. All of these need the hosting decision and must exist before checkout opens (launch gate blocker `abuse_protection`).
 

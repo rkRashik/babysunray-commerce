@@ -4,6 +4,8 @@
 
 Commands run from the project folder. Never paste passwords, passphrases, database URLs or tracking links into chats, issues, commits or screenshots.
 
+For a hosted installation (not chosen, nothing deployed) see [infrastructure.md](infrastructure.md); this runbook describes the local installation.
+
 ## 1. Start and stop
 
 | Task | Command |

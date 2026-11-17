@@ -61,6 +61,7 @@ The machine-readable contract is served by the application at `/api/v1/openapi.j
 | Document | What it covers |
 |---|---|
 | [Operations runbook](operations/runbook.md) | Running, settings, checks, exports, stock counts, photos, backup and restore, outage procedure |
+| [Infrastructure compatibility](operations/infrastructure.md) | Hosted settings (persistent server, serverless, Supabase pooler), photo store, HTTP maintenance, health probes, what is and is not verified, founder setup |
 | [Offline sheets](operations/offline-templates.md) | Blank order, stock, COD and courier sheets for an outage |
 
 ## Project records (private: review before any public release)

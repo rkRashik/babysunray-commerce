@@ -1,7 +1,7 @@
 # Backend completeness
 
 **Status:** Draft — Founder Review
-**Purpose:** Feature by feature: what the backend implements, how it is verified, what is built but inactive, what is missing, and what blocks it. As of batch H.39–H.42 (2026-11-17).
+**Purpose:** Feature by feature: what the backend implements, how it is verified, what is built but inactive, what is missing, and what blocks it. As of Gate H.44 (2026-11-17).
 
 **Summary.** The backend is feature-complete for the scope the founder has approved: the internal business system and every customer-facing foundation that needs no further decision exist and are tested against PostgreSQL. It is **not production-ready**: production needs founder decisions (publication rule, published policies, recovery objectives, account recovery) and infrastructure (hosting, a trusted proxy, a scheduler, durable photo storage, an off-device backup). Nothing is deployed, and only guest tracking is reachable by customers.
 
@@ -24,6 +24,9 @@
 | Anonymous-load protection: bulkheads per process (anonymous reads, checkout, `/api/auth`), storewide checkout limit, streamed body limits | `src/modules/rate-limit` (Gate H.40; `/api/auth` added after the H.42 review) | bulkhead and auth-route unit tests; saturation tests per transport |
 | Database resilience: connection and statement limits, dropped idle connections, locked migrations | `src/db/client.ts`, `migrate-verified.mts` (Gate H.41) | connection and migrate-verified tests (each fails without its fix) |
 | Maintenance: expiry, expired sessions (audited), stale rate-limit windows, integrity checks | `npm run maintenance:run` | `maintenance.integration.test.ts`: concurrent runs, target guard |
+| Hosting compatibility, tested locally only: pool settings for a persistent server, serverless functions and a transaction-mode pooler (TLS rules, no URL overrides, bulkheads sized from the pool), hosted configuration checks | `src/db/pool-settings.ts`, `src/db/client.ts`, `src/config/hosted.ts` (Gate H.44), [infrastructure.md](../operations/infrastructure.md) | pool-settings, hosted-config and `hosting-infrastructure.integration.test.ts`: the last unit goes to one of eight simultaneous orders under the serverless and pooler settings; source scans for session state and named statements. Not tested against Supabase or Vercel |
+| Maintenance over HTTP (off unless `MAINTENANCE_SECRET`; Bearer only, one run at a time, bounded, replay-safe) and liveness and readiness probes | `src/api/maintenance.ts`, `runMaintenance`, `src/api/health.ts` | maintenance-http, health and integration tests: unauthorised, wrong-method, browser-origin, busy, skipped, failed and replayed calls; no scheduler exists |
+| Photo store interface with a Supabase Storage adapter (private bucket, safe keys, no overwrite, retries) and published-only photo lookup | `src/modules/media/supabase-store.ts`, `provider.ts`, `public.ts` | supabase-store unit tests and photo operations on a mocked bucket (replace, remove, manifest check, failed upload). No real bucket was used |
 | Backup and restore of the database and photos (local) | `backup:*`, `media:*`, `recovery:check` | `backup:drill`, `media:drill` on fictional data, new audit tables included |
 | Separate, rebranded installation | `npm run test:install` | clean clone of HEAD, offline install, drills, every browser test |
 
@@ -33,15 +36,18 @@
 |---|---|---|
 | Product publication (publish, withdraw, append-only history) | No publication rule (I-6) is approved: `APPROVED_PUBLICATION_RULE` is `null` and the operation refuses | Founder approves I-6; a gate puts the rule in code and adds the endpoints |
 | Published-only catalogue, filters, product page, cart quote | Launch gate closed; nothing is published; not routed | The gate that opens the shop routes `src/api/public-catalogue.ts` |
+| Published-only photo serving for customers (`src/api/public-media.ts`: only photos of published products, closed gate answered first, no signed URLs) | Not routed; no product can be published | The gate that opens the shop routes it; a caching policy needs hosting |
+| Supabase Storage as the photo store (`MEDIA_STORAGE_PROVIDER=supabase`) | No hosting or bucket exists; not verified against a real bucket | Founder chooses hosting (decision 1, 14); a staging check |
 | Guest checkout (atomic order, reservation, one-time tracking link, anonymous idempotency) | S-17 and G-7 (policies not published), launch gate closed; not routed | Published policies, hosting with per-client limits, then a gate |
 
 ## 3. Missing implementation
 
 Built nowhere yet, and not blocked only by a decision:
 
-- An image route that serves published product photos (storage depends on decision 14).
+- Routing of the published photo transport (built, not routed) and a caching policy for it.
+- A hosted migration command (`DIRECT_DATABASE_URL`) and production-target photo and database backups.
 - Per-client rate limits (needs a trusted client address from the proxy, decision 1).
-- Health and readiness probes in the shape the chosen host expects.
+- A scheduler that calls the maintenance endpoint (none is activated), and a host-specific adapter if the host cannot send `POST` with the secret.
 - Office screens for the audit and the statement check (the API and the exports serve them; screens are frontend work).
 
 ## 4. Blocked by founder approval
@@ -73,7 +79,7 @@ The backend does not depend on the current screens; any new storefront, admin pa
 | Product listing, search, filters, product page, cart | `src/modules/storefront/public-catalogue.ts` through `src/api/public-catalogue.ts` ([public-api.md](../api/public-api.md)) | Built; answers `503 shop_closed` once routed until the launch gate opens |
 | Checkout | `src/api/guest-checkout.ts` | Built; closed (S-17, G-7) |
 | Order tracking | `POST /api/track`, `POST /api/track/cancel` | Live |
-| Product images | none yet | Missing (decision 14) |
+| Product images | `src/api/public-media.ts` (published products only) | Built; not routed (closed gate, decision 14) |
 | Customer accounts | none | Not built (S-14) |
 | Shop identity (name, contact, colours) | `src/config/installation.ts` (`STORE_*`) | Ready |
 
