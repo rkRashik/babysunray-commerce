@@ -5,25 +5,15 @@
 // marked staging is accepted (src/db/hosted-target.mts), over a direct or session connection with TLS. Session tokens,
 // verification tokens and rate-limit windows are left out, as in local backups. Gate H.45; Node 22.18 or newer.
 import { createHash } from "node:crypto";
-import { createReadStream, readFileSync } from "node:fs";
+import { createReadStream } from "node:fs";
 import path from "node:path";
-import { parseEnv } from "node:util";
 import pg from "pg";
 import { assertToolsMatch, backupDirectory, createBackupFile, MIN_PASSPHRASE, verifyBackupFile } from "../src/db/backup.mts";
 import { assertNotLocalDatabase, assertStagingTarget, parseStagingUrl } from "../src/db/hosted-target.mts";
+import { readStagingEnv } from "./staging-env.mts";
 import { askHidden, assertInteractiveTerminal } from "./prompt.mts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
-
-function readEnv(): Record<string, string | undefined> {
-  let file: Record<string, string | undefined> = {};
-  try {
-    file = parseEnv(readFileSync(path.join(ROOT, ".env.staging.local"), "utf8"));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-  return { ...file, ...Object.fromEntries(Object.entries(process.env).filter(([, v]) => v)) };
-}
 
 async function sha256(file: string): Promise<string> {
   const hash = createHash("sha256");
@@ -32,7 +22,7 @@ async function sha256(file: string): Promise<string> {
 }
 
 async function main(): Promise<void> {
-  const env = readEnv();
+  const env = readStagingEnv();
   const outIndex = process.argv.indexOf("--out");
   const dir = await backupDirectory(outIndex > 0 ? process.argv[outIndex + 1] : undefined, ROOT);
   const conn = parseStagingUrl(env, "STAGING_MIGRATION_DATABASE_URL", { pooled: false });

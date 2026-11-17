@@ -4,9 +4,8 @@
 // a missing setup is never a pass. With them it first refuses anything that is not a hosted, staging-marked database
 // distinct from the local ones; the suite then checks again inside (tests/staging/global-setup.ts). Gate H.45.
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import path from "node:path";
-import { parseEnv } from "node:util";
+import { readStagingEnv } from "./staging-env.mts";
 import { assertNotLocalDatabase, parseStagingUrl } from "../src/db/hosted-target.mts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -19,18 +18,8 @@ export const REQUIRED = [
   "STAGING_STORAGE_BUCKET",
 ];
 
-function readFile(): Record<string, string | undefined> {
-  const file = process.env.STAGING_ENV_FILE ?? path.join(ROOT, ".env.staging.local");
-  try {
-    return parseEnv(readFileSync(file, "utf8"));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
-    throw new Error("The staging settings file could not be read.");
-  }
-}
-
 function main(): number {
-  const env = { ...readFile(), ...Object.fromEntries(Object.entries(process.env).filter(([, v]) => v)) };
+  const env = readStagingEnv();
   const missing = REQUIRED.filter((name) => !env[name]);
   if (missing.length) {
     console.log("NOT RUN — awaiting founder setup.");

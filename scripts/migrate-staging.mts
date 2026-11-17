@@ -12,28 +12,18 @@
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { parseEnv } from "node:util";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
 import { auditPrivileges } from "../src/db/hosted-security.mts";
 import { APP_ROLE, applicationTableCount, assertNotLocalDatabase, assertRecentBackup, assertStagingTarget, migrationState, parseStagingUrl } from "../src/db/hosted-target.mts";
 import { MIGRATION_LOCK } from "../src/db/migrate-verified.mts";
+import { readStagingEnv } from "./staging-env.mts";
 import { askVisible, assertInteractiveTerminal } from "./prompt.mts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const MIGRATIONS = path.join(ROOT, "drizzle");
 const PRIVILEGES = path.join(ROOT, "db", "hosted", "privileges.sql");
-
-function readEnv(): Record<string, string | undefined> {
-  let file: Record<string, string | undefined> = {};
-  try {
-    file = parseEnv(readFileSync(path.join(ROOT, ".env.staging.local"), "utf8"));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-  return { ...file, ...Object.fromEntries(Object.entries(process.env).filter(([, v]) => v)) };
-}
 
 /** Runs db/hosted/privileges.sql in its own transaction (it is idempotent). */
 async function applyPrivileges(client: pg.Client): Promise<void> {
@@ -62,7 +52,7 @@ function outsideRepository(file: string | undefined, what: string): string {
 }
 
 async function main(): Promise<void> {
-  const env = readEnv();
+  const env = readStagingEnv();
   const reportFile = outsideRepository(arg("--report"), "report file");
   if (existsSync(reportFile)) throw new Error("The report file already exists. Choose a new name; nothing was changed.");
   const firstTime = process.argv.includes("--first-time");

@@ -24,6 +24,8 @@
     "media:backup:verify": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/media-backup-verify.mts",
     "media:restore": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/media-restore.mts",
     "media:verify": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/media-verify.mts",
+    "media:verify:staging": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/media-staging.mts verify",
+    "media:backup:staging": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/media-staging.mts backup",
     "recovery:check": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/recovery-check.mts",
     "orders:expire-verification": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/expire-verification.mts",
     "maintenance:run": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/maintenance.mts",
@@ -38,6 +40,7 @@
     "test:e2e:prod": "playwright test --config playwright.prod.config.ts",
     "test:install": "playwright test --config playwright.install.config.ts",
     "test:staging": "node scripts/staging-test.mts",
+    "staging:preflight": "node scripts/staging-preflight.mts",
     "test:contract": "vitest run tests/api && vitest run --config vitest.integration.config.mts tests/db/api.integration.test.ts tests/db/api-write.integration.test.ts tests/db/api-orders.integration.test.ts"
   },
   "dependencies": {
