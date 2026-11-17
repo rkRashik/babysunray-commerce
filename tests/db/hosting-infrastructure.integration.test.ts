@@ -9,7 +9,7 @@ import type { Db } from "../../src/db/database";
 import type { Principal } from "../../src/modules/auth/principal";
 import { createProduct, createVariant } from "../../src/modules/catalogue/service";
 import { receiveStock } from "../../src/modules/inventory/service";
-import { MAINTENANCE_LOCK, MAX_RUN_MS, runMaintenance } from "../../src/modules/maintenance/jobs";
+import { MAX_RUN_MS, runMaintenance } from "../../src/modules/maintenance/jobs";
 import { mediaHealthy, verifyMediaStore } from "../../src/modules/media/manifest";
 import { removePhotoOnce, uploadPhotoOnce } from "../../src/modules/media/operations";
 import { findPublicPhoto } from "../../src/modules/media/public";
@@ -19,7 +19,7 @@ import { getOrderDetail } from "../../src/modules/orders/queries";
 import { setDeliveryZoneOnce, submitOrderOnce } from "../../src/modules/orders/operations";
 import { clearAuthState, count, createTestAuth, createVerifiedOwner } from "../support/auth";
 import { errorCodeOf, TEST_ACTOR } from "../support/fixtures";
-import { fakeSupabase } from "../support/fake-supabase";
+import { FAKE_LEGACY_SERVICE_KEY, fakeSupabase } from "../support/fake-supabase";
 import { tempMediaDir, testImage } from "../support/images";
 import { publishNow, withdrawNow } from "../support/publication";
 import { assertSafeTestDatabaseUrl, createTestDb } from "../support/test-database";
@@ -50,6 +50,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Photo records point at a throwaway folder; other test files check the whole manifest.
+  await pool?.query("delete from product_media where product_id in (select id from products where slug like $1)", [`${tag}-%`]);
   media?.cleanup();
   await pool?.end();
 });
@@ -80,26 +82,27 @@ describe("the maintenance run", () => {
     expect(JSON.stringify(first)).not.toMatch(/Test Customer|1711|House 1/);
   });
 
-  it("is serialised: while another run holds the lock this one reports busy and changes nothing, then works", async () => {
-    const holder = await pool.connect();
+  it("needs only one connection at a time: it completes on a pool of one connection (no run-level lock held open)", async () => {
+    const single = createPool(assertSafeTestDatabaseUrl(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL), { ...poolSettingsFor(assertSafeTestDatabaseUrl(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL), { DATABASE_POOL_MAX: "1" }), connectionTimeoutMillis: 2_000 });
     try {
-      await holder.query("begin");
-      await holder.query("select pg_advisory_xact_lock($1, $2)", [...MAINTENANCE_LOCK]);
-      expect(await runMaintenance(db)).toEqual({ status: "busy" });
-      await holder.query("commit");
+      const a = await newSku(1);
+      const { value } = await submit(a.sku);
+      await overdue(value.id);
+      const report = await runMaintenance(drizzle({ client: single }));
+      expect(report.status).toBe("ok");
+      expect((await getOrderDetail(db, value.id)).orderStatus).toBe("verification_expired");
     } finally {
-      holder.release();
+      await single.end();
     }
-    expect((await runMaintenance(db)).status).toBe("ok");
   });
 
-  it("many callers at once: every call either runs or is told it is busy, and no order is expired twice", async () => {
+  it("many callers at once: every run succeeds and no order is expired twice", async () => {
     const a = await newSku(1);
     const { value } = await submit(a.sku);
     await overdue(value.id);
     const reports = await Promise.all(Array.from({ length: 6 }, () => runMaintenance(db)));
-    expect(reports.every((r) => r.status === "ok" || r.status === "busy")).toBe(true);
-    expect(reports.some((r) => r.status === "ok")).toBe(true);
+    expect(reports.map((r) => r.status)).toEqual(Array(6).fill("ok"));
+    expect(reports.reduce((n, r) => n + (r.jobs.find((j) => j.job === "verification_expiry")?.count ?? 0), 0)).toBeGreaterThanOrEqual(1);
     expect((await getOrderDetail(db, value.id)).events.filter((e) => e.event === "verification_expired")).toHaveLength(1);
     expect(await count(pool, "select count(*) from stock_reservations where order_id = $1 and status = 'active'", [value.id])).toBe(0);
   });
@@ -121,7 +124,7 @@ describe("the maintenance run", () => {
     }) as Db;
     const report = await runMaintenance(failing);
     expect(report.status).toBe("failed");
-    if (report.status === "failed" || report.status === "ok") {
+    {
       const failed = report.jobs.filter((j) => !j.ok);
       expect(failed.length).toBeGreaterThanOrEqual(2);
       expect(JSON.stringify(report)).not.toMatch(/topsecret|Failed query/);
@@ -239,7 +242,7 @@ describe("published-only photo serving", () => {
 describe("photo operations on a cloud store (Supabase Storage, mocked)", () => {
   const cloud = () => {
     const server = fakeSupabase();
-    return { server, cloudStore: supabaseMediaStore({ origin: "https://project.example.test", bucket: "photos", serviceKey: "fictional-service-key-0123456789" }, server.fetch, 0) };
+    return { server, cloudStore: supabaseMediaStore({ origin: "https://project.example.test", bucket: "photos", serviceKey: FAKE_LEGACY_SERVICE_KEY }, server.fetch, 0) };
   };
 
   it("upload, replacement and removal keep records and objects in step, and the manifest check passes", async () => {

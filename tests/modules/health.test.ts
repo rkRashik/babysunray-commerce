@@ -49,6 +49,15 @@ describe("readiness", () => {
     expect(execute).not.toHaveBeenCalled();
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).toContain("BETTER_AUTH_SECRET");
   });
+  it("a photo bucket that is not confirmed private makes the application not ready", async () => {
+    const response = await readyResponse(get(), { db: dbThat(async () => ({})), env: ENV, bucketPrivate: () => Promise.resolve(false) });
+    expect([response.status, await response.json()]).toEqual([503, { status: "not_ready" }]);
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).toContain("photo_bucket_not_private");
+    resetReadinessCache();
+    expect((await readyResponse(get(), { db: dbThat(async () => ({})), env: ENV, bucketPrivate: () => Promise.reject(new Error("down")) })).status).toBe(503);
+    resetReadinessCache();
+    expect((await readyResponse(get(), { db: dbThat(async () => ({})), env: ENV, bucketPrivate: () => Promise.resolve(true) })).status).toBe(200);
+  });
   it("a hosted database without TLS settings is not ready", async () => {
     const response = await readyResponse(get(), { db: dbThat(async () => ({})), env: { ...ENV, DATABASE_URL: "postgresql://u:p@db.example.test:5432/d" } });
     expect(response.status).toBe(503);

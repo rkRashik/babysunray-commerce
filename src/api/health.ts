@@ -2,15 +2,16 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import type { Db } from "@/db/database";
 import { hostedConfigProblems } from "@/config/hosted";
+import { configuredBucketPrivate } from "@/modules/media/provider";
 
 // Liveness and readiness for a future host (Gate H.44). Liveness: the process answers; it never touches the database,
 // so a database outage cannot make a host restart a healthy process. Readiness: the configuration is valid and the
-// database answers a trivial query within 2 s; it is what a load balancer or a deploy check should use. Anonymous
+// database answers a trivial query within 2 s, and (with Supabase Storage) the photo bucket is confirmed private; it is what a load balancer or a deploy check should use. Anonymous
 // callers get a status word only: no variable names, versions, hosts, timings or error text (those go to the server
 // log, names only). The readiness answer is cached for 5 s and shared by concurrent callers, so probing it cannot
 // become a way to load the database.
 
-export type HealthDeps = { db: () => Db; env: Record<string, string | undefined>; now?: () => number; pingTimeoutMs?: number };
+export type HealthDeps = { db: () => Db; env: Record<string, string | undefined>; now?: () => number; pingTimeoutMs?: number; bucketPrivate?: (env: Record<string, string | undefined>) => Promise<boolean> | null };
 
 const HEADERS = { "cache-control": "no-store", "x-content-type-options": "nosniff", "content-type": "application/json; charset=utf-8" };
 const answer = (status: number, word: string, request: Request) =>
@@ -47,11 +48,18 @@ async function check(deps: HealthDeps): Promise<boolean> {
     } finally {
       clearTimeout(timer);
     }
-    return true;
   } catch (error) {
     console.error(JSON.stringify({ level: "error", event: "not_ready", reason: "database", errorName: error instanceof Error ? error.name : typeof error }));
     return false;
   }
+  // A public photo bucket would expose draft photos: not ready (Gate H.45). Checked at most once a minute (provider.ts).
+  const bucket = (deps.bucketPrivate ?? configuredBucketPrivate)(deps.env);
+  const bounded = bucket && Promise.race([bucket.catch(() => false), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), deps.pingTimeoutMs ?? 3_000).unref?.())]);
+  if (bounded && !(await bounded)) {
+    console.error(JSON.stringify({ level: "error", event: "not_ready", reason: "photo_bucket_not_private" }));
+    return false;
+  }
+  return true;
 }
 
 export async function readyResponse(request: Request, deps: HealthDeps): Promise<Response> {

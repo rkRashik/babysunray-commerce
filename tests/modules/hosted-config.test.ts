@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { FAKE_LEGACY_SERVICE_KEY } from "../support/fake-supabase";
 import { configChecks, configReady } from "../../src/config/readiness";
 import { databaseProblems, directDatabaseProblem, hostedConfigProblems } from "../../src/config/hosted";
 
@@ -25,7 +26,7 @@ describe("hosted database settings", () => {
   it("a chosen photo store must be valid; local folders are refused in production unless allowed; unset means no photos", () => {
     expect(hostedConfigProblems({ ...hosted, MEDIA_STORAGE_PROVIDER: "supabase" }).map((p) => p.name)).toEqual(["SUPABASE_*"]);
     expect(hostedConfigProblems({ ...hosted, MEDIA_STORAGE_PROVIDER: "ftp" }).map((p) => p.name)).toEqual(["MEDIA_STORAGE_*"]);
-    expect(hostedConfigProblems({ ...hosted, MEDIA_STORAGE_PROVIDER: "supabase", SUPABASE_URL: "https://p.example.test", SUPABASE_STORAGE_BUCKET: "photos", SUPABASE_SERVICE_ROLE_KEY: "fictional-service-key-0123456789" })).toEqual([]);
+    expect(hostedConfigProblems({ ...hosted, MEDIA_STORAGE_PROVIDER: "supabase", SUPABASE_URL: "https://p.example.test", SUPABASE_STORAGE_BUCKET: "photos", SUPABASE_SERVICE_ROLE_KEY: FAKE_LEGACY_SERVICE_KEY })).toEqual([]);
   });
   it("the migration and backup connection may not be the transaction pooler", () => {
     expect(directDatabaseProblem({})).toBeNull();
