@@ -31,6 +31,7 @@
     "maintenance:run": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/maintenance.mts",
     "backup:create": "node scripts/backup-create.mts",
     "backup:verify": "node scripts/backup-verify.mts",
+    "backup:status": "node scripts/backup-status.mts",
     "backup:restore": "node scripts/backup-restore.mts",
     "backup:create:staging": "node scripts/backup-staging.mts",
     "backup:drill": "vitest run --config vitest.drill.config.mts tests/drill/restore-drill.drill.ts",

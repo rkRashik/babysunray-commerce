@@ -8,6 +8,7 @@
 // would carry 'babysunray:production' and is refused by every command here. No marker, no access.
 
 import { readFileSync } from "node:fs";
+import { readBackupHeader } from "./backup-status.mts";
 import { readMigrationFiles } from "drizzle-orm/migrator";
 import type { Client } from "pg";
 
@@ -152,23 +153,11 @@ export async function applicationTableCount(client: Pick<Client, "query">): Prom
   return Number((await client.query<{ n: string }>("select count(*)::text as n from pg_tables where schemaname = 'public'")).rows[0].n);
 }
 
-/** Reads a backup file's readable header (format, database, time) without its passphrase. */
+/** Reads a database backup's readable header (format, database, time, host) without its passphrase; only the header is read. */
 export function backupHeaderOf(file: string): { database: string; createdAt: string; host: string | null } {
-  let bytes: Buffer;
-  try {
-    bytes = readFileSync(file);
-  } catch {
-    throw new Error("The backup file could not be read.");
-  }
-  if (bytes.subarray(0, 8).toString("ascii") !== "BSRBAK01") throw new Error("The backup file is not a BabySunray database backup.");
-  const length = bytes.readUInt32BE(8);
-  try {
-    const header = JSON.parse(bytes.subarray(12, 12 + length).toString("utf8")) as { format?: unknown; database?: unknown; createdAt?: unknown; host?: unknown };
-    if (header.format !== "babysunray-backup" || typeof header.database !== "string" || typeof header.createdAt !== "string") throw new Error("shape");
-    return { database: header.database, createdAt: header.createdAt, host: typeof header.host === "string" ? header.host : null };
-  } catch {
-    throw new Error("The backup file's header is not readable.");
-  }
+  const header = readBackupHeader(file);
+  if (header.kind !== "database") throw new Error("The backup file's header is not readable: it is not a database backup.");
+  return { database: header.database, createdAt: header.createdAt, host: header.host };
 }
 
 /**
