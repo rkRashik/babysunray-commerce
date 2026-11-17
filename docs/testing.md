@@ -15,6 +15,7 @@ Every test uses fictional data. Database tests run only against the local `babys
 | `npm run test:e2e` | The admin panel and storefront preview in headless Chromium with Playwright, desktop and phone, including axe accessibility checks |
 | `npm run test:e2e:prod` | The same browser tests plus production smoke tests against a production build behind local HTTPS |
 | `npm run test:install` | A separate, rebranded installation from a clean clone of the committed HEAD ([installation.md](operations/installation.md), section 5) |
+| `npm run test:staging` | Twelve checks against a real, founder-created Supabase **staging** project ([staging-setup.md](operations/staging-setup.md)); without its settings it reports NOT RUN and exits 2, never a pass. Not run yet |
 | `npm run backup:drill`, `npm run media:drill` | Backup and restore rehearsals ([runbook](operations/runbook.md)) |
 | `npm run perf:bench` | Benchmark on 5,000 fictional products and 20,000 orders ([performance.md](operations/performance.md)) |
 

@@ -1,6 +1,6 @@
 # Infrastructure compatibility
 
-**Status:** Draft — Founder Review. **Purpose:** What the backend supports for a hosted installation (a Vercel-compatible Node deployment with Supabase PostgreSQL and Supabase Storage), the settings it takes, what is verified and what is not, and what the founder must set up by hand. Built in Gate H.44.
+**Status:** Draft — Founder Review. **Purpose:** What the backend supports for a hosted installation (a Vercel-compatible Node deployment with Supabase PostgreSQL and Supabase Storage), the settings it takes, what is verified and what is not, and what the founder must set up by hand. Built in Gate H.44; audited and corrected in Gate H.45 (database exposure, pool design, Storage contract, staging tooling).
 
 **Nothing is deployed and no hosting is chosen** (requirements C-1 to C-3, open decision 1, G-8). No Vercel or Supabase project, account, bucket or credential exists, and no test used one: everything below was verified against local PostgreSQL, mocked HTTP and unit tests. Whether a given plan may be used commercially, and at what cost, is a founder decision; see the plan terms (Vercel's Hobby plan is non-commercial: [terms](https://vercel.com/legal/terms), checked 2026-11-17). The launch gate stays closed and no product can be published.
 
@@ -11,7 +11,8 @@
 | Database connection | local `babysunray_dev` | direct or session connection | transaction-mode pooler |
 | `DATABASE_RUNTIME` | unset | `server` (or unset) | `serverless` |
 | `DATABASE_POOLER` | unset | `direct` (or unset) | `transaction` |
-| Pool per process | 10 | 10 (`DATABASE_POOL_MAX` 5 to 20) | 5 (`DATABASE_POOL_MAX` 5 to 20) |
+| Pool per process | 10 | 10 (`DATABASE_POOL_MAX` 1 to 20) | 2 (`DATABASE_POOL_MAX` 1 to 20) |
+| Waiting for a connection | at most 10 s | at most 10 s | at most 5 s |
 | Idle connection closed after | 10 s | 10 s | 5 s |
 | `statement_timeout` (60 s) | sent at connection start | sent at connection start | **not sent**: set on the database role (section 3) |
 | TLS to the database | off | `DATABASE_SSL=require` or `verify-full` | `DATABASE_SSL=require` or `verify-full` |
@@ -45,31 +46,45 @@ Supabase offers a direct connection, a session pooler (port 5432) and a transact
 |---|---|
 | Prepared statements | The `pg` driver names a statement only when the code gives it a `name`; none does. A unit test scans the source |
 | Session state | No session-level `SET`, advisory lock, `LISTEN` or temporary table exists outside the migration runner and the local tools, which use a direct connection. Exports use `set local` inside a transaction. A unit test scans the source |
-| Transactions and row locks | Each transaction is held on one connection by the pooler, so `FOR UPDATE`, `FOR SHARE`, `SKIP LOCKED` and transaction-scoped advisory locks (used by the maintenance run) behave as before. Tested against local PostgreSQL with the serverless and transaction-pooler pool settings: the last unit goes to exactly one of eight simultaneous orders. **Not tested against Supabase's pooler** |
-| Migrations | `npm run db:migrate` still refuses anything but local `babysunray_dev`. A hosted migration command (using `DIRECT_DATABASE_URL`, a backup first, a rollback plan) does not exist yet: a later gate |
-| Pool size | Supabase's guide says one connection per serverless function; Vercel's guide advises against a pool of one. This project's minimum is 5, because Fluid compute runs concurrent requests in one instance and the bulkheads (section 5) need room. Connections across instances add up: instances times `DATABASE_POOL_MAX` client connections to the pooler. Supabase's connection limits for a plan are **not verified** here |
+| Transactions and row locks | Each transaction is held on one connection by the pooler, so `FOR UPDATE`, `FOR SHARE`, `SKIP LOCKED` and transaction-scoped advisory locks behave as before. Tested against local PostgreSQL with the serverless and transaction-pooler pool settings: the last unit goes to exactly one of eight simultaneous orders. **Not tested against Supabase's pooler** |
+| Migrations | `npm run db:migrate` still refuses anything but local `babysunray_dev`. A hosted **staging** command exists (`npm run db:migrate:staging`, [staging-setup.md](staging-setup.md)): a direct connection with TLS, the staging marker, the typed host name, a matching history, a fresh backup, one transaction under the migration lock, then the privilege script and audit, and a report. No production command exists |
+| Pool size | Supabase's guide says one connection per serverless function, raised only with evidence of queuing; Vercel's advises against one under Fluid compute. Default 2, allowed 1 to 20. No code path holds one connection while waiting for another (`tests/db/pool-one.integration.test.ts` runs the main paths on a pool of one with a 2 s limit; a control proves the test catches nesting), so a small pool queues but never deadlocks. Capacity: section 5a |
 | TLS | `require` encrypts but does not verify the server; Supabase says so and documents `verify-full` with its CA. The founder chooses |
-| Statement limit | PostgreSQL's 60 s `statement_timeout` is sent as a connection start parameter in direct mode. Whether Supabase's pooler accepts that parameter is **not verified**, so in `transaction` mode it is not sent. The founder runs `alter role <the application role> set statement_timeout = '60s';` once on the hosted database (a connection-level setting, so it also applies through the pooler). Without it a stuck statement is not cut off |
+| Statement limit | PostgreSQL's 60 s `statement_timeout` is sent as a connection start parameter in direct mode. Supabase documents that a session `set statement_timeout` does not work through the transaction pooler ([timeouts](https://supabase.com/docs/guides/database/postgres/timeouts), read 2026-11-17), so in `transaction` mode nothing is sent and the founder sets it on the role (`alter role babysunray_app set statement_timeout = '60s'`, [staging-setup.md](staging-setup.md), step 3). Whether a role setting applies through the pooler is **not documented**; the staging suite checks it |
 | Idle connections | Closed after 5 s in serverless mode. Vercel's [guide](https://vercel.com/kb/guide/efficiently-manage-database-connection-pools-with-fluid-compute) also describes `attachDatabasePool` from `@vercel/functions` for closing idle connections before an instance is suspended. It is **not used**: it adds a dependency tied to one host; decide it at the staging check |
 
 ## 4. Product photos
 
-`MEDIA_STORAGE_PROVIDER=supabase` stores photos in a **private** Supabase Storage bucket through its REST API with the service key (`src/modules/media/supabase-store.ts`). No library was added.
+`MEDIA_STORAGE_PROVIDER=supabase` stores photos in a **private** Supabase Storage bucket through its REST API with a secret key on the server (`src/modules/media/supabase-store.ts`). No library was added. The request and error contracts were checked against Supabase Storage's own source and its official client on 2026-11-17 (domain errors arrive as HTTP 400 with the real code in the body, for example `KeyAlreadyExists` or `NoSuchKey`).
 
-- Keys are the same random names as before; only those reach a URL. The content type comes from the key's extension, objects are never overwritten, reads use the authenticated route, requests time out after 15 s, and reads, deletes and lists retry twice. A write whose answer was lost is recovered when the retry finds the same bytes.
+- Keys are the same random names as before; only those reach a URL. The content type comes from the key's extension, objects are never overwritten, reads use the authenticated route, requests time out after 15 s, and network errors, 5xx and 429 answers are retried twice. A write whose answer was lost is recovered when the retry finds the same bytes. A missing bucket is an error, never an empty store. Downloads are read as a stream and cut off at 10 MB, and must come back with the content type of their key. Every answer is validated before use. New `sb_secret_...` keys are sent only as `apikey`; a legacy service_role key also as the bearer token; publishable and anon keys are refused.
 - Images are still validated and re-encoded by the application before they are stored ([ADR-0006](../adr/0006-product-media-storage.md)); the Owner's replacement and removal rules, the manifest check and the encrypted photo backup work on the same store interface.
-- **Unpublished photos are never public.** The bucket must be private (`bucketIsPrivate()` reads its state and fails closed). The Owner Office serves a photo only to a signed-in Owner. For customers, `src/api/public-media.ts` serves a photo only when its product is published at that moment; it is built, tested and **not routed**, answers `503` while the launch gate is closed, and sets `no-store` until a caching policy exists (hosting).
-- **Not verified against a real bucket:** the adapter follows Supabase's documented Storage API (upload with `x-upsert`, authenticated download, delete, list with `search`, bucket details) but was tested only against an in-memory fake. Check it once on a staging project before relying on it.
-- The photo backup and restore commands still run against the local folder and the local development database. Backing up a bucket needs a production-target variant (a later gate); until then the bucket is not backed up by this project.
+- **Unpublished photos are never public.** The bucket must be private and unversioned: the store refuses to upload unless that was confirmed within the last minute, and readiness reports not ready otherwise (both fail closed). The Owner Office serves a photo only to a signed-in Owner. For customers, `src/api/public-media.ts` serves a photo only when its product is published at that moment; it is built, tested and **not routed**, answers `503` while the launch gate is closed, and sets `no-store` until a caching policy exists (hosting).
+- **Not verified against a real bucket:** the unit tests use an in-memory fake that follows those contracts, which is not proof. `npm run test:staging` exercises the real API (upload, duplicate, read, list, metadata, delete, private and anonymous access refused) once a staging project exists.
+- The photo backup and restore commands still run against the local folder and the local development database. A bucket backup is designed, not built: the encrypted photo-backup format already reads through the store interface, so a staging variant needs only a guarded command (a later gate). Until then the bucket is not backed up by this project.
 
 ## 5. Serverless limits
 
-- **Per-process limits do not add up to a global limit.** The bulkheads (anonymous reads, checkout, `/api/auth`) and the in-memory photo cache are per process. Each instance now sizes its bulkheads from `DATABASE_POOL_MAX` (40%, 20%, 20%, at least 1; 4, 2, 2 at 10), so one instance can never use more than 80% of its own pool. Across N instances the anonymous total is N times that. They protect the database from a flood; they are **not rate limits**.
+- **Per-process limits do not add up to a global limit.** The bulkheads (anonymous reads, checkout, `/api/auth`) and the in-memory photo cache are per process. Each instance sizes its bulkheads from `DATABASE_POOL_MAX`: from 5 connections 40%, 20% and 20% (4, 2, 2 at 10); below 5, `/api/auth` keeps its own bulkhead of 1 (the Owner's sign-in never waits behind a tracking flood) and anonymous reads and checkout share one bulkhead of max(1, P - 2); one connection stays free for the Owner's pages at 3 and 4, none at the default 2, where Owner pages queue behind at most two short anonymous requests (never refused). Across N instances the anonymous total is N times that. They protect the database from a flood; they are **not rate limits**.
 - **The storewide checkout limit and the tracking limits are stored in the database**, so they are shared by every instance.
 - **No per-client limit is claimed.** The application trusts no client address header (Better Auth is configured with `ipAddressHeaders: []`; nothing reads `X-Forwarded-For`). A per-client limit needs an address the host's proxy guarantees, plus counters shared by all instances (the database, as today). Both are decided at the staging check; until then the launch gate's `abuse_protection` blocker stands.
 - **Function time:** the maintenance route declares `maxDuration = 60`. Vercel's [duration page](https://vercel.com/docs/functions/configuring-functions/duration) (read 2026-11-17) gives 300 s as the default and, on Hobby, the maximum with Fluid compute; Pro allows more. Page routes use the host's default. Cold starts were not measured.
 - **Ephemeral disk:** nothing the application needs is kept on local disk when `MEDIA_STORAGE_PROVIDER=supabase`. The local photo folder is refused in production unless `MEDIA_LOCAL_STORAGE_IN_PRODUCTION=allow`.
 - **Sessions and cookies:** sessions are rows in the database (no cookie cache), so any instance can verify any session at once. Cookies are `Secure` for an https `BETTER_AUTH_URL` (Better Auth's behaviour, exercised by `npm run test:e2e:prod` behind a local TLS proxy); a hosted URL must be https. Origin and CSRF checks stay on. `sharp` (native) must be installable on the host: untested.
+
+## 5a. Capacity (assumptions stated)
+
+Supabase's published limits for the smallest compute sizes (Nano, the Free plan, and Micro): 60 database connections, 200 pooler clients, a pooler pool of 15 server connections per role and database ([compute and disk](https://supabase.com/docs/guides/platform/compute-and-disk), read 2026-11-17). Assuming those, `DATABASE_POOL_MAX=2` and nothing else using the pooler:
+
+| Quantity | Value |
+|---|---|
+| Client connections per warm function instance | 2 (closed after 5 s idle) |
+| Warm instances before the pooler's 200-client limit | 100; keep 80 as the planning limit |
+| Transactions running at once, whole shop | at most 15 (the pooler's pool for `babysunray_app`); more wait in the pooler |
+| Direct connections for migrations and backups | 1 each, from the founder's machine, out of the 60 the database allows (Supabase's own services also use some) |
+| Rough throughput at 10 to 20 ms per transaction | 750 to 1,500 transactions per second in theory, far above a small shop's need |
+
+Not measured: how many concurrent requests Vercel puts on one instance, Supavisor's queue time-out, and Supabase's own connection use. With many concurrent requests on one instance, all but two wait up to 5 s for a connection and then fail with a clear error (tested locally). Raise `DATABASE_POOL_MAX` only when the staging run or real logs show waiting.
 
 ## 6. Maintenance jobs
 
@@ -79,13 +94,13 @@ Supabase offers a direct connection, a session pooler (port 5432) and a transact
 |---|---|
 | Off by default | `404` unless `MAINTENANCE_SECRET` is set and strong; a weak or placeholder secret keeps it off |
 | Who | `Authorization: Bearer <secret>` only, compared in constant time; `401` otherwise. A request with an `Origin` header (a browser page) gets `403`; only `POST` is accepted; a body over 1 KiB gets `413` |
-| One run at a time | A database lock (transaction scope, so it also works through the pooler): a second caller gets `409` with `Retry-After` |
+| Concurrent calls | Allowed and safe: every job is a single statement or claims its rows with `SKIP LOCKED` and re-checks them under their own lock, so overlapping runs only find less to do. A run uses one connection at a time (H.44's run lock held a transaction open while the jobs took further connections, which waits for itself on a pool of one; removed in H.45) |
 | Replay | The jobs are idempotent; a repeated call finds nothing more to do |
 | Bounded | At most 1,000 rows per job per call; no job starts after 45 s; the rest are reported as `skipped` |
 | Reporting | `200` when everything succeeded; `500` when a job failed, a job was skipped or an integrity check found a problem. Answers and logs carry counts and error class names only |
 | Timing is never relied on | An overdue verification is also released by every new reservation and by the Owner's confirmation; a missed run leaves rows reading as expired a little longer, nothing else |
 
-Manual call (placeholders, never paste the real secret into a chat or a ticket): `curl -X POST https://<site>/api/internal/maintenance -H "Authorization: Bearer <secret>"`. If it returns `500`, read the host's logs (event `maintenance_run`), and if `integrityProblems` is above 0 follow [the runbook](runbook.md), section 4. If it returns `409`, wait a minute. If it is unreachable, run `npm run maintenance:run` against the development database, or call again later; nothing depends on it being on time.
+Manual call (placeholders, never paste the real secret into a chat or a ticket): `curl -X POST https://<site>/api/internal/maintenance -H "Authorization: Bearer <secret>"`. If it returns `500`, read the host's logs (event `maintenance_run`), and if `integrityProblems` is above 0 follow [the runbook](runbook.md), section 4. If it is unreachable, run `npm run maintenance:run` against the development database, or call again later; nothing depends on it being on time.
 
 **No scheduler is activated.** Which scheduler calls it (a host cron, GitHub Actions, a free external pinger) is a founder decision. Vercel Cron, as documented, calls with `GET` and a `CRON_SECRET` header; this endpoint accepts `POST` and `MAINTENANCE_SECRET`, so using it needs a small, reviewed adapter that was not built. GitHub's schedule is not a real-time guarantee either; nothing here assumes it is.
 
@@ -112,15 +127,9 @@ Anonymous callers get a status word only. The reason (variable names, an error c
 | Storage credentials | The service key bypasses the bucket's access rules, so it must stay server-side; it is never sent to a browser |
 | Cloud failures | A storage outage fails uploads with no record written, leaves no half-written state, and makes photo serving return an error without details; a database outage makes the application not ready |
 
-## 9. Founder: manual setup before a staging check
+## 9. Founder: manual setup
 
-Nothing here has been done. None of it is authorised by this document.
-
-1. Decide the hosting plan and its cost (open decision 1); confirm that plan's terms allow commercial use.
-2. Create the Supabase project and a **private** Storage bucket; keep the service key out of the repository and chat.
-3. On the database, create the application role and run the `statement_timeout` command from section 3.
-4. Set the environment variables from section 2 in the host's settings, not in files.
-5. Run the migrations with a hosted-capable command (a later gate), then the staging checks: readiness, a photo upload and read, a maintenance call, a concurrent-order test through the pooler, a cold-start timing.
+The staging steps are in [staging-setup.md](staging-setup.md): create a separate staging project, switch off the Data API, mark the database and create the application role, create a private bucket, collect the settings in `.env.staging.local`, run `npm run db:migrate:staging` and `npm run test:staging`. Nothing there has been done yet. Production needs the decisions below first.
 
 ## 10. Pending founder decisions
 
