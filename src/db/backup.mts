@@ -40,6 +40,8 @@ export type BackupHeader = {
   version: number;
   createdAt: string;
   database: string;
+  /** Hosted backups only (Gate H.45): the server's host name, so a backup cannot be mistaken for another project's. */
+  host?: string;
   archive: "pg_dump custom format";
   pgDumpVersion: string;
   excludedTableData: string[];
@@ -83,7 +85,7 @@ async function* rechunk(input: AsyncIterable<Uint8Array>, size: number): AsyncGe
   yield pending;
 }
 
-export async function* encryptStream(input: AsyncIterable<Uint8Array>, passphrase: string, meta: Pick<BackupHeader, "createdAt" | "database" | "pgDumpVersion">): AsyncGenerator<Buffer> {
+export async function* encryptStream(input: AsyncIterable<Uint8Array>, passphrase: string, meta: Pick<BackupHeader, "createdAt" | "database" | "pgDumpVersion" | "host">): AsyncGenerator<Buffer> {
   yield* sealStream(input, passphrase, { format: "babysunray-backup", version: FORMAT_VERSION, ...meta, archive: "pg_dump custom format", excludedTableData: EXCLUDED_TABLE_DATA });
 }
 
@@ -237,13 +239,19 @@ export async function openSealed<H>(
 // child process (never an argument, so it is not in process listings); every other PG* variable is removed so
 // nothing can redirect the connection. Tools are taken from PG_BIN (a directory) or the PATH.
 
-export type Connection = { host: string; port: number; database: string; user: string; password?: string };
+/**
+ * Where the tools connect. The optional fields are for a hosted staging database (Gate H.45, scripts/backup-staging.mts):
+ * libpq TLS settings, and the schemas to dump (the application's, not the provider's own). Local backups set none.
+ */
+export type Connection = { host: string; port: number; database: string; user: string; password?: string; sslMode?: "require" | "verify-full"; sslRootCert?: string; schemas?: string[] };
 
 function childEnv(conn: Connection): NodeJS.ProcessEnv {
   const env: Record<string, string | undefined> = {};
   for (const [name, value] of Object.entries(process.env)) if (!/^PG/i.test(name)) env[name] = value;
   if (conn.password) env.PGPASSWORD = conn.password;
   env.PGCONNECT_TIMEOUT = "10";
+  if (conn.sslMode) env.PGSSLMODE = conn.sslMode;
+  if (conn.sslRootCert) env.PGSSLROOTCERT = conn.sslRootCert;
   return env as NodeJS.ProcessEnv;
 }
 
@@ -306,7 +314,15 @@ export async function assertToolsMatch(serverMajor: number): Promise<string> {
 
 /** pg_dump's custom-format archive of `conn`'s database, as a stream; `done` rejects if pg_dump fails. */
 export function dumpDatabase(conn: Connection): { archive: AsyncIterable<Uint8Array>; done: Promise<string>; stop: () => void } {
-  const args = ["--format=custom", "--compress=6", ...connectionArgs(conn), "--dbname", conn.database, ...EXCLUDED_TABLE_DATA.flatMap((t) => [`--exclude-table-data=public.${t}`])];
+  const args = [
+    "--format=custom",
+    "--compress=6",
+    ...connectionArgs(conn),
+    "--dbname",
+    conn.database,
+    ...(conn.schemas ?? []).map((schema) => `--schema=${schema}`),
+    ...EXCLUDED_TABLE_DATA.flatMap((t) => [`--exclude-table-data=public.${t}`]),
+  ];
   const { child, stdout, done } = run("pg_dump", args, conn);
   return { archive: stdout, done, stop: () => void child.kill() };
 }
@@ -364,7 +380,7 @@ export async function createBackupFile(conn: Connection, passphrase: string, fil
         }
       })();
       try {
-        for await (const chunk of encryptStream(counted, passphrase, { createdAt: new Date().toISOString(), database: conn.database, pgDumpVersion: meta.pgDumpVersion })) {
+        for await (const chunk of encryptStream(counted, passphrase, { createdAt: new Date().toISOString(), database: conn.database, pgDumpVersion: meta.pgDumpVersion, ...(conn.sslMode ? { host: conn.host } : {}) })) {
           await handle.write(chunk);
           bytes += chunk.length;
         }
