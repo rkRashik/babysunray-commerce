@@ -68,7 +68,13 @@ async function main(): Promise<void> {
   for (const c of checks) console.log(line(c));
   for (const name of conflicts) console.log(`✗ ${name}: set in the shell and differs from .env.local; the shell value wins in the app but local commands refuse it. Unset one.`);
   const databaseOk = checks.find((c) => c.name === "DATABASE_URL")?.status === "ok";
-  const database = databaseOk ? await databaseState(env) : ["- Database: not checked until DATABASE_URL is valid."];
+  // Hosted (NODE_ENV=production): the settings are validated, but this command never connects to a hosted database.
+  const database =
+    env.NODE_ENV === "production"
+      ? ["- Database: not connected to (hosted settings are validated only; check readiness at /api/health/ready on the host)."]
+      : databaseOk
+        ? await databaseState(env)
+        : ["- Database: not checked until DATABASE_URL is valid."];
   for (const l of database) console.log(l);
   const ready = configReady(checks) && conflicts.length === 0 && database.every((l) => !l.startsWith("✗"));
   console.log(ready ? "Ready: the Owner Office can start and sign-in can work." : "Not ready: fix the lines marked ✗, then run npm run config:check again.");

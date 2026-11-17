@@ -6,7 +6,16 @@
 // checkout need. Process-local: each application process has its own; no state is shared or stored.
 // shortcut: fixed sizes per process; replace with per-client limits once hosting provides a trusted client address.
 
-export const ANONYMOUS_CONCURRENCY = 4;
+import { configuredPoolMax } from "../../db/pool-settings";
+
+// Sizes follow the configured pool (DATABASE_POOL_MAX; 10 by default, so 4 + 2 + 2): 40% of it for anonymous reads and
+// 20% each for checkout and /api/auth, never fewer than 1, so at least a fifth of the pool stays free for the Owner.
+// Per process only: with several function instances each has its own limits, so the total across instances is the
+// per-instance limit times the instance count. That is protection for the database, NOT a global rate limit.
+const POOL = configuredPoolMax(process.env);
+const share = (fraction: number) => Math.max(1, Math.floor(POOL * fraction));
+
+export const ANONYMOUS_CONCURRENCY = share(0.4);
 export const ANONYMOUS_QUEUE = 16;
 export const ANONYMOUS_WAIT_MS = 2_000;
 
@@ -57,13 +66,13 @@ export const anonymousDatabaseWork: Bulkhead = createBulkhead(ANONYMOUS_CONCURRE
  * The (unrouted) guest checkout's own, smaller bulkhead: a flood of catalogue reads cannot block ordering, nor the
  * reverse.
  */
-export const CHECKOUT_CONCURRENCY = 2;
+export const CHECKOUT_CONCURRENCY = share(0.2);
 export const anonymousCheckoutWork: Bulkhead = createBulkhead(CHECKOUT_CONCURRENCY, 8, ANONYMOUS_WAIT_MS);
 
 /**
  * Better Auth's HTTP endpoints (/api/auth). Sign-in is anonymous until it succeeds, so it cannot be told apart from a
  * flood; its own bulkhead keeps the Office's pages and the API, which verify sessions in server code rather than over
- * /api/auth, working during one. The three bulkheads together use at most 8 of the pool's 10 connections.
+ * /api/auth, working during one. The three bulkheads together use at most 80% of the pool (8 of 10 by default).
  */
-export const AUTH_CONCURRENCY = 2;
+export const AUTH_CONCURRENCY = share(0.2);
 export const authEndpointWork: Bulkhead = createBulkhead(AUTH_CONCURRENCY, ANONYMOUS_QUEUE, ANONYMOUS_WAIT_MS);
