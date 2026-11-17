@@ -21,7 +21,7 @@
 | Reports, dashboard, print views, exports (XLSX, CSV, JSON) with audit | `src/modules/reports`, `src/modules/exports` | owner-operations tests, independent XLSX reader |
 | Owner API `/api/v1` (OpenAPI 1.6.0), idempotency, body limits, per-user rate limits, no CORS | `src/api/v1` | `npm run test:contract`: every response against the document; documented equals implemented |
 | Guest tracking and cancellation (live) | `/api/track` | tracking tests: limits, bulkhead, no token in logs |
-| Anonymous-load protection: bulkhead per process, storewide checkout limit, streamed body limits | `src/modules/rate-limit` (Gate H.40) | bulkhead unit tests; saturation tests per transport |
+| Anonymous-load protection: bulkheads per process (anonymous reads, checkout, `/api/auth`), storewide checkout limit, streamed body limits | `src/modules/rate-limit` (Gate H.40; `/api/auth` added after the H.42 review) | bulkhead and auth-route unit tests; saturation tests per transport |
 | Database resilience: connection and statement limits, dropped idle connections, locked migrations | `src/db/client.ts`, `migrate-verified.mts` (Gate H.41) | connection and migrate-verified tests (each fails without its fix) |
 | Maintenance: expiry, expired sessions (audited), stale rate-limit windows, integrity checks | `npm run maintenance:run` | `maintenance.integration.test.ts`: concurrent runs, target guard |
 | Backup and restore of the database and photos (local) | `backup:*`, `media:*`, `recovery:check` | `backup:drill`, `media:drill` on fictional data, new audit tables included |

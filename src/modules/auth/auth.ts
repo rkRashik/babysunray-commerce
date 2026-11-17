@@ -58,6 +58,25 @@ const SET_AUTH_TOKEN = "set-auth-token";
 const transportOf = (headers: Headers | undefined): AuthTransport => (isBrowserRequest(headers) ? "browser" : "native");
 const bodyField = (body: unknown, name: string): unknown => (typeof body === "object" && body !== null ? (body as Record<string, unknown>)[name] : undefined);
 
+/**
+ * A session that could not be audited must not stay usable: its cookie is dropped first (and with it the Bearer
+ * token the plugin would derive), the session is deleted if the database allows, and the request is refused with a
+ * fixed error. A failed delete is logged by name only (a database error message can contain the token); the session
+ * then lives only until its expiry, with no client holding it.
+ */
+async function refuseUnauditedSession(
+  ctx: { context: { responseHeaders?: Headers; internalAdapter: { deleteSession: (token: string) => Promise<unknown> } } },
+  token: string,
+): Promise<never> {
+  ctx.context.responseHeaders?.delete("set-cookie");
+  try {
+    await ctx.context.internalAdapter.deleteSession(token);
+  } catch (error) {
+    logAuditFailure("session_refused", error);
+  }
+  throw APIError.from("INTERNAL_SERVER_ERROR", { code: "SIGN_IN_UNAVAILABLE", message: "Sign-in is not available right now. Try again later." });
+}
+
 // Browsers always send at least one of these (Sec-Fetch-* and Origin cannot be removed by page scripts).
 // Native clients send none of them.
 function isBrowserRequest(headers: Headers | undefined): boolean {
@@ -161,16 +180,25 @@ export function createAuth(db: Db, settings: AuthSettings) {
             // No unaudited session stays usable: delete it, drop its cookie (and so the Bearer token the plugin
             // would derive from it) and refuse the sign-in.
             logAuditFailure("sign_in", error);
-            await ctx.context.internalAdapter.deleteSession(created.session.token);
-            ctx.context.responseHeaders?.delete("set-cookie");
-            throw APIError.from("INTERNAL_SERVER_ERROR", { code: "SIGN_IN_UNAVAILABLE", message: "Sign-in is not available right now. Try again later." });
+            await refuseUnauditedSession(ctx, created.session.token);
           }
           return;
         }
         if (ctx.path === "/change-password" && !isAPIError(returned) && ctx.context.session) {
-          await recordPasswordChanged(db, { userId: ctx.context.session.user.id, transport, revokedOtherSessions: bodyField(ctx.body, "revokeOtherSessions") === true }).catch(
+          const userId = ctx.context.session.user.id;
+          await recordPasswordChanged(db, { userId, transport, revokedOtherSessions: bodyField(ctx.body, "revokeOtherSessions") === true }).catch(
             (error: unknown) => logAuditFailure("password_changed", error),
           );
+          // Revoking the other sessions gives this client a new one: recorded like a sign-in, and refused the same way.
+          const renewed = ctx.context.newSession;
+          if (renewed) {
+            try {
+              await recordSignIn(db, { userId, sessionId: renewed.session.id, transport, via: "password_change" });
+            } catch (error) {
+              logAuditFailure("sign_in", error);
+              await refuseUnauditedSession(ctx, renewed.session.token);
+            }
+          }
         }
       }),
     },
@@ -193,7 +221,9 @@ export function createAuth(db: Db, settings: AuthSettings) {
         // when concurrent requests end the same ones. The deletion itself never waits on or fails with the audit.
         delete: {
           after: async (session, context) => {
-            const reason = sessionEndReason(context?.path);
+            // A session found expired while another endpoint read it is an expiry, not that endpoint's action.
+            const expired = new Date(session.expiresAt).getTime() <= Date.now();
+            const reason = expired ? "expired" : sessionEndReason(context?.path);
             const byUser = !["expired", "audit_unavailable", "other"].includes(reason);
             await recordSessionEnded(db, {
               sessionId: session.id,

@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, hkdfSync, randomBytes } from "node:crypto";
 import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "../../src/db/database";
@@ -23,7 +23,9 @@ let n = 0;
 type EventRow = { id: number; event: string; actor_type: string; actor_user_id: string | null; subject_user_id: string | null; session_id: string | null; transport: string | null; subject_digest: string | null; detail: Record<string, unknown> };
 const eventsAfter = async (id: number) => (await pool.query<EventRow>("select * from auth_events where id > $1 order by id", [id])).rows;
 const lastId = async () => Number((await pool.query<{ id: string | null }>("select max(id) as id from auth_events")).rows[0].id ?? 0);
-const digestOf = (email: string) => createHmac("sha256", secret).update(`auth-event-subject:${email.trim().toLowerCase()}`).digest("hex");
+// Independently computed: HMAC-SHA256 under an HKDF-derived key, never the secret itself.
+const digestOf = (email: string) =>
+  createHmac("sha256", Buffer.from(hkdfSync("sha256", secret, "babysunray-auth-events", "failed-sign-in-subject", 32))).update(email.trim().toLowerCase()).digest("hex");
 
 async function newUser(role: "owner" | null = "owner") {
   n += 1;
@@ -179,6 +181,66 @@ describe("ended sessions", () => {
     const after = await lastId();
     expect((await call(auth, "POST", "/change-password", { body: { currentPassword: "not the password at all", newPassword: `${PASSWORD} again` }, cookie: cookieFrom(changed) || keep })).status).not.toBe(200);
     expect((await eventsAfter(after)).filter((r) => r.event === "password_changed")).toEqual([]);
+  });
+
+  it("an expired session found by another endpoint is recorded as an expiry, not as that endpoint's action", async () => {
+    const { email, userId } = await newUser();
+    const { cookie } = await signIn(auth, email, PASSWORD);
+    const [{ id: sessionId }] = (await pool.query<{ id: string }>("select id from auth_sessions where user_id = $1", [userId])).rows;
+    await pool.query("update auth_sessions set expires_at = now() - interval '1 minute' where id = $1", [sessionId]);
+    const from = await lastId();
+    expect((await call(auth, "POST", "/change-password", { body: { currentPassword: PASSWORD, newPassword: `${PASSWORD} never` }, cookie })).status).toBe(401);
+    const ended = (await eventsAfter(from)).filter((r) => r.event === "session_ended");
+    expect(ended.map((r) => [r.session_id, r.actor_type, r.actor_user_id, r.detail])).toEqual([[sessionId, "system", null, { reason: "expired" }]]);
+    expect((await eventsAfter(from)).filter((r) => r.event === "password_changed")).toEqual([]);
+  });
+
+  it("the new session a password change creates is recorded, and refused when it cannot be", async () => {
+    const { email, userId } = await newUser();
+    const first = (await signIn(auth, email, PASSWORD)).cookie;
+    const from = await lastId();
+    const changed = await call(auth, "POST", "/change-password", { body: { currentPassword: PASSWORD, newPassword: `${PASSWORD} one`, revokeOtherSessions: true }, cookie: first });
+    expect(changed.status).toBe(200);
+    const [{ id: renewed }] = (await pool.query<{ id: string }>("select id from auth_sessions where user_id = $1", [userId])).rows;
+    expect((await eventsAfter(from)).filter((r) => r.event === "sign_in").map((r) => [r.session_id, r.detail])).toEqual([[renewed, { via: "password_change" }]]);
+    // Same change while the audit cannot be written: the password changes (Better Auth commits it first), but no
+    // session survives and no cookie or token is handed out.
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const refused = await withFailingInserts(pool, "auth_events", () =>
+        call(auth, "POST", "/change-password", { body: { currentPassword: `${PASSWORD} one`, newPassword: `${PASSWORD} two`, revokeOtherSessions: true }, cookie: cookieFrom(changed) }),
+      );
+      expect(refused.status).toBe(500);
+      expect(refused.headers.getSetCookie()).toEqual([]);
+      expect(await count(pool, "select count(*) from auth_sessions where user_id = $1", [userId])).toBe(0);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("a refused sign-in whose session cannot even be deleted hands out nothing and logs no token", async () => {
+    const { email, userId } = await newUser();
+    await pool.query("create function test_refuse_session_delete() returns trigger language plpgsql as $$ begin raise exception 'injected delete failure'; end $$");
+    await pool.query("create trigger test_refuse_session_delete before delete on auth_sessions for each row execute function test_refuse_session_delete()");
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const logs = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const warns = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const response = await withFailingInserts(pool, "auth_events", () => call(auth, "POST", "/sign-in/email", { body: { email, password: PASSWORD } }));
+      expect(response.status).toBe(500);
+      expect(response.headers.getSetCookie()).toEqual([]);
+      expect(response.headers.get("set-auth-token")).toBeNull();
+      const [{ token }] = (await pool.query<{ token: string }>("select token from auth_sessions where user_id = $1", [userId])).rows;
+      const logged = [...errors.mock.calls, ...logs.mock.calls, ...warns.mock.calls].flat().map((v) => (v instanceof Error ? `${v.message} ${String(v.cause)}` : String(v))).join(" ");
+      expect(logged).toContain('"auditEvent":"session_refused"');
+      expect(logged).not.toContain(token);
+    } finally {
+      errors.mockRestore();
+      logs.mockRestore();
+      warns.mockRestore();
+      await pool.query("drop function test_refuse_session_delete() cascade");
+    }
+    await pool.query("delete from auth_sessions where user_id = $1", [userId]);
   });
 
   it("a sign-out still signs out when its audit row cannot be written, and says so in the log", async () => {

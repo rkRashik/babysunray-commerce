@@ -55,7 +55,15 @@ export const anonymousDatabaseWork: Bulkhead = createBulkhead(ANONYMOUS_CONCURRE
 
 /**
  * The (unrouted) guest checkout's own, smaller bulkhead: a flood of catalogue reads cannot block ordering, nor the
- * reverse. Together the two leave at least four of the pool's ten connections to the Owner.
+ * reverse.
  */
 export const CHECKOUT_CONCURRENCY = 2;
 export const anonymousCheckoutWork: Bulkhead = createBulkhead(CHECKOUT_CONCURRENCY, 8, ANONYMOUS_WAIT_MS);
+
+/**
+ * Better Auth's HTTP endpoints (/api/auth). Sign-in is anonymous until it succeeds, so it cannot be told apart from a
+ * flood; its own bulkhead keeps the Office's pages and the API, which verify sessions in server code rather than over
+ * /api/auth, working during one. The three bulkheads together use at most 8 of the pool's 10 connections.
+ */
+export const AUTH_CONCURRENCY = 2;
+export const authEndpointWork: Bulkhead = createBulkhead(AUTH_CONCURRENCY, ANONYMOUS_QUEUE, ANONYMOUS_WAIT_MS);

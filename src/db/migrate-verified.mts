@@ -21,6 +21,7 @@ export async function migrateVerified(client: Client, target: DatabaseTarget, mi
   try {
     await migrate(drizzle({ client }), { migrationsFolder });
   } finally {
-    await client.query("select pg_advisory_unlock($1, $2)", [...MIGRATION_LOCK]);
+    // If the connection itself failed, PostgreSQL has already released the lock; keep the original error.
+    await client.query("select pg_advisory_unlock($1, $2)", [...MIGRATION_LOCK]).catch(() => undefined);
   }
 }

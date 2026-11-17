@@ -9,6 +9,7 @@ import { expireVerifications, healthReport, integrityProblems, removeExpiredSess
 
 async function main(): Promise<void> {
   const pool = new pg.Pool({ ...sessionConfig(parseSafeDatabaseUrl(resolveDatabaseUrl(), DEV_TARGET)), max: 2 });
+  pool.on("error", (error) => console.error(`A database connection was lost (${error.name}).`));
   try {
     const client = await pool.connect();
     try {

@@ -1,5 +1,5 @@
 import "server-only";
-import { createHmac } from "node:crypto";
+import { createHmac, hkdfSync } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { type Db, pgErrorCode } from "@/db/database";
 import { authEvents } from "@/db/schema";
@@ -9,8 +9,8 @@ import { authEvents } from "@/db/schema";
 // row being deleted); nothing a request body says about a user, role or actor is used. Access changes are recorded
 // by a database trigger, the local Owner commands write their own rows in their transactions.
 //
-// Failure policy: a sign-in that cannot be recorded is refused and its new session deleted (no unaudited session
-// stays usable). An action that reduces access (sign-out, revocation) always takes effect: if its row cannot be
+// Failure policy: a new session that cannot be recorded (a sign-in, or the session a password change creates when it
+// revokes the others) is refused, its cookie dropped and the session deleted (no unaudited session stays usable). An action that reduces access (sign-out, revocation) always takes effect: if its row cannot be
 // written, the failure is logged (event name, error name and SQL state only) and the action stands. A failed sign-in
 // or a password change that cannot be recorded is logged the same way and its answer is not changed, so the audit
 // never becomes an oracle about accounts.
@@ -30,7 +30,19 @@ export function subjectDigest(secret: string, email: unknown): string | null {
   if (typeof email !== "string") return null;
   const normalized = email.trim().toLowerCase();
   if (normalized.length === 0 || normalized.length > MAX_EMAIL) return null;
-  return createHmac("sha256", secret).update(`auth-event-subject:${normalized}`).digest("hex");
+  return createHmac("sha256", subjectKey(secret)).update(normalized).digest("hex");
+}
+
+// A key of its own for the digest, derived from the installation's secret (HKDF-SHA256), so the digest never shares
+// a key with Better Auth's own uses of the secret.
+const subjectKeys = new Map<string, Buffer>();
+function subjectKey(secret: string): Buffer {
+  let key = subjectKeys.get(secret);
+  if (!key) {
+    key = Buffer.from(hkdfSync("sha256", secret, "babysunray-auth-events", "failed-sign-in-subject", 32));
+    subjectKeys.set(secret, key);
+  }
+  return key;
 }
 
 /** A failure to write an audit row: names only, never the error message (it can hold query parameters). */
@@ -40,10 +52,17 @@ export function logAuditFailure(auditEvent: string, error: unknown): void {
   );
 }
 
-export async function recordSignIn(db: Db, input: { userId: string; sessionId: string; transport: AuthTransport }): Promise<void> {
-  await db
-    .insert(authEvents)
-    .values({ event: "sign_in", actorType: "user", actorUserId: input.userId, subjectUserId: input.userId, sessionId: input.sessionId, transport: input.transport, detail: {} });
+/** A new session: a sign-in, or the replacement session a password change that revoked the others creates. */
+export async function recordSignIn(db: Db, input: { userId: string; sessionId: string; transport: AuthTransport; via?: "password_change" }): Promise<void> {
+  await db.insert(authEvents).values({
+    event: "sign_in",
+    actorType: "user",
+    actorUserId: input.userId,
+    subjectUserId: input.userId,
+    sessionId: input.sessionId,
+    transport: input.transport,
+    detail: input.via ? { via: input.via } : {},
+  });
 }
 
 export async function recordFailedSignIn(db: Db, input: { digest: string | null; transport: AuthTransport; status: number; code: unknown }): Promise<void> {

@@ -33,12 +33,12 @@ export async function removeExpiredSessions(db: Db): Promise<number> {
   return rows[0].n;
 }
 
-/** Rate-limit counters whose window ended more than an hour ago: they restart at 1 anyway, so nothing is lost. */
+/** Up to BATCH counters per table whose window ended more than an hour ago: they restart at 1 anyway. */
 export async function removeStaleRateLimitWindows(db: Db): Promise<number> {
   const { rows } = await db.execute<{ n: number }>(sql`
-    with a as (delete from api_rate_limits where window_start < now() - interval '1 hour' returning 1),
-         t as (delete from tracking_rate_limits where window_start < now() - interval '1 hour' returning 1),
-         b as (delete from auth_rate_limits where last_request < (extract(epoch from now() - interval '1 hour') * 1000)::bigint returning 1)
+    with a as (delete from api_rate_limits where ctid in (select ctid from api_rate_limits where window_start < now() - interval '1 hour' limit ${BATCH}) returning 1),
+         t as (delete from tracking_rate_limits where ctid in (select ctid from tracking_rate_limits where window_start < now() - interval '1 hour' limit ${BATCH}) returning 1),
+         b as (delete from auth_rate_limits where ctid in (select ctid from auth_rate_limits where last_request < (extract(epoch from now() - interval '1 hour') * 1000)::bigint limit ${BATCH}) returning 1)
     select ((select count(*) from a) + (select count(*) from t) + (select count(*) from b))::int as n`);
   return rows[0].n;
 }
