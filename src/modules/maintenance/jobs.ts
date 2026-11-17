@@ -93,50 +93,47 @@ export const integrityProblems = (h: HealthReport) => h.ledgerMismatch + h.reser
 // One run of every job, for a scheduler that can only call an HTTP endpoint or a script (Gate H.44). Correctness never
 // depends on it running on time: an overdue verification is also released by every new reservation and by the Owner's
 // confirmation (orders/service.ts), so a late or missed run only leaves rows that read as expired a little longer.
+//
+// No run-level lock (Gate H.45). H.44 held a transaction with an advisory lock open while the jobs used further pool
+// connections: with a pool of one connection (the serverless advice) that waits for itself until the connect timeout.
+// A lock is not needed for correctness: every job is safe to run concurrently (single statements, or SKIP LOCKED rows
+// re-checked under their own lock), so overlapping runs only find less to do. A run uses one connection at a time.
 
-/** Session-independent lock (transaction scope, so it also works through a transaction-mode pooler): one run at a time. */
-export const MAINTENANCE_LOCK = [1651725938, 3] as const;
 /** A run starts no further job after this long, so it ends inside the host's function time limit. */
 export const MAX_RUN_MS = 45_000;
 
 export type JobResult = { job: string; ok: boolean; count?: number; error?: string };
-export type MaintenanceReport =
-  | { status: "busy" }
-  | { status: "ok" | "failed"; jobs: JobResult[]; integrityProblems: number; health: HealthReport | null; skipped: string[] };
+export type MaintenanceReport = { status: "ok" | "failed"; jobs: JobResult[]; integrityProblems: number; health: HealthReport | null; skipped: string[] };
 
 /** What may be logged or returned about a failure: the error's class and SQLSTATE, never its message (it can hold query parameters). */
 const describeFailure = (error: unknown) => `${error instanceof Error ? error.name : typeof error}${pgErrorCode(error) ? ` ${pgErrorCode(error)}` : ""}`;
 
 export async function runMaintenance(db: Db, now: () => number = Date.now): Promise<MaintenanceReport> {
   const started = now();
-  return db.transaction(async (lock) => {
-    const { rows } = await lock.execute<{ ok: boolean }>(sql`select pg_try_advisory_xact_lock(${MAINTENANCE_LOCK[0]}, ${MAINTENANCE_LOCK[1]}) as ok`);
-    if (!rows[0].ok) return { status: "busy" } as const;
-    const jobs: JobResult[] = [];
-    const skipped: string[] = [];
-    const steps: [string, () => Promise<number>][] = [
-      ["verification_expiry", () => expireVerifications(db)],
-      ["expired_sessions", () => removeExpiredSessions(db)],
-      ["stale_rate_limit_windows", () => removeStaleRateLimitWindows(db)],
-    ];
-    for (const [job, work] of steps) {
-      if (now() - started > MAX_RUN_MS) {
-        skipped.push(job);
-        continue;
-      }
-      try {
-        jobs.push({ job, ok: true, count: await work() });
-      } catch (error) {
-        jobs.push({ job, ok: false, error: describeFailure(error) });
-      }
+  const jobs: JobResult[] = [];
+  const skipped: string[] = [];
+  const steps: [string, () => Promise<number>][] = [
+    ["verification_expiry", () => expireVerifications(db)],
+    ["expired_sessions", () => removeExpiredSessions(db)],
+    ["stale_rate_limit_windows", () => removeStaleRateLimitWindows(db)],
+  ];
+  for (const [job, work] of steps) {
+    if (now() - started > MAX_RUN_MS) {
+      skipped.push(job);
+      continue;
     }
-    let health: HealthReport | null = null;
     try {
-      health = await healthReport(db);
+      jobs.push({ job, ok: true, count: await work() });
     } catch (error) {
-      jobs.push({ job: "integrity_check", ok: false, error: describeFailure(error) });
+      jobs.push({ job, ok: false, error: describeFailure(error) });
     }
-    const problems = health ? integrityProblems(health) : 0;
-    return { status: jobs.every((j) => j.ok) && problems === 0 && skipped.length === 0 ? "ok" : "failed", jobs, integrityProblems: problems, health, skipped } as const;
-  });
+  }
+  let health: HealthReport | null = null;
+  try {
+    health = await healthReport(db);
+  } catch (error) {
+    jobs.push({ job: "integrity_check", ok: false, error: describeFailure(error) });
+  }
+  const problems = health ? integrityProblems(health) : 0;
+  return { status: jobs.every((j) => j.ok) && problems === 0 && skipped.length === 0 ? "ok" : "failed", jobs, integrityProblems: problems, health, skipped };
 }

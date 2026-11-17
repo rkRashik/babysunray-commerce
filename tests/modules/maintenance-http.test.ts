@@ -86,10 +86,6 @@ describe("an authorised call", () => {
     expect(await response.json()).toEqual({ status: "ok", jobs: ok.status === "ok" ? ok.jobs : [], skipped: [], integrityProblems: 0 });
     expect(run).toHaveBeenCalledTimes(1);
   });
-  it("a second call while one runs gets 409 with Retry-After", async () => {
-    const response = await maintenanceResponse(call({ headers: bearer() }), deps(async () => ({ status: "busy" })));
-    expect([response.status, response.headers.get("retry-after")]).toEqual([409, "60"]);
-  });
   it("a failed job or an integrity problem is a 500, so a scheduler can alert", async () => {
     const failed: MaintenanceReport = { status: "failed", jobs: [{ job: "expired_sessions", ok: false, error: "Error 57014" }], integrityProblems: 2, health: null, skipped: ["stale_rate_limit_windows"] };
     const response = await maintenanceResponse(call({ headers: bearer() }), deps(async () => failed));

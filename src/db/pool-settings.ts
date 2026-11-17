@@ -4,7 +4,7 @@
 //
 //   DATABASE_RUNTIME  server (default) | serverless   a long-lived Node process, or functions that may be frozen
 //   DATABASE_POOLER   direct (default) | transaction  a direct or session connection, or a transaction-mode pooler
-//   DATABASE_POOL_MAX 5..20                           connections this process may hold (default 10, serverless 5)
+//   DATABASE_POOL_MAX 1..20                           connections this process may hold (default 10, serverless 2)
 //   DATABASE_SSL      disable | require | verify-full (required for a database that is not on this machine)
 //   DATABASE_SSL_CA   PEM text of the CA certificate, for verify-full against a provider's own CA
 //
@@ -17,9 +17,12 @@
 
 type Env = Record<string, string | undefined>;
 
-export const DEFAULT_POOL_MAX = { server: 10, serverless: 5 } as const;
-/** The smallest pool the bulkheads (src/modules/rate-limit/bulkhead.ts) can share and still leave room for the Owner. */
-export const MIN_POOL_MAX = 5;
+// Serverless default 2 (Gate H.45): Supabase advises one connection per function instance, raised only with evidence of
+// queuing; Vercel advises against one under Fluid compute, where one instance serves concurrent requests. Two lets the
+// Owner keep one connection while anonymous traffic shares the other (bulkhead.ts). No code path holds one connection
+// while waiting for another (tested with a pool of 1), so 1 is allowed and never deadlocks; it only queues.
+export const DEFAULT_POOL_MAX = { server: 10, serverless: 2 } as const;
+export const MIN_POOL_MAX = 1;
 export const MAX_POOL_MAX = 20;
 
 export type SslMode = "disable" | "require" | "verify-full";
@@ -102,7 +105,8 @@ export function readPoolSettings(env: Env, host?: string): { ok: true; settings:
       idleTimeoutMillis: runtime === "serverless" ? 5_000 : 10_000,
       allowExitOnIdle: runtime === "serverless",
       statementTimeoutMillis: pooler === "transaction" ? null : 60_000,
-      connectionTimeoutMillis: 10_000,
+      // A function waiting for a connection is billed and holds its request: fail sooner there.
+      connectionTimeoutMillis: runtime === "serverless" ? 5_000 : 10_000,
       ssl: sslMode === "disable" ? false : sslMode === "require" ? { rejectUnauthorized: false } : { rejectUnauthorized: true, ...(env.DATABASE_SSL_CA ? { ca: env.DATABASE_SSL_CA } : {}) },
     },
   };
