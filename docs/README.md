@@ -47,6 +47,7 @@ The machine-readable contract is served by the application at `/api/v1/openapi.j
 | [Storefront preview](guides/storefront-preview.md) | The private bilingual shop prototype, cart and checkout simulation |
 | [Bulk catalogue import](operations/catalogue-import.md) | The import file format, rules and limits |
 | [Export formats](operations/exports.md) | Datasets, columns, types, spreadsheet safety, JSON layout |
+| [Courier statement check](operations/courier-statements.md) | The statement template and the read-only comparison with recorded COD money |
 
 ## Testing
 

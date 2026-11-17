@@ -86,6 +86,7 @@ describe("destructive reset statements", () => {
       '"public"."auth_verifications"',
       '"public"."cancellation_requests"',
       '"public"."catalogue_imports"',
+      '"public"."courier_statement_checks"',
       '"public"."delivery_zones"',
       '"public"."export_requests"',
       '"public"."guest_checkout_submissions"',

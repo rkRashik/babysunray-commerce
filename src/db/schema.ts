@@ -809,6 +809,36 @@ export const paymentEntries = pgTable(
   ],
 );
 
+// Append-only record of every courier statement check (migration 0018; src/modules/orders/statements.ts): who
+// compared which file (its SHA-256, never its content) with the recorded COD money, the counts, and the report shown
+// (order references, amounts and statuses only; no customer data). A check changes no order or payment: it is read-only
+// matching, and settlement is still recorded by hand.
+export const courierStatementChecks = pgTable(
+  "courier_statement_checks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorUserId: userRef("actor_user_id").notNull(),
+    fileSha256: text("file_sha256").notNull(),
+    rowCount: integer("row_count").notNull(),
+    matches: integer("matches").notNull(),
+    differs: integer("differs").notNull(),
+    notFound: integer("not_found").notNull(),
+    duplicates: integer("duplicates").notNull(),
+    invalid: integer("invalid").notNull(),
+    report: jsonb("report").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("courier_statement_checks_created_at_idx").on(t.createdAt),
+    check("courier_statement_checks_sha256_format", sql`${t.fileSha256} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "courier_statement_checks_counts_valid",
+      sql`${t.matches} >= 0 and ${t.differs} >= 0 and ${t.notFound} >= 0 and ${t.duplicates} >= 0 and ${t.invalid} >= 0 and ${t.rowCount} = ${t.matches} + ${t.differs} + ${t.notFound} + ${t.duplicates} + ${t.invalid}`,
+    ),
+    check("courier_statement_checks_report_object", sql`jsonb_typeof(${t.report}) = 'object'`),
+  ],
+);
+
 // Guest tracking credentials (founder rule K, S-15). Only the SHA-256 digest of the random token is stored.
 // One active link per order; a revoked link never works again. Lifetime: until 30 days after closed_at.
 export const orderTrackingTokens = pgTable(

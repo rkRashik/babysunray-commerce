@@ -45,6 +45,7 @@ describe("OpenAPI document", () => {
         "POST /orders/{orderId}/transitions",
         "POST /orders/{orderId}/cancellation-review",
         "POST /orders/{orderId}/payments",
+        "POST /cod/statement-checks",
         "POST /orders/{orderId}/rto-charge",
         "POST /orders/{orderId}/returns",
         "POST /orders/{orderId}/returns/{returnId}/steps",

@@ -34,6 +34,7 @@ const ORDER_ROUTES: Record<string, RouteModule> = {
   "/delivery-zones": await load(import("../../src/app/api/v1/delivery-zones/route")),
   "/delivery-zones/{code}": await load(import("../../src/app/api/v1/delivery-zones/[code]/route")),
   "/skus/{sku}/stock": await load(import("../../src/app/api/v1/skus/[sku]/stock/route")),
+  "/cod/statement-checks": await load(import("../../src/app/api/v1/cod/statement-checks/route")),
 };
 const openApiRoute = await import("../../src/app/api/v1/openapi.json/route");
 
@@ -274,5 +275,74 @@ describe("order API", () => {
     expect((await put({ chargePaisa: 1, active: "yes", version: zone.version })).status).toBe(400);
     const other = await call({ method: "PUT", path: "/delivery-zones/sylhet", template: "/delivery-zones/{code}", params: { code: "sylhet" }, body: { chargePaisa: 1, active: true, version: null } });
     expect(other.status).toBe(400);
+  });
+});
+
+describe("courier statement check (read-only)", () => {
+  const check = (csv: string, extra: Partial<Call> = {}) => call({ path: "/cod/statement-checks", template: "/cod/statement-checks", body: { csv }, ...extra });
+  const HEADER = "order_reference,collected_taka,deducted_taka,remitted_taka";
+
+  async function deliveredWithMoney(collected: number, settled: number, deducted: number) {
+    await configureZones();
+    const created = (await create([{ sku: await sku(1), quantity: 1 }])).body.data;
+    let version = created.version;
+    for (const action of ["confirm", "pack", "dispatch", "deliver"]) version = (await transition(created.id, action, version)).body.data.version;
+    for (const [kind, amountPaisa] of [["collected", collected], ["settled", settled], ["deducted", deducted]] as const) {
+      if (amountPaisa > 0) version = (await orderCall(created.id, "/payments", "/orders/{orderId}/payments", { kind, amountPaisa, occurredOn: dhakaToday(), version })).body.data.version;
+    }
+    return created as { id: string; reference: string; totalPaisa: number };
+  }
+
+  it("matches, differs, unknown, repeated and invalid rows; changes no order or payment; audited and replayable", async () => {
+    const a = await deliveredWithMoney(91_000, 90_000, 1_000);
+    const b = await deliveredWithMoney(91_000, 91_000, 0);
+    const before = { entries: await count(pool, "select count(*) from payment_entries"), versions: await count(pool, "select coalesce(sum(version), 0) from orders") };
+    const csv = [
+      HEADER,
+      `${a.reference},910,10,900`,
+      `${b.reference.toLowerCase()},910,25.50,884.50`,
+      "ORD-999999,100,0,100",
+      "ORD-999998,1,0,1",
+      "ORD-999998,1,0,1",
+      "not-a-reference,1,0,1",
+      `${a.reference},abc,0,0`,
+      "",
+    ].join("\r\n");
+    const k = randomUUID();
+    const first = await check(csv, { key: k });
+    expect(first.status).toBe(201);
+    const report = first.body.data;
+    expect(report.summary).toEqual({ rows: 7, matches: 1, differs: 1, notFound: 1, duplicates: 2, invalid: 2 });
+    const byLine = (line: number) => report.rows.find((r: { line: number }) => r.line === line);
+    expect(byLine(2)).toMatchObject({ reference: a.reference, status: "matches", differencePaisa: { collected: 0, deducted: 0, remitted: 0 } });
+    expect(byLine(3)).toMatchObject({ reference: b.reference, status: "differs", differencePaisa: { collected: 0, deducted: 2_550, remitted: -2_550 } });
+    expect(byLine(4)).toMatchObject({ status: "order_not_found", recorded: null });
+    expect([byLine(5).status, byLine(6).status]).toEqual(["duplicate", "duplicate"]);
+    expect(byLine(7)).toMatchObject({ status: "invalid", problems: ["reference_invalid"] });
+    expect(byLine(8)).toMatchObject({ status: "invalid", problems: ["amount_invalid:collected_taka"] });
+    expect(report.totals).toEqual({ statement: { collectedPaisa: 182_000, deductedPaisa: 3_550, remittedPaisa: 178_450 }, recorded: { collectedPaisa: 182_000, settledPaisa: 181_000, deductedPaisa: 1_000 } });
+    // No customer data in the report, and nothing changed.
+    expect(JSON.stringify(report)).not.toMatch(/Test Customer|0171|House 3/);
+    expect(await count(pool, "select count(*) from payment_entries")).toBe(before.entries);
+    expect(await count(pool, "select coalesce(sum(version), 0) from orders")).toBe(before.versions);
+    // Audited once; a retry with the same key returns the same report and records nothing more.
+    expect(await count(pool, "select count(*) from courier_statement_checks where id = $1", [report.checkId])).toBe(1);
+    const replay = await check(csv, { key: k });
+    expect(replay.response.headers.get("idempotent-replayed")).toBe("true");
+    expect(replay.body.data).toEqual(report);
+    expect(await count(pool, "select count(*) from courier_statement_checks where file_sha256 = $1", [report.fileSha256])).toBe(1);
+    expect((await check(`${HEADER}\r\nORD-2,1,0,1`, { key: k })).body.code).toBe("IDEMPOTENCY_KEY_REUSED");
+    await expect(pool.query("delete from courier_statement_checks")).rejects.toThrow(/append-only/);
+  });
+
+  it("refuses a wrong header, a broken file, oversized text, unknown fields and unauthenticated callers", async () => {
+    const before = await count(pool, "select count(*) from courier_statement_checks");
+    expect((await check("reference,amount\r\nORD-1,1")).body).toMatchObject({ status: 400, code: "VALIDATION_FAILED" });
+    expect((await check(`${HEADER}\r\n"ORD-1,1,0,1`)).status).toBe(400);
+    expect((await check("x".repeat(60_001))).status).toBe(400);
+    expect((await check(`${HEADER}\r\nORD-1,1,0,1`, { token: null })).status).toBe(401);
+    expect((await check(`${HEADER}\r\nORD-1,1,0,1`, { key: null })).body.code).toBe("IDEMPOTENCY_KEY_REQUIRED");
+    expect((await call({ path: "/cod/statement-checks", template: "/cod/statement-checks", body: { csv: HEADER, settle: true } })).status).toBe(400);
+    expect(await count(pool, "select count(*) from courier_statement_checks")).toBe(before);
   });
 });

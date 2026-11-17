@@ -7,7 +7,7 @@ The contract itself is `GET /api/v1/openapi.json` (OpenAPI 3.1, generated from `
 
 ## What exists
 
-Owner-only endpoints for the draft catalogue, physical stock and internal (Owner-assisted) orders. There are no public endpoints and no checkout, and nothing publishes a product. The table matches the OpenAPI document (`GET /api/v1/openapi.json`, version 1.5.0); a contract test checks that the documented operations are exactly the implemented ones.
+Owner-only endpoints for the draft catalogue, physical stock and internal (Owner-assisted) orders. There are no public endpoints and no checkout, and nothing publishes a product. The table matches the OpenAPI document (`GET /api/v1/openapi.json`, version 1.6.0); a contract test checks that the documented operations are exactly the implemented ones.
 
 | Endpoint | Permission | Does |
 |---|---|---|
@@ -35,6 +35,7 @@ Owner-only endpoints for the draft catalogue, physical stock and internal (Owner
 | `POST /api/v1/orders/{orderId}/inspections/{quarantineItemId}` | `stock:receive` | Restock (once) or reject a returned or RTO item |
 | `POST /api/v1/orders/{orderId}/tracking-link`, `.../tracking-link/revoke` | `orders:write` | New guest tracking link (201; token shown once); revoke it |
 | `GET /api/v1/delivery-zones`, `PUT /api/v1/delivery-zones/{code}` | `orders:read` / `settings:write` | Configured zones; set a zone's charge and active flag |
+| `POST /api/v1/cod/statement-checks` | `payments:record` | Compare a courier statement (generic CSV template) with the recorded COD money (201); read-only, audited ([courier-statements.md](../operations/courier-statements.md)) |
 
 The actor of every stock movement is the signed-in user. A request cannot name an actor, user or role; such fields are refused as unknown.
 
@@ -130,6 +131,8 @@ Version 1.3.0 added the order and delivery-zone endpoints, `reserved` and `avail
 Version 1.4.0 added product content: `category`, `fabric` (with `confirmedAt`), `care`, `sizeGuidance`, `featured`, `measurements` and `photos` (metadata only) on the product, the same content fields in `PATCH /products/{productId}`, `PUT /products/{productId}/measurements`, `GET /products/{productId}/readiness` (advisory; it publishes nothing), `GET` and `POST /categories`, and the problem code `CATEGORY_NOT_FOUND`. Only fields were added; no field was removed or changed. Photo upload and viewing are Owner Office only.
 
 Version 1.5.0 (Gate H.31–H.32) added the product `status` value `published` (no product can be published yet: no publication rule is approved, and no endpoint publishes), the `status=published` list filter, and `409 PRODUCT_NOT_EDITABLE` on `POST /products/{productId}/variants` (only a draft product gets new variants) and on `POST /products/{productId}/archive` (a published product is withdrawn first). It also added courier deductions: `kind: "deducted"` in `POST /orders/{orderId}/payments` and in the order's `payments`, and `codDeductedPaisa` on the order; settled plus deducted never exceeds collected, and `paymentStatus: "settled"` now means every collected taka is settled or recorded as deducted. A strict 1.4.0 client would notice the new status value only once products can be published, and the new payment kind once a deduction is recorded.
+
+Version 1.6.0 (Gate H.41) added `POST /cod/statement-checks`, a read-only comparison of a courier statement with the recorded COD money; it changes no order or payment.
 
 ## Testing
 

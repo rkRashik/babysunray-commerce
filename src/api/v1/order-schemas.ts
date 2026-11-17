@@ -323,3 +323,30 @@ export const toDeliveryZoneDto = (z0: DeliveryZoneRow): z.infer<typeof deliveryZ
   updatedAt: iso(z0.updatedAt),
   updatedByUserId: z0.updatedByUserId,
 });
+
+// Courier statement check (Gate H.41, 1.6.0): read-only matching of a statement against the recorded COD money.
+const statementAmounts = z.object({ collectedPaisa: paisa(), deductedPaisa: paisa(), remittedPaisa: paisa() });
+export const statementCheckRequest = z
+  .strictObject({ csv: z.string().min(1).max(60_000).meta({ description: "The statement in the template: order_reference,collected_taka,deducted_taka,remitted_taka (UTF-8 CSV, at most 1,000 rows)." }) })
+  .register(apiRegistry, { id: "StatementCheckRequest" });
+export const statementCheckSchema = z
+  .object({
+    checkId: z.uuid(),
+    checkedAt: timestamp,
+    fileSha256: z.string().regex(/^[0-9a-f]{64}$/),
+    summary: z.object({ rows: z.int().min(0), matches: z.int().min(0), differs: z.int().min(0), notFound: z.int().min(0), duplicates: z.int().min(0), invalid: z.int().min(0) }),
+    totals: z.object({ statement: statementAmounts, recorded: z.object({ collectedPaisa: paisa(), settledPaisa: paisa(), deductedPaisa: paisa() }) }),
+    rows: z.array(
+      z.object({
+        line: z.int().min(1),
+        reference: z.string().nullable(),
+        status: z.enum(["matches", "differs", "order_not_found", "duplicate", "invalid"]),
+        problems: z.array(z.string()),
+        statement: statementAmounts.nullable(),
+        recorded: z.object({ collectedPaisa: paisa(), settledPaisa: paisa(), deductedPaisa: paisa(), orderStatus: z.string(), fulfilmentStatus: z.string() }).nullable(),
+        differencePaisa: z.object({ collected: z.int(), deducted: z.int(), remitted: z.int() }).nullable(),
+      }),
+    ),
+  })
+  .register(apiRegistry, { id: "StatementCheck" });
+export const statementCheckResponseSchema = z.object({ data: statementCheckSchema }).register(apiRegistry, { id: "StatementCheckResponse" });

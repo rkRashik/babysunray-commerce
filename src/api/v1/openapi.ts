@@ -8,7 +8,7 @@ import { apiRegistry, PROBLEM_CODES, type ProblemCode } from "./schemas";
 // parameters are written out below. tests/db/api*.integration.test.ts check real responses against this
 // document, and tests/api/openapi.test.ts validates it against the OpenAPI 3.1 schema.
 
-export const API_VERSION = "1.5.0";
+export const API_VERSION = "1.6.0";
 
 const ref = (id: string) => ({ $ref: `#/components/schemas/${id}` });
 
@@ -302,6 +302,18 @@ function orderPaths() {
         ok: { status: "200", description: "The zone as it is now.", schemaId: "DeliveryZoneResponse" },
         conflict: ["VERSION_CONFLICT"],
         allow: "PUT",
+      }),
+    },
+    "/cod/statement-checks": {
+      post: write({
+        operationId: "checkCourierStatement",
+        summary: "Compare a courier statement with the recorded COD money (read-only)",
+        description:
+          "Send a statement copied into the template (columns order_reference, collected_taka, deducted_taka, remitted_taka). Each row is matched to an order by its reference and compared with the collected, settled and deducted amounts on record; repeated references, unknown orders and invalid rows are reported. Nothing is collected, settled or deducted from a statement: record each entry with POST /orders/{orderId}/payments. Each check is kept with the report it showed; a retry with the same key returns that report.",
+        permission: "payments:record",
+        request: { schemaId: "StatementCheckRequest", required: true },
+        ok: { status: "201", description: "The comparison.", schemaId: "StatementCheckResponse" },
+        allow: "POST",
       }),
     },
   };

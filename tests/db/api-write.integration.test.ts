@@ -45,6 +45,7 @@ const ROUTES: Record<string, RouteModule> = {
   "/orders/{orderId}/tracking-link/revoke": (await import("../../src/app/api/v1/orders/[orderId]/tracking-link/revoke/route")) as unknown as RouteModule,
   "/delivery-zones": (await import("../../src/app/api/v1/delivery-zones/route")) as unknown as RouteModule,
   "/delivery-zones/{code}": (await import("../../src/app/api/v1/delivery-zones/[code]/route")) as unknown as RouteModule,
+  "/cod/statement-checks": (await import("../../src/app/api/v1/cod/statement-checks/route")) as unknown as RouteModule,
 };
 const openApiRoute = await import("../../src/app/api/v1/openapi.json/route");
 const { apiPost } = await import("../../src/api/v1/http");
