@@ -19,6 +19,14 @@ export type PublicCheckoutGate = { open: false; blockers: GateBlocker[] };
 
 const POLICY_NAMES = { delivery: "delivery", returns: "return and exchange", privacy: "privacy", checkout_notices: "checkout notices" } as const;
 
+/**
+ * Whether the public shop may answer a request, decided with no data at all (so a closed shop never touches the database
+ * or storage). It asks the gate with the most closed facts, so it can only be open if the gate itself ever opens.
+ */
+export const publicShopGate = (): { open: boolean } => ({
+  open: publicCheckoutGate({ policies: { delivery: "empty", returns: "empty", privacy: "empty", checkout_notices: "empty" }, deliveryZonesConfigured: false, reviewedProducts: 0 }).open,
+});
+
 /** Why public checkout (and with it the public shop) is closed, in the order the founder would resolve them. */
 export function publicCheckoutGate(facts: LaunchFacts): PublicCheckoutGate {
   const blockers: GateBlocker[] = [];

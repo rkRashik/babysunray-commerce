@@ -6,13 +6,12 @@ import { findPublicPhoto } from "@/modules/media/public";
 import type { MediaStore } from "@/modules/media/storage";
 import { anonymousDatabaseWork, type Bulkhead } from "@/modules/rate-limit/bulkhead";
 
-// The future public photo transport (Gate H.44), prepared but NOT ROUTED: no file under src/app imports it (a unit test
-// checks), so no request reaches it. Same pattern as the catalogue and checkout transports: the gate is answered before
-// any database or storage work, and the real launch gate (src/modules/launch/gate.ts) refuses in this version. Only
-// photos of published products are served (src/modules/media/public.ts); there is no signed or guessable URL, and the
+// The public photo transport (Gate H.44), routed at /api/public/media/{id} in Gate H.49 but CLOSED: the gate is answered
+// before any database or storage work, and the real launch gate (src/modules/launch/gate.ts) refuses in this version.
+// Only photos of published products are served (src/modules/media/public.ts); there is no signed or guessable URL, and the
 // stored file is never public. `no-store` for now: a caching policy depends on hosting.
 
-export type PublicMediaDeps = { db: Db; store: () => MediaStore; gate: () => { open: boolean }; bulkhead?: Bulkhead };
+export type PublicMediaDeps = { db: () => Db; store: () => MediaStore; gate: () => { open: boolean }; bulkhead?: Bulkhead };
 
 const HEADERS = {
   "cache-control": "no-store",
@@ -32,7 +31,7 @@ export async function publicMediaResponse(request: Request, mediaId: string, dep
   const w = params.length === 1 && params[0][0] === "w" ? Number(params[0][1]) : null;
   if (params.length > 1 || (params.length === 1 && w === null) || (w !== null && !(RENDITION_WIDTHS as readonly number[]).includes(w))) return refuse(400, requestId);
   try {
-    const found = await (deps.bulkhead ?? anonymousDatabaseWork)(() => findPublicPhoto(deps.db, mediaId));
+    const found = await (deps.bulkhead ?? anonymousDatabaseWork)(() => findPublicPhoto(deps.db(), mediaId));
     if (!found.ok) return refuse(503, requestId, { "retry-after": "1" });
     const photo = found.value;
     if (!photo) return refuse(404, requestId);

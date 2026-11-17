@@ -85,7 +85,7 @@ describe("9 and 12 (photos). records and objects in step; drafts never served", 
     const check = await verifyMediaStore(db, store);
     expect([check.missing.includes(photo.storageKey), check.changed.includes(photo.storageKey)]).toEqual([false, false]);
     expect(await findPublicPhoto(db, photo.id)).toBeNull();
-    expect((await publicMediaResponse(new Request("https://staging.example.test/media/x"), photo.id, { db, store: () => store, gate: () => ({ open: true }) })).status).toBe(404);
+    expect((await publicMediaResponse(new Request("https://staging.example.test/media/x"), photo.id, { db: () => db, store: () => store, gate: () => ({ open: true }) })).status).toBe(404);
     await removePhotoOnce(db, owner, key(), { productId: product.id, mediaId: photo.id, expectedVersion: value.version }, store);
     expect(await store.read(photo.storageKey)).toBeNull();
   });

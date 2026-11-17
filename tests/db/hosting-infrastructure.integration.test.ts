@@ -182,7 +182,7 @@ describe("published-only photo serving", () => {
     const { mediaId } = await productWithPhoto();
     const s = spy();
     expect(await findPublicPhoto(db, mediaId)).toBeNull();
-    const response = await publicMediaResponse(request(), mediaId, { db, store: s.store, gate: open });
+    const response = await publicMediaResponse(request(), mediaId, { db: () => db, store: s.store, gate: open });
     expect(response.status).toBe(404);
     expect(s.reads).toEqual([]);
   });
@@ -191,14 +191,14 @@ describe("published-only photo serving", () => {
     const { productId, mediaId } = await productWithPhoto();
     await publishNow(db, owner, productId);
     const s = spy();
-    const response = await publicMediaResponse(request(), mediaId, { db, store: s.store, gate: open });
+    const response = await publicMediaResponse(request(), mediaId, { db: () => db, store: s.store, gate: open });
     expect([response.status, response.headers.get("content-type"), response.headers.get("x-content-type-options"), response.headers.get("cache-control")]).toEqual([200, "image/jpeg", "nosniff", "no-store"]);
     expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(100);
-    const small = await publicMediaResponse(request("?w=320"), mediaId, { db, store: s.store, gate: open });
+    const small = await publicMediaResponse(request("?w=320"), mediaId, { db: () => db, store: s.store, gate: open });
     expect(small.status).toBe(200);
     await withdrawNow(db, owner, productId);
     const after = spy();
-    expect((await publicMediaResponse(request(), mediaId, { db, store: after.store, gate: open })).status).toBe(404);
+    expect((await publicMediaResponse(request(), mediaId, { db: () => db, store: after.store, gate: open })).status).toBe(404);
     expect(after.reads).toEqual([]);
   });
 
@@ -207,7 +207,7 @@ describe("published-only photo serving", () => {
     await publishNow(db, owner, productId);
     const s = spy();
     const query = vi.spyOn(pool, "query");
-    const response = await publicMediaResponse(request(), mediaId, { db, store: s.store, gate: closed });
+    const response = await publicMediaResponse(request(), mediaId, { db: () => db, store: s.store, gate: closed });
     expect(response.status).toBe(503);
     expect(s.reads).toEqual([]);
     expect(query).not.toHaveBeenCalled();
@@ -218,7 +218,7 @@ describe("published-only photo serving", () => {
     const { productId, mediaId } = await productWithPhoto();
     await publishNow(db, owner, productId);
     const s = spy();
-    const deps = { db, store: s.store, gate: open };
+    const deps = { db: () => db, store: s.store, gate: open };
     for (const id of [randomUUID(), "not-a-uuid", "../../etc/passwd", `${mediaId}' or '1'='1`, ""]) expect((await publicMediaResponse(request(), id, deps)).status).toBe(404);
     expect((await publicMediaResponse(new Request("http://localhost:3000/media/x", { method: "POST" }), mediaId, deps)).status).toBe(405);
     for (const query of ["?w=999", "?w=abc", "?w=320&w=640", "?x=1"]) expect((await publicMediaResponse(request(query), mediaId, deps)).status).toBe(400);
@@ -230,11 +230,11 @@ describe("published-only photo serving", () => {
     await publishNow(db, owner, productId);
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     const broken = { ...store, read: async () => Promise.reject(new Error("connect ECONNREFUSED https://project.example.test key=secret")) } as MediaStore;
-    const response = await publicMediaResponse(request(), mediaId, { db, store: () => broken, gate: open });
+    const response = await publicMediaResponse(request(), mediaId, { db: () => db, store: () => broken, gate: open });
     expect([response.status, await response.text()]).toEqual([500, ""]);
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toMatch(/ECONNREFUSED|project\.example|secret/);
     const missing = { ...store, read: async () => null } as MediaStore;
-    expect((await publicMediaResponse(request(), mediaId, { db, store: () => missing, gate: open })).status).toBe(404);
+    expect((await publicMediaResponse(request(), mediaId, { db: () => db, store: () => missing, gate: open })).status).toBe(404);
     vi.restoreAllMocks();
   });
 });
