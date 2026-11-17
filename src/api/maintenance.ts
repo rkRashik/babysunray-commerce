@@ -30,7 +30,7 @@ export async function maintenanceResponse(request: Request, deps: MaintenanceDep
     const report = await (deps.run ?? runMaintenance)(deps.db());
     const log = { level: report.status === "ok" ? "info" : "error", event: "maintenance_run", requestId, status: report.status, ms: Date.now() - started };
     console[report.status === "ok" ? "log" : "error"](JSON.stringify(log));
-    return answer(requestId, report.status === "ok" ? 200 : 500, { status: report.status, jobs: report.jobs, skipped: report.skipped, integrityProblems: report.integrityProblems });
+    return answer(requestId, report.status === "ok" ? 200 : 500, { status: report.status, jobs: report.jobs, skipped: report.skipped, integrityProblems: report.integrityProblems, backlog: report.backlog });
   } catch (error) {
     console.error(JSON.stringify({ level: "error", event: "maintenance_failed", requestId, errorName: error instanceof Error ? error.name : typeof error }));
     return answer(requestId, 500, { status: "failed", error: "internal" });

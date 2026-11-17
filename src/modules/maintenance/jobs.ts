@@ -102,8 +102,20 @@ export const integrityProblems = (h: HealthReport) => h.ledgerMismatch + h.reser
 /** A run starts no further job after this long, so it ends inside the host's function time limit. */
 export const MAX_RUN_MS = 45_000;
 
+/** Work that was already overdue when a run started: how late the scheduler (or anything else) has been. Read-only. */
+export type Backlog = { overdueVerifications: number; oldestOverdueMinutes: number | null; expiredSessions: number };
+
+export async function maintenanceBacklog(db: Db): Promise<Backlog> {
+  const { rows } = await db.execute<Record<string, string | number | null>>(sql`select
+    (select count(*) from orders where order_status = 'pending_verification' and verification_expires_at <= now())::int as overdue_verifications,
+    (select floor(extract(epoch from now() - min(verification_expires_at)) / 60) from orders where order_status = 'pending_verification' and verification_expires_at <= now()) as oldest_minutes,
+    (select count(*) from auth_sessions where expires_at < now())::int as expired_sessions`);
+  const r = rows[0];
+  return { overdueVerifications: Number(r.overdue_verifications), oldestOverdueMinutes: r.oldest_minutes === null ? null : Number(r.oldest_minutes), expiredSessions: Number(r.expired_sessions) };
+}
+
 export type JobResult = { job: string; ok: boolean; count?: number; error?: string };
-export type MaintenanceReport = { status: "ok" | "failed"; jobs: JobResult[]; integrityProblems: number; health: HealthReport | null; skipped: string[] };
+export type MaintenanceReport = { status: "ok" | "failed"; jobs: JobResult[]; integrityProblems: number; health: HealthReport | null; skipped: string[]; backlog: Backlog | null };
 
 /** What may be logged or returned about a failure: the error's class and SQLSTATE, never its message (it can hold query parameters). */
 const describeFailure = (error: unknown) => `${error instanceof Error ? error.name : typeof error}${pgErrorCode(error) ? ` ${pgErrorCode(error)}` : ""}`;
@@ -112,6 +124,8 @@ export async function runMaintenance(db: Db, now: () => number = Date.now): Prom
   const started = now();
   const jobs: JobResult[] = [];
   const skipped: string[] = [];
+  // Measured first, so the report says how late this run was; a failed measurement never stops the jobs.
+  const backlog = await maintenanceBacklog(db).catch(() => null);
   const steps: [string, () => Promise<number>][] = [
     ["verification_expiry", () => expireVerifications(db)],
     ["expired_sessions", () => removeExpiredSessions(db)],
@@ -135,5 +149,5 @@ export async function runMaintenance(db: Db, now: () => number = Date.now): Prom
     jobs.push({ job: "integrity_check", ok: false, error: describeFailure(error) });
   }
   const problems = health ? integrityProblems(health) : 0;
-  return { status: jobs.every((j) => j.ok) && problems === 0 && skipped.length === 0 ? "ok" : "failed", jobs, integrityProblems: problems, health, skipped };
+  return { status: jobs.every((j) => j.ok) && problems === 0 && skipped.length === 0 ? "ok" : "failed", jobs, integrityProblems: problems, health, skipped, backlog };
 }

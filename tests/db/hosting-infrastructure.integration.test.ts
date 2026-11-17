@@ -74,6 +74,10 @@ describe("the maintenance run", () => {
     await overdue(value.id);
     const first = await runMaintenance(db);
     expect(first).toMatchObject({ status: "ok", integrityProblems: 0, skipped: [] });
+    // The run says how late it was: this order was overdue when it started, and nothing is overdue afterwards.
+    expect(first.backlog?.overdueVerifications).toBeGreaterThanOrEqual(1);
+    expect(first.backlog?.oldestOverdueMinutes).toBeGreaterThanOrEqual(0);
+    expect((await runMaintenance(db)).backlog?.overdueVerifications).toBe(0);
     expect(first.status === "ok" && first.jobs.find((j) => j.job === "verification_expiry")?.count).toBeGreaterThanOrEqual(1);
     expect((await getOrderDetail(db, value.id)).orderStatus).toBe("verification_expired");
     const second = await runMaintenance(db);

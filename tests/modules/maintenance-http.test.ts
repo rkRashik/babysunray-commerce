@@ -9,7 +9,7 @@ import { bearerMatches, maintenanceSecret, maintenanceSecretProblem } from "../.
 
 const SECRET = "Zq8LmW3xT9vB2nR7kD5pC1hY4gF6sJ0aEoUi";
 const ENV = { MAINTENANCE_SECRET: SECRET, BETTER_AUTH_SECRET: "k7Qm2Zp9Xv4Rt8Ws3Yb6Nc1Ld5Hf0Gj_aB" };
-const ok: MaintenanceReport = { status: "ok", jobs: [{ job: "verification_expiry", ok: true, count: 0 }], integrityProblems: 0, health: null, skipped: [] };
+const ok: MaintenanceReport = { status: "ok", jobs: [{ job: "verification_expiry", ok: true, count: 0 }], integrityProblems: 0, health: null, skipped: [], backlog: null };
 const call = (init: { method?: string; headers?: Record<string, string> } = {}) =>
   new Request("http://localhost:3000/api/internal/maintenance", { method: init.method ?? "POST", headers: init.headers });
 const bearer = (secret = SECRET) => ({ authorization: `Bearer ${secret}` });
@@ -83,11 +83,11 @@ describe("an authorised call", () => {
     const run = vi.fn(async () => ok);
     const response = await maintenanceResponse(call({ headers: bearer() }), deps(run));
     expect([response.status, response.headers.get("cache-control")]).toEqual([200, "no-store"]);
-    expect(await response.json()).toEqual({ status: "ok", jobs: ok.status === "ok" ? ok.jobs : [], skipped: [], integrityProblems: 0 });
+    expect(await response.json()).toEqual({ status: "ok", jobs: ok.status === "ok" ? ok.jobs : [], skipped: [], integrityProblems: 0, backlog: null });
     expect(run).toHaveBeenCalledTimes(1);
   });
   it("a failed job or an integrity problem is a 500, so a scheduler can alert", async () => {
-    const failed: MaintenanceReport = { status: "failed", jobs: [{ job: "expired_sessions", ok: false, error: "Error 57014" }], integrityProblems: 2, health: null, skipped: ["stale_rate_limit_windows"] };
+    const failed: MaintenanceReport = { status: "failed", jobs: [{ job: "expired_sessions", ok: false, error: "Error 57014" }], integrityProblems: 2, health: null, skipped: ["stale_rate_limit_windows"], backlog: null };
     const response = await maintenanceResponse(call({ headers: bearer() }), deps(async () => failed));
     expect([response.status, (await response.json()).integrityProblems]).toEqual([500, 2]);
   });

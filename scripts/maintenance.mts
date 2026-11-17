@@ -5,7 +5,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import { assertConnectedIdentity, DEV_TARGET, parseSafeDatabaseUrl, pinSearchPath, resolveDatabaseUrl, sessionConfig } from "../src/db/connection-guard.mts";
-import { expireVerifications, healthReport, integrityProblems, removeExpiredSessions, removeStaleRateLimitWindows } from "../src/modules/maintenance/jobs.ts";
+import { expireVerifications, maintenanceBacklog, healthReport, integrityProblems, removeExpiredSessions, removeStaleRateLimitWindows } from "../src/modules/maintenance/jobs.ts";
 
 async function main(): Promise<void> {
   const pool = new pg.Pool({ ...sessionConfig(parseSafeDatabaseUrl(resolveDatabaseUrl(), DEV_TARGET)), max: 2 });
@@ -19,6 +19,8 @@ async function main(): Promise<void> {
       client.release();
     }
     const db = drizzle({ client: pool });
+    const backlog = await maintenanceBacklog(db);
+    console.log(`Already overdue at the start: ${backlog.overdueVerifications} verification(s)${backlog.oldestOverdueMinutes === null ? "" : `, the oldest by ${backlog.oldestOverdueMinutes} minute(s)`}; ${backlog.expiredSessions} expired session(s). A large figure means this has not run on time.`);
     console.log(`Verification expiry: ${await expireVerifications(db)} order(s) expired.`);
     console.log(`Expired sessions removed (each recorded in the audit): ${await removeExpiredSessions(db)}.`);
     console.log(`Stale rate-limit windows removed: ${await removeStaleRateLimitWindows(db)}.`);
