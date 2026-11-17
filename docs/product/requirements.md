@@ -376,6 +376,17 @@ As of 16 Nov 2026. Basis labels are unchanged: building a foundation for a **P**
 | OF-5, OF-10, S-14 | Evaluated, not built | Recovery codes or email reset, Better Auth's 2FA plugin (TOTP codes can be replayed within about 90 seconds; backup codes stored encrypted, not hashed), customer identity in a separate auth instance: [ADR-0008](../adr/0008-customer-identity-recovery-and-mfa.md). |
 | OF-6 | Gap recorded | Account events (sign-in, password change, session revocation) are not audited yet; listed as remaining work. |
 
+### 9.6 Implementation status (Batch H.39–H.42)
+
+As of 17 Nov 2026. Basis labels are unchanged; nothing here opens the shop. Overview: [backend-completeness.md](../architecture/backend-completeness.md).
+
+| ID | Status | Notes |
+|---|---|---|
+| OF-6, OF-9, OF-10 | Extended | Append-only sign-in and access audit (migration 0017): sign-in, failed sign-in (keyed digest of the address only), ended sessions, password changes, the local Owner commands and every access change; an unaudited sign-in is refused. Owner export dataset. |
+| OF-8 | Extended (statement check proposed, P) | Read-only courier statement check against recorded COD money through a generic template (migration 0018); nothing is recorded from a statement. |
+| API-11, S-15 | Hardened | Per-process bulkhead for anonymous database work; per-client limits still need a trusted proxy. |
+| EN-6, K-6 | Extended | Dropped idle connections no longer stop the process; migrations hold a lock; maintenance jobs with integrity checks; the restore drill covers the new audit tables. |
+
 ## 10. Phasing (proposed)
 
 | Phase | Outcome | Basis |
@@ -439,6 +450,7 @@ Also out of scope: a separate backend server, Express, microservices, a monorepo
 | Founder instruction, batch H.21–H.24 (15 Nov 2026) | Bulk catalogue import, catalogue preparation, media backup and restore tooling, storefront preview improvements, installation configuration and rehearsal | Approves the named engineering scope only; basis labels unchanged; no publication, public checkout, hosting, backup schedule or RPO/RTO approved. |
 | Founder instruction, Gate H.30 (16 Nov 2026) | Storefront design research, a proposed hybrid concept, customer-journey review, one launch decision document | Approves the named engineering scope only; final design approval stays with the founder; no public storefront, checkout or policy approved. |
 | Founder instruction, batch H.25–H.28 (16 Nov 2026) | Inactive guest checkout service, launch gate and readiness, private policy drafts, internal product review, two storefront design concepts, performance and recovery work, launch rehearsal | Approves the named engineering scope only; basis labels unchanged; no public checkout, publication, hosting, design, policy text, RPO/RTO or customer accounts approved. |
+| Founder instruction, batch H.39–H.42 (17 Nov 2026) | Authentication audit, public API protection, courier statement matching, maintenance and resilience, verification and review | Approves the named engineering scope only; basis labels unchanged; no publication, checkout, accounts, hosting or deployment approved. |
 | Founder instruction, batch H.31–H.38 (16 Nov 2026) | Backend completion: integrity and security fixes, publication foundation, dormant customer-facing API, courier deductions, operational limits, evaluation of customer identity, recovery and 2FA | Approves the named engineering scope only; basis labels unchanged; no publication, public checkout, customer accounts, hosting or deployment approved. |
 | Founder instruction, batch H.17–H.20 (15 Nov 2026) | Order and tracking fixes, product content and readiness, local development media, an Owner-only storefront preview with cart and checkout simulation, test and readiness work | Approves the named engineering scope only; basis labels unchanged; no publication, public checkout, customer accounts, hosting or final design approved. |
 | Original BabySunray brand and business documents on the G: drive | Not read for this draft | Should be checked against sections 1 and 8 during review. |

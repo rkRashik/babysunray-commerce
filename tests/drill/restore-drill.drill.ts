@@ -14,6 +14,7 @@ import { reviewStates } from "../../src/modules/catalogue/review";
 import { createProduct, createVariant } from "../../src/modules/catalogue/service";
 import { createExport } from "../../src/modules/exports/service";
 import { placeGuestOrder } from "../../src/modules/orders/guest-checkout";
+import { checkCourierStatementOnce } from "../../src/modules/orders/statements";
 import { savePolicyDraftOnce } from "../../src/modules/policies/drafts";
 import { getStockCount } from "../../src/modules/inventory/counts";
 import { applyStockCountOnce, recordCountsOnce, startStockCountOnce } from "../../src/modules/inventory/operations";
@@ -139,6 +140,8 @@ async function seedFictionalBusiness() {
   await publishNow(db, owner, p.id); // reviewed, then published under the test-only rule
   await placeGuestOrder(db, key(), { customer: { name: "Drill Guest", phone: "01711000124", address: "House 10, Drill Road" }, deliveryZone: "dhaka_city", items: [{ sku: g.sku, quantity: 1, unitPricePaisa: 60_000 }], deliveryChargePaisa: 6_000, totalPaisa: 66_000 });
   await savePolicyDraftOnce(db, owner, key(), { kind: "delivery", expectedVersion: 0, bodyEn: "Fictional drill draft.", bodyBn: "কাল্পনিক খসড়া।" });
+  // Gate H.39 and H.41: the sign-in audit (the Owner's sign-in above wrote rows) and a courier statement check.
+  await checkCourierStatementOnce(db, owner, key(), { csv: "order_reference,collected_taka,deducted_taka,remitted_taka\r\nORD-999997,1,0,1\r\n" });
   return { bangla: "পরীক্ষামূলক রম্পার", reviewedProductId: p.id };
 }
 
@@ -220,6 +223,12 @@ it("backs up, verifies, restores into an emptied babysunray_test and finds every
     expect((await q(`select status from products where id = '${reviewedProductId}'`)).status).toBe("published");
     expect((await q(`select count(*)::int as n from product_publication_events where product_id = '${reviewedProductId}' and event = 'published'`)).n).toBe(1);
     await expect(after.query("delete from product_publication_events")).rejects.toThrow(/append-only/);
+    // The authentication audit and the courier statement checks survive, append-only, and the access trigger still fires.
+    expect((await q("select count(*)::int as n from auth_events where event = 'sign_in'")).n).toBeGreaterThan(0);
+    expect((await q("select count(*)::int as n from auth_events where event = 'access_changed'")).n).toBeGreaterThan(0);
+    expect((await q("select count(*)::int as n from courier_statement_checks where not_found = 1")).n).toBe(1);
+    for (const table of ["auth_events", "courier_statement_checks"]) await expect(after.query(`delete from ${table}`)).rejects.toThrow(/append-only/);
+    expect((await q("select count(*)::int as n from pg_trigger where tgname = 'user_access_audit' and not tgisinternal")).n).toBe(1);
     // A review stays current after the restore: the content digest does not depend on the database it is computed in.
     const { db: restoredDb, pool: restoredPool } = await createTestDb(1);
     try {

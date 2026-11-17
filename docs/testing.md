@@ -18,6 +18,8 @@ Every test uses fictional data. Database tests run only against the local `babys
 | `npm run backup:drill`, `npm run media:drill` | Backup and restore rehearsals ([runbook](operations/runbook.md)) |
 | `npm run perf:bench` | Benchmark on 5,000 fictional products and 20,000 orders ([performance.md](operations/performance.md)) |
 
+Failure behaviour that needs a real fault is tested with real ones: an injected trigger that makes an insert fail (`withFailingInserts`), a backend terminated with `pg_terminate_backend`, a session holding a row lock while other connections are proven blocked, and two migration runs at once.
+
 Tests that need a published product publish a fictional one under `TEST_PUBLICATION_RULE` (`tests/support/publication.ts`), a rule that exists only in the tests: the application has no approved publication rule, and a unit test checks that nothing routed can reach the publication services. Database test files share one database for the whole run and Vitest may change their order (failed and slow files first), so a test must not assume that another file has or has not run; run `npx vitest run --config vitest.integration.config.mts --sequence.shuffle.files` to check. (Tests inside one file may build on each other and run in order; `--sequence.shuffle` would also shuffle those.)
 
 ## 2. Database test safeguards
