@@ -1,6 +1,6 @@
 import { type Client, Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { POOL_LIMITS, poolConfig } from "../../src/db/client";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { createPool, POOL_LIMITS, poolConfig } from "../../src/db/client";
 import { assertConnectedToTestDatabase, assertSafeTestDatabaseUrl, connectTestClient, lockTestDatabase } from "../support/test-database";
 
 let client: Client;
@@ -39,6 +39,30 @@ describe("application pool limits", () => {
       const { rows } = await pool.query<{ statement_timeout: string }>("show statement_timeout");
       expect(rows[0].statement_timeout).toBe("1min");
     } finally {
+      await pool.end();
+    }
+  });
+});
+
+describe("lost connections", () => {
+  it("a connection dropped while idle is logged and replaced; the process keeps running", async () => {
+    const pool = createPool(assertSafeTestDatabaseUrl(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL));
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      await assertConnectedToTestDatabase(pool);
+      const before = (await pool.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0].pid;
+      // What a database restart does to an idle pooled connection.
+      expect((await client.query<{ ok: boolean }>("select pg_terminate_backend($1) as ok", [before])).rows[0].ok).toBe(true);
+      const deadline = Date.now() + 5_000;
+      while (!log.mock.calls.flat().join(" ").includes("db_idle_connection_lost")) {
+        if (Date.now() > deadline) throw new Error("The lost connection was not reported.");
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      expect(log.mock.calls.flat().join(" ")).toContain('"sqlState":"57P01"');
+      const after = (await pool.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0].pid;
+      expect(after).not.toBe(before);
+    } finally {
+      log.mockRestore();
       await pool.end();
     }
   });

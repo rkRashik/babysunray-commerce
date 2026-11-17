@@ -112,3 +112,37 @@ describe("migrateVerified: search_path", () => {
     expect(await search(sessionConfig(params))).toBe("public");
   });
 });
+
+describe("concurrent runs", () => {
+  // A slow probe that counts how often it ran: without the migration lock both runs read "not applied" before
+  // either commits, and both apply it.
+  const SLOW_WHEN = MARKER_WHEN + 1;
+  let slowFolder: string;
+  beforeAll(() => {
+    slowFolder = mkdtempSync(path.join(tmpdir(), "bsr-probe-slow-"));
+    mkdirSync(path.join(slowFolder, "meta"));
+    writeFileSync(
+      path.join(slowFolder, "meta", "_journal.json"),
+      JSON.stringify({ version: "7", dialect: "postgresql", entries: [{ idx: 0, version: "7", when: SLOW_WHEN, tag: "0000_probe_slow", breakpoints: true }] }),
+    );
+    writeFileSync(path.join(slowFolder, "0000_probe_slow.sql"), 'select pg_sleep(0.5);\n--> statement-breakpoint\ninsert into "probe_runs" (n) values (1);\n');
+  });
+  afterAll(async () => {
+    await client.query(`drop table if exists public.probe_runs; delete from drizzle.__drizzle_migrations where created_at = ${SLOW_WHEN};`);
+    rmSync(slowFolder, { recursive: true, force: true });
+  });
+
+  it("apply a pending migration once: the second run waits for the first, then finds nothing to do", async () => {
+    await client.query('create table "probe_runs" (n int)');
+    const [a, b] = [await connectTestClient(), await connectTestClient()];
+    try {
+      await Promise.all([migrateVerified(a, TEST_TARGET, slowFolder), migrateVerified(b, TEST_TARGET, slowFolder)]);
+    } finally {
+      await Promise.all([a.end(), b.end()]);
+    }
+    expect((await client.query("select count(*)::int as n from probe_runs")).rows[0].n).toBe(1);
+    expect((await client.query(`select count(*)::int as n from drizzle.__drizzle_migrations where created_at = ${SLOW_WHEN}`)).rows[0].n).toBe(1);
+    // The lock is released afterwards.
+    expect((await client.query("select count(*)::int as n from pg_locks where locktype = 'advisory' and classid = 1651725938 and objid = 2")).rows[0].n).toBe(0);
+  });
+});

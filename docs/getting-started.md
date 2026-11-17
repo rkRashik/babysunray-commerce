@@ -75,6 +75,7 @@ It works only in an interactive terminal, only against the local `babysunray_dev
 | `config:check` | Which settings are set and valid; database reachability and migrations; prints no values |
 | `auth:bootstrap-owner`, `auth:reset-owner-password` | Create the first admin account; reset its password on a local installation (interactive) |
 | `orders:expire-verification` | Release holds of orders past their 24-hour verification deadline (`babysunray_dev` only) |
+| `maintenance:run` | Routine maintenance and health checks (`babysunray_dev` only): verification expiry, expired sessions (audited), stale rate-limit windows, integrity checks; exits 1 if an integrity check fails ([runbook](operations/runbook.md), section 5) |
 | `media:verify` | Compare the photo records with the photo folder; read-only |
 | `media:backup`, `media:backup:verify`, `media:restore` | Encrypted photo backup, its check, restore into an empty folder (interactive) |
 | `backup:create`, `backup:verify`, `backup:restore` | Encrypted database backup, its check, restore into an empty `babysunray_restore` (interactive) |

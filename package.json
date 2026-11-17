@@ -25,6 +25,7 @@
     "media:verify": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/media-verify.mts",
     "recovery:check": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/recovery-check.mts",
     "orders:expire-verification": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/expire-verification.mts",
+    "maintenance:run": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/maintenance.mts",
     "backup:create": "node scripts/backup-create.mts",
     "backup:verify": "node scripts/backup-verify.mts",
     "backup:restore": "node scripts/backup-restore.mts",
