@@ -8,6 +8,7 @@ import { createCategoryOnce } from "../../src/modules/catalogue/operations";
 import { archiveProduct, createProduct, createVariant, deactivateVariant, updateProduct } from "../../src/modules/catalogue/service";
 import { receiveStock } from "../../src/modules/inventory/service";
 import { publicCheckoutGate } from "../../src/modules/launch/gate";
+import { createBulkhead } from "../../src/modules/rate-limit/bulkhead";
 import { setDeliveryZoneOnce } from "../../src/modules/orders/operations";
 import { getPublicProduct, listPublicProducts, publicFacets, quotePublicCart } from "../../src/modules/storefront/public-catalogue";
 import { clearAuthState, createTestAuth, createVerifiedOwner } from "../support/auth";
@@ -197,6 +198,23 @@ describe("public catalogue transport (unrouted, test harness only)", () => {
     expect((await quote("{not json")).status).toBe(400);
     expect((await quote({ lines: [], extra: 1 })).status).toBe(400);
     expect((await quote({ lines: Array.from({ length: 21 }, (_, i) => ({ sku: `S${i}`, quantity: 1 })) })).status).toBe(400);
+  });
+
+  it("when anonymous database work is saturated, answers 503 busy at once without touching the database", async () => {
+    const untouchable = new Proxy({}, { get: () => { throw new Error("the database must not be used"); } }) as unknown as Db;
+    const full = createBulkhead(1, 0, 10);
+    let release!: () => void;
+    const holder = full(() => new Promise<void>((r) => (release = r)));
+    for (const resource of [{ kind: "products" }, { kind: "product", slug: published.slug }, { kind: "facets" }] as PublicResource[]) {
+      const r = await publicCatalogueResponse(new Request(`${BASE}/shop`), resource, { db: untouchable, baseUrl: BASE, gate: open, bulkhead: full });
+      expect([r.status, r.headers.get("retry-after"), (await r.json()).error]).toEqual([503, "1", "busy"]);
+    }
+    const q = await publicCatalogueResponse(new Request(`${BASE}/shop`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ lines: [] }) }), { kind: "quote" }, { db: untouchable, baseUrl: BASE, gate: open, bulkhead: full });
+    expect(q.status).toBe(503);
+    release();
+    await holder;
+    // Invalid input is still refused before the bulkhead, so it never takes a slot.
+    expect((await publicCatalogueResponse(new Request(`${BASE}/shop?page=0`), { kind: "products" }, { db: untouchable, baseUrl: BASE, gate: open, bulkhead: full })).status).toBe(400);
   });
 
   it("an unexpected failure is generic and logs neither the query nor the cart", async () => {

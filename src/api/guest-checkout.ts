@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { type Db, pgErrorCode } from "@/db/database";
 import { DomainError } from "@/modules/domain-error";
 import { GuestCheckoutInvalid, placeGuestOrder, validateGuestCheckout } from "@/modules/orders/guest-checkout";
+import { anonymousCheckoutWork, type Bulkhead } from "@/modules/rate-limit/bulkhead";
 import { consumePublicLimit } from "@/modules/rate-limit/service";
 import { ApiProblem, readBody } from "./v1/http";
 
@@ -16,7 +17,7 @@ import { ApiProblem, readBody } from "./v1/http";
 // fixed messages only, never echoed input. The tracking token is in the first success answer only and is never
 // logged; errors log the error name and SQL state only.
 
-export type CheckoutDeps = { db: Db; baseUrl: string; gate: () => { open: boolean } };
+export type CheckoutDeps = { db: Db; baseUrl: string; gate: () => { open: boolean }; bulkhead?: Bulkhead };
 
 const HEADERS = {
   "cache-control": "no-store",
@@ -55,7 +56,7 @@ export async function guestCheckoutResponse(request: Request, deps: CheckoutDeps
 }
 
 async function respond(request: Request, deps: CheckoutDeps, requestId: string): Promise<Response> {
-  if (request.method !== "POST") return refusal(405, "method_not_allowed", "Use POST.");
+  if (request.method !== "POST") return answer(405, { error: "method_not_allowed", message: "Use POST." }, { allow: "POST" });
   if (!deps.gate().open) return refusal(503, "checkout_closed", "Online ordering is not open yet. Please contact the shop to order.");
   if (request.headers.get("origin") !== deps.baseUrl) return refusal(403, "forbidden", "This request is not allowed.");
   if (!JSON_TYPE.test(request.headers.get("content-type") ?? "")) return refusal(415, "unsupported_media_type", "Send the order as application/json (UTF-8).");
@@ -73,11 +74,15 @@ async function respond(request: Request, deps: CheckoutDeps, requestId: string):
     // any database work) cannot use up the minute's submissions. A retry of an earlier submission counts too.
     const checked = validateGuestCheckout(body);
     if (!checked.ok) return answer(400, { error: "invalid", message: "Please check the highlighted details.", errors: checked.errors });
-    if (!(await consumePublicLimit(deps.db, "checkout", GUEST_CHECKOUTS_PER_MINUTE))) {
-      return answer(429, { error: "rate_limited", message: "Many orders are being placed right now. Please try again in a minute. Your order was not placed." }, { "retry-after": "60" });
-    }
-    const result = await placeGuestOrder(deps.db, key[1] ?? key[2], body);
-    return answer(result.replayed ? 200 : 201, { data: { order: result.order, trackingToken: result.trackingToken } }, { "idempotent-replayed": String(result.replayed) });
+    // All database work inside the checkout's own bulkhead (src/modules/rate-limit/bulkhead.ts).
+    const done = await (deps.bulkhead ?? anonymousCheckoutWork)(async () => {
+      if (!(await consumePublicLimit(deps.db, "checkout", GUEST_CHECKOUTS_PER_MINUTE))) {
+        return answer(429, { error: "rate_limited", message: "Many orders are being placed right now. Please try again in a minute. Your order was not placed." }, { "retry-after": "60" });
+      }
+      const result = await placeGuestOrder(deps.db, key[1] ?? key[2], body);
+      return answer(result.replayed ? 200 : 201, { data: { order: result.order, trackingToken: result.trackingToken } }, { "idempotent-replayed": String(result.replayed) });
+    });
+    return done.ok ? done.value : answer(503, { error: "busy", message: "Ordering is busy right now. Please try again in a moment. Your order was not placed." }, { "retry-after": "1" });
   } catch (error) {
     if (error instanceof GuestCheckoutInvalid) return answer(400, { error: "invalid", message: "Please check the highlighted details.", errors: error.errors });
     if (error instanceof DomainError && BUSINESS[error.code]) {

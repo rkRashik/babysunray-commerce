@@ -64,11 +64,12 @@ No client address is trusted until hosting provides a trusted proxy (decision 1)
 | Guessing tracking links | 256-bit random tokens; unknown tokens share a 30-per-minute global limit; each live link has its own 30 per minute |
 | Holding all stock with anonymous orders | At most 20 guest checkout submissions per minute from everyone together (`GUEST_CHECKOUTS_PER_MINUTE`), counted only for well-formed requests; every order still waits for the Owner's verification and expires after 24 hours (rule D) |
 | Large bodies | Bytes counted while streaming: tracking 2 KiB, quote 8 KiB, checkout 64 KiB |
-| Expensive searches | Search text ≤ 100 characters, bound as a parameter; at most page 100 of 24. **No rate limit on catalogue reads and quotes yet**: one is needed before they are routed |
+| Expensive searches | Search text ≤ 100 characters, bound as a parameter; at most page 100 of 24; a quote at most 20 lines |
+| Flooding the database with anonymous requests | A **bulkhead** per application process (`src/modules/rate-limit/bulkhead.ts`, Gate H.40): at most 4 anonymous reads (tracking, catalogue, quote) and, separately, 2 checkout submissions use the database at once; up to 16 (checkout 8) wait at most 2 s; the rest get `503 busy` with `Retry-After: 1` at once. Invalid input is refused before it takes a slot. At least 4 of the pool's 10 connections stay for the Owner, whatever anonymous traffic does |
 | Finding orders by number or phone | Not possible: an order is reachable only by its random token |
-| Exhausting database connections | A request waits at most 10 s for a connection; PostgreSQL cancels a statement after 60 s ([runbook](../operations/runbook.md), section 4) |
+| Exhausting database connections | The bulkhead above; a request waits at most 10 s for a connection; PostgreSQL cancels a statement after 60 s ([runbook](../operations/runbook.md), section 4) |
 
-**Not covered without hosting:** a per-client limit (one client can use up the storewide checkout minute, blocking others), bot detection, flood protection in front of the application. All of these need the hosting decision and must exist before checkout opens (launch gate blocker `abuse_protection`).
+**Not covered without hosting:** a per-client limit. Without a trusted client address, one client can fill the anonymous slots or use up the storewide checkout minute, and other customers then get `503 busy` or `429` until it stops; the Owner and the database are protected, other customers are not. Also missing: bot detection and flood protection in front of the application. No limit is per-minute storewide for reads, on purpose: one visitor could otherwise lock every customer out for the rest of the minute. All of these need the hosting decision and must exist before checkout opens (launch gate blocker `abuse_protection`).
 
 ## Before any of this opens
 

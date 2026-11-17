@@ -360,6 +360,7 @@ describe("guest checkout transport (unrouted, test harness only)", () => {
     expect((await post("{not json")).status).toBe(400);
     const get = await guestCheckoutResponse(new Request(`${BASE}/checkout`, { method: "GET" }), { db, baseUrl: BASE, gate: open });
     expect(get.status).toBe(405);
+    expect(get.headers.get("allow")).toBe("POST");
     expect(await counts()).toEqual(before);
   });
 
@@ -395,6 +396,19 @@ describe("guest checkout transport (unrouted, test harness only)", () => {
     expect(await limited.json()).toMatchObject({ error: "rate_limited" });
     expect(await counts()).toMatchObject({ orders: before.orders + 1, holds: before.holds + 1 });
     await pool.query("delete from tracking_rate_limits where bucket = 'checkout'");
+  });
+
+  it("when checkout's database work is saturated, says the order was not placed and creates nothing", async () => {
+    const a = await publishedSku(1);
+    const before = await counts();
+    const refuse = async () => ({ ok: false as const });
+    const response = await guestCheckoutResponse(
+      new Request(`${BASE}/checkout`, { method: "POST", headers: { origin: BASE, "content-type": "application/json", "idempotency-key": key() }, body: JSON.stringify(request([line(a)])) }),
+      { db, baseUrl: BASE, gate: open, bulkhead: refuse },
+    );
+    expect([response.status, response.headers.get("retry-after")]).toEqual([503, "1"]);
+    expect(await response.json()).toMatchObject({ error: "busy" });
+    expect(await counts()).toEqual(before);
   });
 
   it("an unexpected failure says the order was not recorded and logs no customer data or token", async () => {

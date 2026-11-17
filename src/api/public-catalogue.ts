@@ -4,6 +4,7 @@ import * as z from "zod";
 import { type Db, pgErrorCode } from "@/db/database";
 import { DomainError } from "@/modules/domain-error";
 import { DELIVERY_ZONES } from "@/modules/orders/rules";
+import { anonymousDatabaseWork, type Bulkhead } from "@/modules/rate-limit/bulkhead";
 import { getPublicProduct, listPublicProducts, MAX_PUBLIC_PAGE, publicFacets, quotePublicCart } from "@/modules/storefront/public-catalogue";
 import { ApiProblem, readBody } from "./v1/http";
 
@@ -17,7 +18,7 @@ import { ApiProblem, readBody } from "./v1/http";
 // database work), origin (none, or the site's own), then strictly validated input, then the service. Responses
 // say `no-store` for now: a caching policy depends on hosting.
 
-export type PublicDeps = { db: Db; baseUrl: string; gate: () => { open: boolean } };
+export type PublicDeps = { db: Db; baseUrl: string; gate: () => { open: boolean }; bulkhead?: Bulkhead };
 export type PublicResource = { kind: "products" } | { kind: "product"; slug: string } | { kind: "facets" } | { kind: "quote" };
 
 const HEADERS = {
@@ -66,6 +67,12 @@ export async function publicCatalogueResponse(request: Request, resource: Public
   if (!deps.gate().open) return refusal(requestId, 503, "shop_closed", "The online shop is not open yet. Please contact the shop.");
   const origin = request.headers.get("origin");
   if (origin !== null && origin !== deps.baseUrl) return refusal(requestId, 403, "forbidden", "This request is not allowed.");
+  // Every database read runs inside the shared bulkhead (src/modules/rate-limit/bulkhead.ts), after validation, so
+  // anonymous traffic can never hold more than its share of the connection pool.
+  const guarded = async (work: () => Promise<unknown>): Promise<Response> => {
+    const result = await (deps.bulkhead ?? anonymousDatabaseWork)(work);
+    return result.ok ? (result.value as Response) : refusal(requestId, 503, "busy", "The shop is busy right now. Please try again in a moment.", { "retry-after": "1" });
+  };
   try {
     if (resource.kind === "quote") {
       if (!JSON_TYPE.test(request.headers.get("content-type") ?? "")) return refusal(requestId, 415, "unsupported_media_type", "Send the cart as application/json (UTF-8).");
@@ -78,21 +85,25 @@ export async function publicCatalogueResponse(request: Request, resource: Public
       }
       const body = quoteBody.safeParse(raw);
       if (!body.success) return refusal(requestId, 400, "bad_request", BAD_REQUEST);
-      return answer(requestId, 200, { data: await quotePublicCart(deps.db, { lines: body.data.lines, zone: body.data.zone ?? null }) });
+      return await guarded(async () => answer(requestId, 200, { data: await quotePublicCart(deps.db, { lines: body.data.lines, zone: body.data.zone ?? null }) }));
     }
     const query = queryOf(new URL(request.url));
     if (resource.kind === "products") {
       const parsed = query && listQuery.safeParse(query);
       if (!parsed?.success) return refusal(requestId, 400, "bad_request", BAD_REQUEST);
       const q = parsed.data;
-      const list = await listPublicProducts(deps.db, { q: q.q, category: q.category, size: q.size, colour: q.colour, inStock: q.inStock === "true" ? true : undefined, page: q.page ? Number(q.page) : 1 });
-      return answer(requestId, 200, { data: list.items, page: { number: list.page, hasMore: list.hasMore, maxPage: MAX_PUBLIC_PAGE } });
+      return await guarded(async () => {
+        const list = await listPublicProducts(deps.db, { q: q.q, category: q.category, size: q.size, colour: q.colour, inStock: q.inStock === "true" ? true : undefined, page: q.page ? Number(q.page) : 1 });
+        return answer(requestId, 200, { data: list.items, page: { number: list.page, hasMore: list.hasMore, maxPage: MAX_PUBLIC_PAGE } });
+      });
     }
     if (query === null || Object.keys(query).length > 0) return refusal(requestId, 400, "bad_request", BAD_REQUEST);
-    if (resource.kind === "facets") return answer(requestId, 200, { data: await publicFacets(deps.db) });
-    // Unknown, draft, withdrawn and archived products all get this same answer.
-    const product = await getPublicProduct(deps.db, resource.slug);
-    return product ? answer(requestId, 200, { data: product }) : refusal(requestId, 404, "not_found", "This product is not available.");
+    if (resource.kind === "facets") return await guarded(async () => answer(requestId, 200, { data: await publicFacets(deps.db) }));
+    return await guarded(async () => {
+      // Unknown, draft, withdrawn and archived products all get this same answer.
+      const product = await getPublicProduct(deps.db, resource.slug);
+      return product ? answer(requestId, 200, { data: product }) : refusal(requestId, 404, "not_found", "This product is not available.");
+    });
   } catch (error) {
     if (error instanceof DomainError && error.code === "INVALID_INPUT") return refusal(requestId, 400, "bad_request", BAD_REQUEST);
     console.error(JSON.stringify({ level: "error", event: "public_catalogue_failed", requestId, errorName: error instanceof Error ? error.name : typeof error, sqlState: pgErrorCode(error) ?? null }));

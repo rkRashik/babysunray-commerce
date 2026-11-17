@@ -22,6 +22,9 @@ vi.mock("next/navigation", () => ({
 
 const actions = await import("../../src/app/office/orders/actions");
 const trackRoute = await import("../../src/app/api/track/route");
+const { trackingRequest, tokenField } = await import("../../src/api/track");
+const { viewOf } = await import("../../src/modules/orders/tracking");
+const z = await import("zod");
 const cancelRoute = await import("../../src/app/api/track/cancel/route");
 
 const OWNER = { email: "office-orders@example.test", password: "office orders long password" };
@@ -215,6 +218,17 @@ describe("guest tracking endpoints", () => {
       errors.mockRestore();
       logs.mockRestore();
     }
+  });
+
+  it("when anonymous database work is saturated, a tracking request gets 503 busy and touches nothing", async () => {
+    const { orderId } = await newOrder();
+    const token = await linkFor(orderId);
+    const before = await count(pool, "select coalesce(sum(count), 0) from tracking_rate_limits");
+    const refuse = async () => ({ ok: false as const });
+    const r = await trackingRequest(new Request(`${BASE_URL}/api/track`, { method: "POST", headers: { origin: BASE_URL, "content-type": "application/json" }, body: JSON.stringify({ token }) }), z.strictObject({ token: tokenField }), (d, id) => viewOf(d, id), refuse);
+    expect([r.status, r.headers.get("retry-after"), r.headers.get("x-request-id") !== null]).toEqual([503, "1", true]);
+    expect(await count(pool, "select coalesce(sum(count), 0) from tracking_rate_limits")).toBe(before);
+    expect((await post(trackRoute, "/api/track", { token })).status).toBe(200);
   });
 
   it("limits unknown tokens globally without ever blocking a live link; malformed ones cost no lookup", async () => {

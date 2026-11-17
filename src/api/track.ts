@@ -6,6 +6,7 @@ import { type Db, pgErrorCode } from "@/db/database";
 import { getAuth } from "@/modules/auth/server";
 import { DomainError } from "@/modules/domain-error";
 import { consumeTrackingLimit, findLiveLink, type GuestView, wellFormedToken } from "@/modules/orders/tracking";
+import { anonymousDatabaseWork, type Bulkhead } from "@/modules/rate-limit/bulkhead";
 import { ApiProblem, readBody } from "./v1/http";
 
 // Transport for the public guest-tracking endpoints (/api/track, /api/track/cancel; founder rule K, S-15).
@@ -26,6 +27,11 @@ const answer = (status: number, body: unknown) => new Response(JSON.stringify(bo
 export const NOT_FOUND = () => answer(404, { error: "not_found", message: "This tracking link is not valid or has expired. Please contact the shop." });
 
 const LIMITED = () => answer(429, { error: "rate_limited", message: "Too many requests. Please wait a minute and try again." });
+const BUSY = () => {
+  const response = answer(503, { error: "busy", message: "The shop is busy right now. Please try again in a moment." });
+  response.headers.set("retry-after", "1");
+  return response;
+};
 
 /**
  * Checks origin, media type and size, parses the body with `schema` (which has a `token`), applies the
@@ -36,9 +42,10 @@ export async function trackingRequest<S extends z.ZodType<{ token: string }>>(
   request: Request,
   schema: S,
   run: (db: Db, orderId: string, body: z.output<S>) => Promise<GuestView | null>,
+  bulkhead: Bulkhead = anonymousDatabaseWork,
 ): Promise<Response> {
   const requestId = randomUUID();
-  const response = await track(request, schema, run, requestId);
+  const response = await track(request, schema, run, requestId, bulkhead);
   response.headers.set("x-request-id", requestId);
   return response;
 }
@@ -48,6 +55,7 @@ async function track<S extends z.ZodType<{ token: string }>>(
   schema: S,
   run: (db: Db, orderId: string, body: z.output<S>) => Promise<GuestView | null>,
   requestId: string,
+  bulkhead: Bulkhead,
 ): Promise<Response> {
   try {
     if (request.headers.get("origin") !== getAuth().options.baseURL) return answer(403, { error: "forbidden" });
@@ -64,11 +72,15 @@ async function track<S extends z.ZodType<{ token: string }>>(
     if (!parsed.success) return answer(400, { error: "bad_request" });
     if (!wellFormedToken(parsed.data.token)) return NOT_FOUND();
     const db = getDb();
-    const link = await findLiveLink(db, parsed.data.token);
-    if (!link) return (await consumeTrackingLimit(db, "failure")) ? NOT_FOUND() : LIMITED();
-    if (!(await consumeTrackingLimit(db, `link:${link.tokenId}`))) return LIMITED();
-    const view = await run(db, link.orderId, parsed.data);
-    return view ? answer(200, { data: view }) : NOT_FOUND();
+    // All database work inside the shared bulkhead for anonymous requests (src/modules/rate-limit/bulkhead.ts).
+    const done = await bulkhead(async () => {
+      const link = await findLiveLink(db, parsed.data.token);
+      if (!link) return (await consumeTrackingLimit(db, "failure")) ? NOT_FOUND() : LIMITED();
+      if (!(await consumeTrackingLimit(db, `link:${link.tokenId}`))) return LIMITED();
+      const view = await run(db, link.orderId, parsed.data);
+      return view ? answer(200, { data: view }) : NOT_FOUND();
+    });
+    return done.ok ? done.value : BUSY();
   } catch (error) {
     if (error instanceof DomainError && error.code === "INVALID_TRANSITION") {
       return answer(409, { error: "not_allowed", message: "This order can no longer be cancelled here. Please contact the shop." });
