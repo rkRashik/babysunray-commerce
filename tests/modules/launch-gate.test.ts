@@ -67,6 +67,20 @@ describe("guest checkout is not reachable", () => {
     expect(importers).toEqual(["src/api/public-media.ts"]);
   });
 
+  it("no secret can reach the browser: no NEXT_PUBLIC_ setting, no env block in the Next.js config, and a client component imports nothing at run time from server modules", () => {
+    const sources = files("src").filter((f) => /\.(ts|tsx|mts)$/.test(f));
+    expect(sources.filter((f) => /NEXT_PUBLIC_/.test(readFileSync(path.join(ROOT, f), "utf8")))).toEqual([]);
+    const config = readFileSync(path.join(ROOT, "next.config.ts"), "utf8");
+    expect(config).not.toMatch(/NEXT_PUBLIC_|publicRuntimeConfig|\benv\s*:/);
+    // Only `import type` (erased at build time) may reach a server module from a "use client" file.
+    const clients = sources.filter((f) => /^\s*["']use client["']/.test(readFileSync(path.join(ROOT, f), "utf8")));
+    expect(clients.length).toBeGreaterThan(5);
+    const runtimeImports = clients.flatMap((f) =>
+      [...readFileSync(path.join(ROOT, f), "utf8").matchAll(/^import (?!type )[^;]*from "@\/(db|config|api|modules\/(?!storefront\/)[^"]*)"/gm)].map((m) => `${f}: ${m[0].slice(0, 80)}`),
+    );
+    expect(runtimeImports).toEqual([]);
+  });
+
   it("no code trusts a client-supplied address header, so no per-client limit is claimed or faked (needs a trusted proxy, open decision 1)", () => {
     const readers = files("src").filter((f) => /.(ts|tsx|mts)$/.test(f) && /x-forwarded|x-real-ip|cf-connecting-ip|true-client-ip|forwarded/i.test(readFileSync(path.join(ROOT, f), "utf8")));
     expect(readers).toEqual([]);

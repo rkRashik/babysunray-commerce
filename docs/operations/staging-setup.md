@@ -144,4 +144,4 @@ The administrator and application passwords, the secret key, the connection stri
 ## What still blocks production
 
 - **Decisions:** hosting choice and cost (decision 1), a production photo store (decision 14), recovery objectives and an off-device backup place (K-9, decision 15), the publication rule (I-6), and published policies (S-17, G-7).
-- **Engineering:** a production migration and backup procedure (the staging commands refuse production by design), a bucket backup, a trusted proxy with per-client limits, a scheduler for maintenance, and a passing staging run.
+- **Engineering:** an executable production migration and backup procedure (the staging commands refuse production by design; the plan is in [production-migration.md](production-migration.md)), a bucket restore command, a trusted proxy with per-client limits, a scheduler for maintenance, and a passing staging run.

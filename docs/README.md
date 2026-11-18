@@ -25,6 +25,7 @@ Each document starts with a status line. Most are **Draft — Founder Review**: 
 | [ADR-0007: Guest checkout foundation](adr/0007-guest-checkout-foundation.md) | The inactive guest checkout: customer actor, anonymous idempotency, one-time tracking link |
 | [ADR-0008: Customer identity, recovery and 2FA](adr/0008-customer-identity-recovery-and-mfa.md) | Proposal only: separate customer identity, Owner recovery options, an evaluation of Better Auth's two-factor plugin, staff permissions |
 | [ADR-0009: Hosted database security boundary](adr/0009-hosted-database-security-boundary.md) | Hosted database security boundary (Data API, roles, privileges) and serverless connection design (Draft) |
+| [Backend handoff](architecture/backend-handoff.md) | One page for the next client developer: architecture, Owner API, closed public services, settings, blockers, decisions, verification limits |
 | [Backend completeness](architecture/backend-completeness.md) | Feature by feature: implemented, tested, production readiness, what blocks it, remaining work |
 
 ## API
@@ -63,6 +64,7 @@ The machine-readable contract is served by the application at `/api/v1/openapi.j
 |---|---|
 | [Operations runbook](operations/runbook.md) | Running, settings, checks, exports, stock counts, photos, backup and restore, outage procedure |
 | [Infrastructure compatibility](operations/infrastructure.md) | Hosted settings (persistent server, serverless, Supabase pooler), photo store, HTTP maintenance, health probes, what is and is not verified, founder setup |
+| [Production migration](operations/production-migration.md) | Plan and read-only preflight for a future production migration (nothing can migrate production today) |
 | [Staging setup](operations/staging-setup.md) | For the founder: a separate Supabase staging project, locked down, migrated and verified with the staging commands |
 | [Offline sheets](operations/offline-templates.md) | Blank order, stock, COD and courier sheets for an outage |
 
