@@ -37,6 +37,7 @@ Values are never written in documents or `.env.example`. Secrets are server-side
 | `MEDIA_STORAGE_DIR`, `MEDIA_LOCAL_STORAGE_IN_PRODUCTION` | local provider | As before |
 | `SUPABASE_URL`, `SUPABASE_STORAGE_BUCKET`, `SUPABASE_SERVICE_ROLE_KEY` | `supabase` provider | Project origin, bucket name, and the server-side service key |
 | `MAINTENANCE_SECRET` | optional | Turns on `POST /api/internal/maintenance`; 32 or more random characters, different from `BETTER_AUTH_SECRET` |
+| `MAINTENANCE_ALLOW_GET` | optional | Exactly `true` lets `GET` use the same Bearer secret, for a host whose scheduler cannot send `POST` (Gate H.53). Off by default; any other value keeps `GET` at `405` |
 
 ## 3. Supabase PostgreSQL
 
@@ -93,7 +94,7 @@ Not measured: how many concurrent requests Vercel puts on one instance, Supaviso
 | Rule | Behaviour |
 |---|---|
 | Off by default | `404` unless `MAINTENANCE_SECRET` is set and strong; a weak or placeholder secret keeps it off |
-| Who | `Authorization: Bearer <secret>` only, compared in constant time; `401` otherwise. A request with an `Origin` header (a browser page) gets `403`; only `POST` is accepted; a body over 1 KiB gets `413` |
+| Who | `Authorization: Bearer <secret>` only, compared in constant time; `401` otherwise. A request with an `Origin` header (a browser page) gets `403`; only `POST` is accepted (and `GET`, only when `MAINTENANCE_ALLOW_GET=true`, see below); a body over 1 KiB gets `413` |
 | Concurrent calls | Allowed and safe: every job is a single statement or claims its rows with `SKIP LOCKED` and re-checks them under their own lock, so overlapping runs only find less to do. A run uses one connection at a time (H.44's run lock held a transaction open while the jobs took further connections, which waits for itself on a pool of one; removed in H.45) |
 | Replay | The jobs are idempotent; a repeated call finds nothing more to do |
 | Bounded | At most 1,000 rows per job per call; no job starts after 45 s; the rest are reported as `skipped` |
@@ -103,7 +104,7 @@ Not measured: how many concurrent requests Vercel puts on one instance, Supaviso
 
 Manual call (placeholders, never paste the real secret into a chat or a ticket): `curl -X POST https://<site>/api/internal/maintenance -H "Authorization: Bearer <secret>"`. If it returns `500`, read the host's logs (event `maintenance_run`), and if `integrityProblems` is above 0 follow [the runbook](runbook.md), section 4. If it is unreachable, run `npm run maintenance:run` against the development database, or call again later; nothing depends on it being on time.
 
-**No scheduler is activated.** Which scheduler calls it (a host cron, GitHub Actions, a free external pinger) is a founder decision. Vercel Cron, as documented, calls with `GET` and a `CRON_SECRET` header; this endpoint accepts `POST` and `MAINTENANCE_SECRET`, so using it needs a small, reviewed adapter that was not built. GitHub's schedule is not a real-time guarantee either; nothing here assumes it is.
+**No scheduler is activated.** Which scheduler calls it (a host cron, GitHub Actions, a free external pinger) is a founder decision. Vercel Cron, as documented, calls with `GET` and a `CRON_SECRET` header; this endpoint accepts `POST` and `MAINTENANCE_SECRET`, so Gate H.53 added a small adapter, off by default: with `MAINTENANCE_ALLOW_GET=true` the same endpoint accepts `GET` with the same `Authorization: Bearer <secret>` (set the host's `CRON_SECRET` to the same value as `MAINTENANCE_SECRET`; a second secret is not supported). Nothing else changes: no secret in a URL or query string (ignored), `401` without the right header, `403` with an `Origin` header, `404` without a usable secret, `no-store`, bounded run, idempotent jobs, so an overlapping, repeated, early or late call is harmless. It is tested with the jobs replaced (`tests/modules/maintenance-http.test.ts`); no host scheduler has been configured or tried. GitHub's schedule is not a real-time guarantee either; nothing here assumes it is.
 
 ## 7. Health and readiness
 

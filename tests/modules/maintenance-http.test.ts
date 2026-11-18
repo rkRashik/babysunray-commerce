@@ -97,3 +97,48 @@ describe("an authorised call", () => {
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toMatch(/Failed query|postgresql|Zq8L/);
   });
 });
+
+describe("the GET adapter for schedulers that can only call GET (Gate H.53; off unless MAINTENANCE_ALLOW_GET=true)", () => {
+  const on = { ...ENV, MAINTENANCE_ALLOW_GET: "true" };
+  it("is off by default and for any value other than exactly true", async () => {
+    for (const flag of [undefined, "", "TRUE", "1", "yes", "false"]) {
+      const run = vi.fn(async () => ok);
+      const response = await maintenanceResponse(call({ method: "GET", headers: bearer() }), deps(run, { ...ENV, MAINTENANCE_ALLOW_GET: flag }));
+      expect([response.status, response.headers.get("allow")]).toEqual([405, "POST"]);
+      expect(run).not.toHaveBeenCalled();
+    }
+  });
+  it("with the flag and the secret as a Bearer header, one GET runs the jobs once, no-store, counts only", async () => {
+    const run = vi.fn(async () => ok);
+    const response = await maintenanceResponse(call({ method: "GET", headers: bearer() }), deps(run, on));
+    expect([response.status, response.headers.get("cache-control")]).toEqual([200, "no-store"]);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+  it("is still unauthenticated-proof: no, wrong or non-Bearer credentials, a secret in the URL, and a browser Origin all run nothing", async () => {
+    const run = vi.fn(async () => ok);
+    const cases: [string, Request][] = [
+      ["no credentials", call({ method: "GET" })],
+      ["a wrong secret", call({ method: "GET", headers: bearer("Zq8LmW3xT9vB2nR7kD5pC1hY4gF6sJ0aEoUj") })],
+      ["Basic scheme", call({ method: "GET", headers: { authorization: `Basic ${SECRET}` } })],
+      ["the secret in the query string", new Request(`http://localhost:3000/api/internal/maintenance?secret=${SECRET}&token=${SECRET}`, { method: "GET" })],
+      ["a browser page", call({ method: "GET", headers: { ...bearer(), origin: "https://elsewhere.example" } })],
+    ];
+    const statuses = await Promise.all(cases.map(async ([, request]) => (await maintenanceResponse(request, deps(run, on))).status));
+    expect(statuses).toEqual([401, 401, 401, 401, 403]);
+    expect(run).not.toHaveBeenCalled();
+  });
+  it("is still off (404) without a usable secret, even with the flag", async () => {
+    const run = vi.fn(async () => ok);
+    for (const env of [{ MAINTENANCE_ALLOW_GET: "true" }, { MAINTENANCE_ALLOW_GET: "true", MAINTENANCE_SECRET: "short" }]) {
+      expect((await maintenanceResponse(call({ method: "GET", headers: bearer() }), deps(run, env))).status).toBe(404);
+    }
+    expect(run).not.toHaveBeenCalled();
+  });
+  it("other methods stay refused, and a replayed GET only repeats idempotent work: the second run reports what the jobs report", async () => {
+    const run = vi.fn(async () => ok);
+    for (const method of ["PUT", "DELETE", "PATCH", "HEAD"]) expect((await maintenanceResponse(call({ method, headers: bearer() }), deps(run, on))).status).toBe(405);
+    const [a, b] = await Promise.all([maintenanceResponse(call({ method: "GET", headers: bearer() }), deps(run, on)), maintenanceResponse(call({ method: "GET", headers: bearer() }), deps(run, on))]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+});
