@@ -148,3 +148,25 @@ describe("the bulkheads a small pool really gets", () => {
     }
   });
 });
+
+describe("a connection lost while a transaction holds it (Gate H.52)", () => {
+  it("every new connection gets a permanent error listener, so a socket reset cannot stop the process, and only names are logged", async () => {
+    const { EventEmitter } = await import("node:events");
+    const { createPool } = await import("../../src/db/client");
+    const { vi } = await import("vitest");
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const pool = createPool(LOCAL);
+    try {
+      // node-postgres's pool removes its own listener while a connection is checked out; an emitter without one throws on 'error'.
+      const checkedOut = new EventEmitter();
+      pool.emit("connect", checkedOut);
+      expect(() => checkedOut.emit("error", Object.assign(new Error("read ECONNRESET to 10.1.2.3 password=s3cret"), { code: "ECONNRESET" }))).not.toThrow();
+      const line = String(log.mock.calls.flat().join(" "));
+      expect(line).toContain("db_connection_lost");
+      expect(line).not.toMatch(/10\.1\.2\.3|s3cret|password/);
+    } finally {
+      log.mockRestore();
+      await pool.end();
+    }
+  });
+});

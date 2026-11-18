@@ -44,12 +44,20 @@ export function poolSettingsFor(connectionString: string, env: Record<string, st
 }
 
 /**
- * The pool with a listener for connections lost while idle (a database restart, a terminated backend). Without it,
- * node-postgres's 'error' event has no listener and Node stops the whole process; with it, the loss is logged
- * (names only) and the pool opens a new connection for the next request.
+ * The pool with listeners for connections lost (a database restart, a terminated backend). node-postgres's pool
+ * listens for errors only while a connection is idle: it removes its listener when a connection is checked out (every
+ * transaction does that), so a socket reset during a transaction had no listener at all and Node stopped the whole
+ * process (found by killing a backend mid-order, Gate H.52). Every connection therefore gets its own permanent
+ * listener, so a loss while in use fails only that request (the query reports the error) and is logged (names only);
+ * the pool's own listener still covers idle connections, and the next request gets a new connection.
  */
 export function createPool(connectionString: string, settings: PoolSettings = poolSettingsFor(connectionString)): Pool {
   const pool = new Pool(poolConfig(connectionString, settings));
+  pool.on("connect", (client) => {
+    client.on("error", (error) => {
+      console.error(JSON.stringify({ level: "error", event: "db_connection_lost", errorName: error.name, sqlState: pgErrorCode(error) ?? null }));
+    });
+  });
   pool.on("error", (error) => {
     console.error(JSON.stringify({ level: "error", event: "db_idle_connection_lost", errorName: error.name, sqlState: pgErrorCode(error) ?? null }));
   });
