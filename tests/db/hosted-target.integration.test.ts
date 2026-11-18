@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { auditPrivileges } from "../../src/db/hosted-security.mts";
+import { auditPrivilegeReport, auditPrivileges } from "../../src/db/hosted-security.mts";
 import { assertStagingTarget, migrationState, STAGING_MARKER, TARGET_SCHEMA } from "../../src/db/hosted-target.mts";
 import { connectTestClient } from "../support/test-database";
 
@@ -87,7 +87,71 @@ describe("the privilege audit", () => {
   });
 });
 
+describe("the privilege audit and the API roles (Gate H.56)", () => {
+  // The Supabase roles do not exist on plain PostgreSQL and the test role cannot create roles, so the built-in pg_monitor
+  // stands in for an API role. Everything is rolled back.
+  const API = ["pg_monitor"];
+  const audit = () => auditPrivilegeReport(client, "no_such_role_h45", API);
+  it("fails on a default privilege for an API role owned by the connection's own role, in public or in every schema (never exempted)", async () => {
+    expect((await audit()).findings.some((f) => f.check.includes("default privileges"))).toBe(false);
+    await rolledBack(async () => {
+      await client.query("alter default privileges in schema public grant select on tables to pg_monitor");
+      const report = await audit();
+      expect(report.findings).toContainEqual({ severity: "high", check: "pg_monitor would get privileges on new objects (default privileges)", object: "public (r)" });
+      expect(report.warnings).toEqual([]);
+    });
+    await rolledBack(async () => {
+      await client.query("alter default privileges grant usage on sequences to pg_monitor");
+      expect((await audit()).findings).toContainEqual({ severity: "high", check: "pg_monitor would get privileges on new objects (default privileges)", object: "all schemas (S)" });
+    });
+  });
+  it("fails on a table that an API role can reach, and reports no warning for it", async () => {
+    await rolledBack(async () => {
+      await client.query("grant select on orders to pg_monitor");
+      const report = await audit();
+      expect(report.findings).toContainEqual({ severity: "critical", check: "pg_monitor can read or change a table", object: "public.orders" });
+      expect(report.warnings).toEqual([]);
+    });
+  });
+});
+
+describe("the privilege audit and row-level security (Gate H.56)", () => {
+  // Found on the first hosted run: Supabase switches row-level security on for every table, and with no policy the
+  // application role is denied every row.
+  it("fails when row-level security is on and the application role has no policy, and passes once it has one", async () => {
+    await rolledBack(async () => {
+      await client.query("alter table orders enable row level security");
+      expect(await auditPrivileges(client, "babysunray_test")).toContainEqual({ severity: "high", check: "row-level security is on and the application role has no policy (the application would be denied every row)", object: "orders" });
+      await client.query("create policy app_only on orders for all to babysunray_test using (true) with check (true)");
+      expect((await auditPrivileges(client, "babysunray_test")).some((f) => f.check.includes("row-level security"))).toBe(false);
+    });
+  });
+  it("fails on a policy that applies to PUBLIC or to any role other than the application role", async () => {
+    await rolledBack(async () => {
+      await client.query("create policy open_to_all on orders for select using (true)");
+      expect(await auditPrivileges(client, "babysunray_test")).toContainEqual({ severity: "high", check: "a row-level security policy applies to a role other than the application role", object: "orders.open_to_all" });
+    });
+    await rolledBack(async () => {
+      await client.query("create policy to_monitor on orders for select to pg_monitor using (true)");
+      expect((await auditPrivileges(client, "babysunray_test")).map((f) => f.object)).toContain("orders.to_monitor");
+    });
+  });
+});
+
 describe("the hosted privilege script", () => {
+  it("gives the application role one policy per table, once (idempotent), and the audit then finds no row-level security problem (the script run as the test role, rolled back)", async () => {
+    await rolledBack(async () => {
+      const script = readFileSync(path.join("db", "hosted", "privileges.sql"), "utf8").replaceAll("babysunray_app", "babysunray_test").replace("exists (select 1 from pg_namespace where nspname = 'drizzle')", "false"); // the test role does not own the drizzle schema, so its revokes are left out
+      await client.query("alter table orders enable row level security");
+      await client.query("alter table order_items enable row level security");
+      await client.query(script);
+      await client.query(script);
+      const tables = Number((await client.query("select count(*) as n from pg_tables where schemaname = 'public'")).rows[0].n);
+      const policies = await client.query<{ n: string }>("select count(*) as n from pg_policies where schemaname = 'public' and policyname = 'babysunray_test_all' and roles = array['babysunray_test']::name[]");
+      expect(Number(policies.rows[0].n)).toBe(tables);
+      expect((await auditPrivileges(client, "babysunray_test")).filter((f) => f.check.includes("row-level security"))).toEqual([]);
+    });
+  });
   it("runs on plain PostgreSQL (Supabase's roles absent: skipped) inside a transaction, which is then rolled back", async () => {
     await rolledBack(async () => {
       await client.query(readFileSync(path.join("db", "hosted", "privileges.sql"), "utf8"));

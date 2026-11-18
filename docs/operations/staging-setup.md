@@ -85,6 +85,8 @@ npm run staging:preflight
 
 It lists each setting as ok, MISSING or INVALID (wrong port, administrator user in the application setting, swapped keys, two projects mixed). It cannot see the staging marker, the application role or the bucket's privacy; the commands check those after connecting and refuse. All staging commands read the same settings file, `.env.staging.local`, or the file named by `STAGING_ENV_FILE`.
 
+**Let the computer fix the file.** `npm run staging:setup` reads `.env.staging.local` as raw text, rebuilds a connection string broken by a password with `#`, `/`, `@`, `?`, `:` or `%` in it (it percent-encodes the password; you never encode anything yourself), removes `?...` options, adds `.<project-ref>` to a pooler user and moves the administrator pooler port 6543 to 5432, and derives `STAGING_SUPABASE_URL` from the project ref. Run in your own terminal it also asks for the publishable and secret keys with a hidden prompt (nothing typed is echoed, stored in history or put on a command line). It prints setting names only, connects to nothing and never touches the database. A password that is already valid is left byte for byte as it was.
+
 ## 6. First migration
 
 Create a folder outside the project for reports and backups, for example `D:\BabySunray-staging`. Then:
@@ -94,6 +96,11 @@ npm run db:migrate:staging -- --first-time --report D:\BabySunray-staging\migrat
 ```
 
 It shows the host it connected to and asks you to type the host name back. It applies the privilege script (`db/hosted/privileges.sql`), all migrations in one transaction, the privilege script again, and then audits the privileges. It should end with **no findings**. The report file holds no passwords or data.
+
+Two things found on the first real staging run (Gate H.56):
+
+- **Warnings, not findings.** Supabase's own role `supabase_admin` has default privileges in `public` that grant the API roles access to objects *it* creates (33 entries). Our migration role is not a member of it and cannot change them, and they never apply to tables the migration role creates. The audit lists them in the report as `privilegeWarnings` and ignores exactly those: that owner, a superuser, the `public` schema only, tables and sequences only, known privileges only. Any other default privilege, table, sequence, function or policy for an API role is still a finding.
+- **Row-level security.** Supabase switches row-level security on for every new table (the `ensure_rls` event trigger). A table with RLS and no policy denies a role that is not its owner every row, so the privilege script gives `babysunray_app` one policy per table (`babysunray_app_all`, for that role only). The API roles get no policy and no grants. The audit fails when RLS is on without a policy for the application role, and when a policy names any other role.
 
 ## 7. Run the staging checks
 

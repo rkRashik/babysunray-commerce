@@ -18,6 +18,7 @@ declare
   api_role text;
   append_only text;
   has_drizzle boolean := exists (select 1 from pg_namespace where nspname = 'drizzle');
+  tbl text;
 begin
   foreach api_role in array array['anon', 'authenticated', 'service_role'] loop
     if exists (select 1 from pg_roles where rolname = api_role) then
@@ -54,6 +55,16 @@ begin
     ] loop
       if to_regclass(format('public.%I', append_only)) is not null then
         execute format('revoke update, delete on public.%I from babysunray_app', append_only);
+      end if;
+    end loop;
+    -- Row-level security (Gate H.56). Supabase's `ensure_rls` event trigger switches it on for every new table. With no
+    -- policy a role that is not the table owner and has no BYPASSRLS sees no row and may add none, so the application
+    -- role gets one explicit policy per table, for itself only. The API roles get no policy (and no grants), so RLS
+    -- stays a second wall against them. The grants above still decide what the application role may do (an append-only
+    -- table is still closed to UPDATE and DELETE by privilege and by trigger).
+    for tbl in select tablename from pg_tables where schemaname = 'public' loop
+      if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = tbl and policyname = 'babysunray_app_all') then
+        execute format('create policy babysunray_app_all on public.%I for all to babysunray_app using (true) with check (true)', tbl);
       end if;
     end loop;
     if has_drizzle then

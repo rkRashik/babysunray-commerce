@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { publicCatalogueResponse } from "../../src/api/public-catalogue";
 import { maintenanceResponse } from "../../src/api/maintenance";
-import { auditPrivileges } from "../../src/db/hosted-security.mts";
+import { auditPrivilegeReport } from "../../src/db/hosted-security.mts";
 import { APP_ROLE } from "../../src/db/hosted-target.mts";
 import { getPrincipal, type Principal } from "../../src/modules/auth/principal";
 import { createProduct, createVariant } from "../../src/modules/catalogue/service";
@@ -58,7 +58,10 @@ describe("2. least privilege", () => {
   it("the privilege audit has no findings", async () => {
     const client = await pool.connect();
     try {
-      expect(await auditPrivileges(client, APP_ROLE)).toEqual([]);
+      const { findings, warnings } = await auditPrivilegeReport(client, APP_ROLE);
+      expect(findings).toEqual([]);
+      // The only thing allowed to remain is Supabase's own supabase_admin default (reported, never a failure).
+      expect(warnings.every((w) => w.check.includes("Supabase's own role supabase_admin") && w.object.startsWith("public ("))).toBe(true);
     } finally {
       client.release();
     }

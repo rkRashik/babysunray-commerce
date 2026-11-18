@@ -15,7 +15,7 @@ import path from "node:path";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
-import { auditPrivileges } from "../src/db/hosted-security.mts";
+import { auditPrivilegeReport } from "../src/db/hosted-security.mts";
 import { APP_ROLE, applicationTableCount, assertNotLocalDatabase, assertRecentBackup, assertStagingTarget, migrationState, parseStagingUrl } from "../src/db/hosted-target.mts";
 import { MIGRATION_LOCK } from "../src/db/migrate-verified.mts";
 import { outsideRepository, reportWriter } from "../src/db/hosted-report.mts";
@@ -90,10 +90,11 @@ async function main(): Promise<void> {
     const after = await migrationState(client, MIGRATIONS);
     report.after = after;
     if (after.applied !== after.expected || after.mismatches.length) throw new Error("After migrating, the history does not match this checkout. Investigate before using the database.");
-    const findings = await auditPrivileges(client, APP_ROLE);
+    const { findings, warnings } = await auditPrivilegeReport(client, APP_ROLE);
     report.privilegeFindings = findings;
+    report.privilegeWarnings = warnings;
     report.result = findings.length ? "migrated, privilege findings" : "migrated";
-    console.log(`Migrations: all ${after.applied} applied. Privilege audit: ${findings.length ? `${findings.length} finding(s), see the report` : "no findings"}.`);
+    console.log(`Migrations: all ${after.applied} applied. Privilege audit: ${findings.length ? `${findings.length} finding(s), see the report` : "no findings"}.${warnings.length ? ` ${warnings.length} platform-owned warning(s) (Supabase-managed defaults), see the report.` : ""}`);
     if (findings.length) process.exitCode = 1;
   } catch (error) {
     report.result = "failed";
