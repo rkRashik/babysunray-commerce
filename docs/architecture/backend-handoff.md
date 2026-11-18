@@ -53,4 +53,4 @@ Product publication rule I-6; customer policies S-17 and G-7; delivery charges b
 
 ## 10. Verification evidence and its limits
 
-See [testing.md](../testing.md) for every suite and how to run it. The counts of the last full run are in section 10 of that document's "Last full run" entry. Everything was run on one Windows machine against local PostgreSQL databases, fictional data, mocked Supabase Storage and a mocked scheduler. Not verified: any Supabase service, any hosting, real photos, real customers, real couriers, load beyond the local benchmark ([operations/performance.md](../operations/performance.md)), restore time on real data.
+See [testing.md](../testing.md) for every suite and how to run it. The counts of the last full run are in its section 5. Everything was run on one Windows machine against local PostgreSQL databases, fictional data, mocked Supabase Storage and a mocked scheduler. Not verified: any Supabase service, any hosting, real photos, real customers, real couriers, load beyond the local benchmark ([operations/performance.md](../operations/performance.md)), restore time on real data.

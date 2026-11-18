@@ -55,3 +55,24 @@ It then resets and migrates `babysunray_test`, creates one fictional admin accou
   - **esbuild ≤ 0.24.2 development-server request exposure (GHSA-67mh-4wv8-2f99)** through `drizzle-kit` 0.31.11 → `@esbuild-kit/esm-loader` → `@esbuild-kit/core-utils` → esbuild 0.18.20. The only offered fix is a downgrade to drizzle-kit 0.18.1, which is wrong; the real fix is drizzle-kit 1.0 (still release-candidate), a migration-tooling change for the founder to approve. Nothing here starts an esbuild server (drizzle-kit's code does not import `@esbuild-kit`).
 - Also checked: no `NEXT_PUBLIC_` variable exists; no tracked file holds a credential (the only tracked env file is `.env.example` with `CHANGE_ME`; test fixtures use fictional passwords); `.env*`, backups and photo backups are git-ignored; no package of this project defines an install, prepare or postinstall script (npm 11 reports `allowScripts` is unset for the `esbuild` postinstall of three esbuild copies, which are dev tooling and unchanged); `npm ci --dry-run` resolves from the lockfile alone.
 - TypeScript is held at 6.0.x because `typescript-eslint` supports TypeScript below 6.1; ESLint is held at 9.x because `eslint-config-next` depends on plugins that do not yet declare ESLint 10 support. Revisit both when the plugins update.
+
+## 5. Last full run (Gate H.55, 2026-11-18)
+
+Run one suite at a time, in this order, on one Windows machine against the local `babysunray_test` database, with no code change after it (the HEAD of the commit that records it differs only in documentation). All exit 0:
+
+| Suite | Result |
+|---|---|
+| `npm run typecheck`, `npm run lint` | clean |
+| `npm test` (unit) | 37 files, 358 tests |
+| `npm run db:check` | clean |
+| `npm run test:db` (PostgreSQL integration) | 40 files, 563 tests |
+| `npm run test:contract` | 6 unit tests, then 83 tests over 3 files |
+| `npm run build` | compiled |
+| `npm run test:e2e` | 56 browser tests |
+| `npm run test:e2e:prod` | 59 browser tests |
+| `npm run backup:drill`, `npm run media:drill` | 1 and 3 tests |
+| `npm run test:install` | clean clone, offline `npm ci`, both drills, build and 61 browser tests |
+| `npm run perf:bench` | 5 benchmarks on fictional data (see [performance.md](operations/performance.md)) |
+| `npm audit --omit=dev --omit=optional` | 0 vulnerabilities (the production install); plain `npm audit` still reports 20 development-tooling findings, section 4 |
+
+Not run, by design: `npm run test:staging` and every staging command (**REAL SUPABASE STAGING: NOT RUN**, no staging setting is configured on this machine), and the commands the founder runs (`auth:*`, `backup:create|verify|restore`, `media:backup*`, `recovery:check`).
