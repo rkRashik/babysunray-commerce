@@ -44,6 +44,7 @@
     "test:staging": "node scripts/staging-test.mts",
     "staging:preflight": "node scripts/staging-preflight.mts",
     "staging:setup": "node scripts/staging-setup.mts",
+    "netlify:env": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/netlify-env.mts",
     "test:contract": "vitest run tests/api && vitest run --config vitest.integration.config.mts tests/db/api.integration.test.ts tests/db/api-write.integration.test.ts tests/db/api-orders.integration.test.ts"
   },
   "dependencies": {

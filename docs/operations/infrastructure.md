@@ -36,6 +36,7 @@ Values are never written in documents or `.env.example`. Secrets are server-side
 | `MEDIA_STORAGE_PROVIDER` | optional | `local` (default) or `supabase` |
 | `MEDIA_STORAGE_DIR`, `MEDIA_LOCAL_STORAGE_IN_PRODUCTION` | local provider | As before |
 | `SUPABASE_URL`, `SUPABASE_STORAGE_BUCKET`, `SUPABASE_SERVICE_ROLE_KEY` | `supabase` provider | Project origin, bucket name, and the server-side service key |
+| `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER` | optional (the first three together turn the CDN on) | Cloudinary delivery of published product photos only ([ADR-0010](../adr/0010-hosting-and-image-delivery.md)); the folder defaults to `babysunray/products` |
 | `MAINTENANCE_SECRET` | optional | Turns on `POST /api/internal/maintenance`; 32 or more random characters, different from `BETTER_AUTH_SECRET` |
 | `MAINTENANCE_ALLOW_GET` | optional | Exactly `true` lets `GET` use the same Bearer secret, for a host whose scheduler cannot send `POST` (Gate H.53). Off by default; any other value keeps `GET` at `405` |
 

@@ -136,6 +136,9 @@ export const productMedia = pgTable(
     altEn: text("alt_en"),
     altBn: text("alt_bn"),
     position: integer("position").notNull(),
+    // The public Cloudinary copy of a PUBLISHED product's photo (src/modules/media/cdn.ts), null for every other photo. Set
+    // after upload, cleared after the copy is deleted; a photo with a copy cannot be replaced or removed until then.
+    cdnPublicId: text("cdn_public_id"),
     createdByUserId: uuid("created_by_user_id")
       .notNull()
       .references(() => authUsers.id, { onDelete: "restrict" }),
@@ -151,6 +154,7 @@ export const productMedia = pgTable(
     check("product_media_sha256_format", sql`${t.sha256} ~ '^[0-9a-f]{64}$'`),
     check("product_media_alt_valid", sql`btrim(${t.altEn}) <> '' and length(${t.altEn}) <= 300 and btrim(${t.altBn}) <> '' and length(${t.altBn}) <= 300`),
     check("product_media_position_nonnegative", sql`${t.position} >= 0`),
+    check("product_media_cdn_public_id_format", sql`${t.cdnPublicId} is null or ${t.cdnPublicId} ~ '^[A-Za-z0-9_/-]{1,200}$'`),
   ],
 );
 

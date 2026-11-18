@@ -2,6 +2,7 @@ import "server-only";
 import type { Db } from "@/db/database";
 import type { MeasurementPoint } from "../catalogue/content";
 import { normalizeSearch } from "../catalogue/rules";
+import { type CdnImages, cdnConfig, cdnImages } from "../media/cdn";
 import { DomainError } from "../domain-error";
 import type { DeliveryZone } from "../orders/rules";
 import { catalogueFacets, type Facets, listProductCards, type PhotoRef, PREVIEW_PAGE_SIZE, productBySlug, PUBLIC_SCOPE, quoteLines, type StockState } from "./service";
@@ -19,16 +20,22 @@ export const PUBLIC_PAGE_SIZE = PREVIEW_PAGE_SIZE;
 export const MAX_PUBLIC_PAGE = 100;
 
 type Localised = { en: string | null; bn: string | null };
-export type PublicPhoto = { id: string; width: number; height: number; alt: Localised };
+/** `images` is the Cloudinary delivery of a published product's photo (src and srcSet), or null when it has no CDN copy: then the photo is the closed /api/public/media/{id} route. */
+export type PublicPhoto = { id: string; width: number; height: number; alt: Localised; images: CdnImages | null };
 export type PublicProductCard = { slug: string; name: Localised; featured: boolean; pricePaisa: { min: number; max: number }; stock: StockState; photo: PublicPhoto | null };
 export type PublicFilters = { q?: string; category?: string; size?: string; colour?: string; inStock?: boolean; page?: number };
 
-const photo = (p: PhotoRef | { id: string; width: number; height: number; altEn: string | null; altBn: string | null }): PublicPhoto => ({
-  id: p.id,
-  width: p.width,
-  height: p.height,
-  alt: { en: p.altEn, bn: p.altBn },
-});
+// Only products that passed PUBLIC_SCOPE reach here, and a CDN copy is recorded only while a product is published (media/cdn-sync.ts).
+const photo = (p: PhotoRef, env: Record<string, string | undefined> = process.env): PublicPhoto => {
+  const cdn = cdnConfig(env);
+  return {
+    id: p.id,
+    width: p.width,
+    height: p.height,
+    alt: { en: p.altEn, bn: p.altBn },
+    images: cdn.ok && cdn.config && p.cdnPublicId ? cdnImages(cdn.config, p.cdnPublicId) : null,
+  };
+};
 
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const LABEL = /^[^\u0000-\u001f\u007f]{1,64}$/;
@@ -97,7 +104,7 @@ export async function getPublicProduct(db: Db, slug: string): Promise<PublicProd
     care: { en: p.careEn, bn: p.careBn },
     sizeGuidance: { en: p.sizeGuidanceEn, bn: p.sizeGuidanceBn },
     measurements: p.measurements.map((m) => ({ size: m.size, point: m.point, valueMm: m.valueMm })),
-    photos: p.media.map(photo),
+    photos: p.media.map((m) => photo(m)),
     variants: found.variants.map((v) => ({ sku: v.sku, size: v.size, colour: v.colour, pricePaisa: v.pricePaisa, inStock: v.available > 0 })),
     deliveryZones: found.zones.flatMap((z) => (z.chargePaisa === null ? [] : [{ code: z.code, chargePaisa: z.chargePaisa }])),
   };

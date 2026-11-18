@@ -1,0 +1,2 @@
+ALTER TABLE "product_media" ADD COLUMN "cdn_public_id" text;--> statement-breakpoint
+ALTER TABLE "product_media" ADD CONSTRAINT "product_media_cdn_public_id_format" CHECK ("product_media"."cdn_public_id" is null or "product_media"."cdn_public_id" ~ '^[A-Za-z0-9_/-]{1,200}$');

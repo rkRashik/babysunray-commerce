@@ -1,5 +1,6 @@
 import { parseDatabaseUrl, readPoolSettings, type SettingProblem } from "../db/pool-settings";
 import { authSettingProblems } from "../modules/auth/settings";
+import { cdnConfig } from "../modules/media/cdn";
 import { configuredMediaStore } from "../modules/media/provider";
 
 // What a hosted installation needs to be configured correctly (Gate H.44), as names and rules only, never values. Shared by
@@ -48,7 +49,13 @@ export function mediaProblems(env: Record<string, string | undefined>, projectRo
   return configured.ok ? [] : [{ name: env.MEDIA_STORAGE_PROVIDER === "supabase" ? "SUPABASE_*" : "MEDIA_STORAGE_*", problem: configured.problem }];
 }
 
+/** Problems with the Cloudinary settings, only when any CLOUDINARY_* setting is present (the CDN is optional). */
+export function cdnProblems(env: Record<string, string | undefined>): SettingProblem[] {
+  const configured = cdnConfig(env);
+  return configured.ok ? [] : configured.problems;
+}
+
 /** Everything that must be valid for the application to serve requests when hosted. Empty means ready. */
 export function hostedConfigProblems(env: Record<string, string | undefined>, projectRoot = process.cwd()): SettingProblem[] {
-  return [...databaseProblems(env), ...authSettingProblems(env), ...mediaProblems(env, projectRoot)];
+  return [...databaseProblems(env), ...authSettingProblems(env), ...mediaProblems(env, projectRoot), ...cdnProblems(env)];
 }

@@ -25,6 +25,7 @@ Each document starts with a status line. Most are **Draft — Founder Review**: 
 | [ADR-0007: Guest checkout foundation](adr/0007-guest-checkout-foundation.md) | The inactive guest checkout: customer actor, anonymous idempotency, one-time tracking link |
 | [ADR-0008: Customer identity, recovery and 2FA](adr/0008-customer-identity-recovery-and-mfa.md) | Proposal only: separate customer identity, Owner recovery options, an evaluation of Better Auth's two-factor plugin, staff permissions |
 | [ADR-0009: Hosted database security boundary](adr/0009-hosted-database-security-boundary.md) | Hosted database security boundary (Data API, roles, privileges) and serverless connection design (Draft) |
+| [ADR-0010: Hosting and image delivery](adr/0010-hosting-and-image-delivery.md) | Confirmed hosting target (Netlify, Supabase, Cloudinary), Cloudinary delivery of published photos only, and the Netlify compatibility review |
 | [Backend handoff](architecture/backend-handoff.md) | One page for the next client developer: architecture, Owner API, closed public services, settings, blockers, decisions, verification limits |
 | [Backend completeness](architecture/backend-completeness.md) | Feature by feature: implemented, tested, production readiness, what blocks it, remaining work |
 

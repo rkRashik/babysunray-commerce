@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { type Db, pgErrorCode } from "@/db/database";
+import { reconcileCdn } from "../media/cdn-sync";
 import { expireOverdueVerifications } from "../orders/service";
 
 // Maintenance jobs (Gate H.41) for `npm run maintenance:run` and, once hosting is chosen, a scheduler. Each job is
@@ -41,6 +42,13 @@ export async function removeStaleRateLimitWindows(db: Db): Promise<number> {
          b as (delete from auth_rate_limits where ctid in (select ctid from auth_rate_limits where last_request < (extract(epoch from now() - interval '1 hour') * 1000)::bigint limit ${BATCH}) returning 1)
     select ((select count(*) from a) + (select count(*) from t) + (select count(*) from b))::int as n`);
   return rows[0].n;
+}
+
+/** Retries unfinished Cloudinary uploads and removals (media/cdn-sync.ts); 0 when no CDN is configured. A failure fails the job (counts only, no message). */
+export async function reconcileCdnCopies(db: Db): Promise<number> {
+  const result = await reconcileCdn(db);
+  if (result.failed > 0) throw new Error("CDN copies could not all be reconciled.");
+  return result.uploaded + result.destroyed;
 }
 
 export type HealthReport = {
@@ -130,6 +138,7 @@ export async function runMaintenance(db: Db, now: () => number = Date.now): Prom
     ["verification_expiry", () => expireVerifications(db)],
     ["expired_sessions", () => removeExpiredSessions(db)],
     ["stale_rate_limit_windows", () => removeStaleRateLimitWindows(db)],
+    ["cdn_reconcile", () => reconcileCdnCopies(db)],
   ];
   for (const [job, work] of steps) {
     if (now() - started > MAX_RUN_MS) {

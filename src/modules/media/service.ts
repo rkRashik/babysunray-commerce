@@ -13,6 +13,11 @@ import type { StoredImage } from "./images";
 // the product's version. Positions stay 0..n-1. Files are handled by the caller (operations.ts): it writes a
 // new file before these run and deletes a replaced or removed file only after they commit.
 
+/** A photo that still has a public CDN copy (withdrawal not yet finished at Cloudinary) is left alone, so no copy is ever orphaned. */
+const assertNoCdnCopy = (photo: { cdnPublicId: string | null }) => {
+  if (photo.cdnPublicId) throw new DomainError("PRODUCT_NOT_EDITABLE", "This photo's public CDN copy is still being removed after the product was withdrawn. Try again in a few minutes.");
+};
+
 /** Technical bound per product, not a merchandising rule (how many photos a product needs is not decided). */
 export const MAX_PRODUCT_PHOTOS = 12;
 
@@ -46,6 +51,7 @@ export async function addPhoto(
   let replaced: (typeof existing)[number] | null = null;
   if (input.replaceMediaId) {
     replaced = await photoOf(tx, product.id, input.replaceMediaId);
+    assertNoCdnCopy(replaced);
     position = replaced.position;
     await tx.delete(productMedia).where(eq(productMedia.id, replaced.id));
   } else if (existing.length >= MAX_PRODUCT_PHOTOS) {
@@ -97,6 +103,7 @@ export async function movePhoto(tx: Db, input: { productId: string; mediaId: str
 export async function removePhoto(tx: Db, input: { productId: string; mediaId: string; expectedVersion: number }): Promise<string> {
   const product = await lockDraftProduct(tx, input.productId, input.expectedVersion);
   const photo = await photoOf(tx, product.id, input.mediaId);
+  assertNoCdnCopy(photo);
   await tx.delete(productMedia).where(eq(productMedia.id, photo.id));
   await renumber(tx, (await photosOf(tx, product.id)).map((p) => p.id));
   await bumpProductVersion(tx, product.id);

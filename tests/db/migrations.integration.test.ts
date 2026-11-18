@@ -201,6 +201,7 @@ describe("migrations", () => {
       "product_measurements_value_range",
       "product_media_alt_valid",
       "product_media_byte_size_range",
+      "product_media_cdn_public_id_format",
       "product_media_content_type_valid",
       "product_media_created_by_user_id_auth_users_id_fk",
       "product_media_dimensions_range",

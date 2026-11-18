@@ -6,6 +6,7 @@ import { type UserActor, validateActor } from "../actor";
 import { actorFor, assertPermission, type Principal } from "../auth/principal";
 import { DomainError } from "../domain-error";
 import { type Once, runOnce } from "../idempotency/service";
+import { publishPhotosToCdn, withdrawPhotosFromCdn } from "../media/cdn-sync";
 import { evaluateReadiness, type PreparationItem, type ReadinessItem } from "./readiness";
 import { contentDigest } from "./review";
 import { validateId, validateVersion } from "./rules";
@@ -147,24 +148,31 @@ export async function publishProductOnce(db: Db, principal: Principal, idempoten
   const rule = APPROVED_PUBLICATION_RULE;
   if (rule === null) throw new DomainError("PUBLICATION_NOT_APPROVED", "No publication rule is approved (requirement I-6), so no product can be published.");
   const request = { productId: input.productId, contentSha256: input.contentSha256 };
-  return runOnce(
+  const once = await runOnce(
     db,
     { userId: user.userId, operation: "catalog.product.publish", key: idempotencyKey, request },
     async (tx) => ({ productId: (await publishProduct(tx, request.productId, request.contentSha256, rule, actorFor(user))).id }),
     loadProduct,
   );
+  // After the commit, never inside the transaction: the CDN copies of the photos (media/cdn-sync.ts). It never throws; what
+  // fails is retried by the maintenance job, and until then the photos are served without the CDN.
+  if (!once.replayed) await publishPhotosToCdn(db, request.productId);
+  return once;
 }
 
 /** Withdraws a published product, once per idempotency key. Nothing routes to it yet (nothing can be published). */
 export async function withdrawProductOnce(db: Db, principal: Principal, idempotencyKey: string, input: { productId: string; expectedVersion: number }): Promise<Once<Product>> {
   const user = assertPermission(principal, "catalog:publish");
   const request = { productId: input.productId, expectedVersion: input.expectedVersion };
-  return runOnce(
+  const once = await runOnce(
     db,
     { userId: user.userId, operation: "catalog.product.withdraw", key: idempotencyKey, request },
     async (tx) => ({ productId: (await withdrawProduct(tx, request.productId, request.expectedVersion, actorFor(user))).id }),
     loadProduct,
   );
+  // After the commit the shop no longer shows the photos (the database decides); now their CDN copies are destroyed and purged.
+  if (!once.replayed) await withdrawPhotosFromCdn(db, request.productId);
+  return once;
 }
 
 /** The publication history of one product, newest first. */

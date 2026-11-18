@@ -21,7 +21,7 @@ export const PREVIEW_PAGE_SIZE = 24;
 
 export type PreviewFilters = { q?: string; category?: string; size?: string; colour?: string; inStock?: boolean; page?: number };
 export type StockState = "in" | "partial" | "out";
-export type PhotoRef = { id: string; width: number; height: number; altEn: string | null; altBn: string | null };
+export type PhotoRef = { id: string; width: number; height: number; altEn: string | null; altBn: string | null; cdnPublicId?: string | null };
 export type ProductCard = {
   id: string;
   slug: string;
@@ -92,7 +92,7 @@ export async function listProductCards(db: Db, filters: PreviewFilters, scope: C
       .where(and(inArray(variants.productId, ids), eq(variants.status, "active")))
       .groupBy(variants.productId);
     const photos = await tx
-      .selectDistinctOn([productMedia.productId], { productId: productMedia.productId, id: productMedia.id, width: productMedia.width, height: productMedia.height, altEn: productMedia.altEn, altBn: productMedia.altBn })
+      .selectDistinctOn([productMedia.productId], { productId: productMedia.productId, id: productMedia.id, width: productMedia.width, height: productMedia.height, altEn: productMedia.altEn, altBn: productMedia.altBn, cdnPublicId: productMedia.cdnPublicId })
       .from(productMedia)
       .where(inArray(productMedia.productId, ids))
       .orderBy(productMedia.productId, asc(productMedia.position));
@@ -104,7 +104,7 @@ export async function listProductCards(db: Db, filters: PreviewFilters, scope: C
         minPricePaisa: p?.min ?? 0,
         maxPricePaisa: p?.max ?? 0,
         stock: !p || p.inStock === 0 ? "out" : p.inStock < p.total ? "partial" : "in",
-        photo: photo ? { id: photo.id, width: photo.width, height: photo.height, altEn: photo.altEn, altBn: photo.altBn } : null,
+        photo: photo ? { id: photo.id, width: photo.width, height: photo.height, altEn: photo.altEn, altBn: photo.altBn, cdnPublicId: photo.cdnPublicId } : null,
       };
     });
     return { items, hasMore: rows.length > PREVIEW_PAGE_SIZE, page };
@@ -237,7 +237,7 @@ export async function quoteLines(db: Db, input: { lines: unknown; zone?: unknown
     const productIds = [...new Set(rows.map((r) => r.productId))];
     const photos = productIds.length
       ? await tx
-          .selectDistinctOn([productMedia.productId], { productId: productMedia.productId, id: productMedia.id, width: productMedia.width, height: productMedia.height, altEn: productMedia.altEn, altBn: productMedia.altBn })
+          .selectDistinctOn([productMedia.productId], { productId: productMedia.productId, id: productMedia.id, width: productMedia.width, height: productMedia.height, altEn: productMedia.altEn, altBn: productMedia.altBn, cdnPublicId: productMedia.cdnPublicId })
           .from(productMedia)
           .where(inArray(productMedia.productId, productIds))
           .orderBy(productMedia.productId, asc(productMedia.position))
@@ -261,7 +261,7 @@ export async function quoteLines(db: Db, input: { lines: unknown; zone?: unknown
         nameBn: r.nameBn,
         size: r.size,
         colour: r.colour,
-        photo: photo ? { id: photo.id, width: photo.width, height: photo.height, altEn: photo.altEn, altBn: photo.altBn } : null,
+        photo: photo ? { id: photo.id, width: photo.width, height: photo.height, altEn: photo.altEn, altBn: photo.altBn, cdnPublicId: photo.cdnPublicId } : null,
       };
     });
     const subtotalPaisa = quoted.reduce((sum, l) => sum + (l.lineTotalPaisa ?? 0), 0);
