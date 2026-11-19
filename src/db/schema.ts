@@ -83,7 +83,7 @@ export const products = pgTable(
         and btrim(${t.careEn}) <> '' and length(${t.careEn}) <= 1000 and btrim(${t.careBn}) <> '' and length(${t.careBn}) <= 1000
         and btrim(${t.sizeGuidanceEn}) <> '' and length(${t.sizeGuidanceEn}) <= 1000 and btrim(${t.sizeGuidanceBn}) <> '' and length(${t.sizeGuidanceBn}) <= 1000`,
     ),
-    // Migration 0012: the Office list pages by (created_at, id) and filters by category; measured on 5,000
+    // Migration 0012: Admin list pages by (created_at, id) and filters by category; measured on 5,000
     // fictional products (first page 2.5 ms → 0.05 ms, category filter 0.96 ms → 0.26 ms).
     index("products_created_at_id_idx").on(t.createdAt, t.id),
     index("products_category_id_idx").on(t.categoryId),
@@ -1158,7 +1158,7 @@ export const policyPublications = pgTable(
 
 // Customer accounts (migration 0020; ADR-0011): a SECOND Better Auth instance (src/modules/customers/auth.ts) with its
 // own tables, cookies and path, Google sign-in only. Nothing here can reach the Owner's tables: user_access references
-// auth_users only, and the Office and /api/v1 verify only the Owner instance, so a customer can never become a principal.
+// auth_users only, and Admin and /api/v1 verify only the Owner instance, so a customer can never become a principal.
 // OAuth tokens from Google are never stored (the instance clears them before every write).
 export const customerUsers = pgTable(
   "customer_users",

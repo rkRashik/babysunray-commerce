@@ -30,10 +30,10 @@ const TRACKING_HEADERS = [
   },
 ];
 
-// The Owner Office: never framed by another site (clickjacking of its buttons), never indexed, no MIME sniffing,
+// Admin: never framed by another site (clickjacking of its buttons), never indexed, no MIME sniffing,
 // and no full URL (which can carry order or count ids) sent to another origin. Pages are dynamic, so Next.js
 // already marks them no-store.
-const OFFICE_HEADERS = [
+const ADMIN_HEADERS = [
   { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Robots-Tag", value: "noindex, nofollow" },
@@ -59,8 +59,8 @@ const nextConfig: NextConfig = {
       { source: "/track", headers: TRACKING_HEADERS },
       { source: "/api/track/:path*", headers: TRACKING_HEADERS },
       { source: "/api/track", headers: TRACKING_HEADERS },
-      { source: "/office", headers: OFFICE_HEADERS },
-      { source: "/office/:path*", headers: OFFICE_HEADERS },
+      { source: "/admin", headers: ADMIN_HEADERS },
+      { source: "/admin/:path*", headers: ADMIN_HEADERS },
       ...["/en", "/en/:path*", "/bn", "/bn/:path*", "/api/shop/:path*", "/api/customer-auth/:path*"].map((source) => ({ source, headers: SHOP_HEADERS })),
     ];
   },

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireShop } from "@/app/_shop/access";
-import { CheckoutForm } from "@/app/office/storefront-preview/_components/checkout-form";
+import { CheckoutForm } from "@/app/admin/storefront-preview/_components/checkout-form";
 import { dictionary, isLang } from "@/modules/storefront/i18n";
 
 // The real checkout: the last step places a Cash on Delivery order through POST /api/shop/checkout (src/api/guest-checkout.ts).

@@ -9,7 +9,7 @@
 
 ## Context
 
-BabySunray needs a bilingual (Bangla and English) e-commerce website and a private Owner Office for a single-founder baby and kidswear business in Bangladesh. Website infrastructure and software budget is BDT 0 by default. Data ownership, exports and verified backup and restore are launch-critical.
+BabySunray needs a bilingual (Bangla and English) e-commerce website and a private BabySunRay Admin for a single-founder baby and kidswear business in Bangladesh. Website infrastructure and software budget is BDT 0 by default. Data ownership, exports and verified backup and restore are launch-critical.
 
 Earlier work explored a Cloudflare Workers plus D1 direction, a framework-agnostic design prototype, and a Cloudflare-based proof-of-concept plan. The founder has restarted from a clean foundation and confirmed a different technology direction. This ADR records that direction and what remains open.
 
@@ -25,14 +25,14 @@ Earlier work explored a Cloudflare Workers plus D1 direction, a framework-agnost
 | Styling | Tailwind CSS with a custom, professional design system |
 | Architecture | One **modular monolith**. No separate backend server initially. |
 | Experience | Premium, product-first, bilingual, Bangladesh-focused e-commerce |
-| Office | Private Owner Office with reporting, exports, backups and recovery |
+| Admin | Private BabySunRay Admin with reporting, exports, backups and recovery |
 | Cost | Zero-cost infrastructure requirement (requirements C-1 to C-5) |
 
 ### Expected consequences
 
 These follow from the decision. They are expectations, not additional approvals.
 
-- Storefront, Owner Office and server logic live in one Next.js application, split into domain modules with explicit boundaries rather than into services.
+- Storefront, BabySunRay Admin and server logic live in one Next.js application, split into domain modules with explicit boundaries rather than into services.
 - PostgreSQL is the system of record. Consistency rules (stock holds, idempotent orders) are enforced by database transactions, not by client code. The rules themselves are business decisions (requirements O-9 to O-14).
 - The website and any future API clients (web, Windows, Android; requirements B-11, API-1) use the same server-side domain services. The API is part of the monolith: no separate backend server, Express, microservices, monorepo or API gateway is introduced.
 - Standard PostgreSQL logical dumps keep data portable between hosts.

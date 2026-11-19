@@ -7,7 +7,7 @@ Nothing described here is public. The real shop and its checkout exist (`/en`, `
 
 ## 1. The activation barrier
 
-`src/modules/launch/gate.ts` is the one place that answers "may the PUBLIC shop open?". In this version the answer is always **no**: `open` is the literal `false`, the module reads no environment variable, setting or database, and no Office action changes it (unit tests check all three). Founder acceptance (`src/modules/launch/acceptance.ts`) is separate and never opens it. The gate lists the reasons. Some depend on data (an empty or unpublished policy, unconfigured delivery charges, no reviewed product) and disappear when the data is there; the rest are unconditional because they need decisions this system cannot record:
+`src/modules/launch/gate.ts` is the one place that answers "may the PUBLIC shop open?". In this version the answer is always **no**: `open` is the literal `false`, the module reads no environment variable, setting or database, and no Admin action changes it (unit tests check all three). Founder acceptance (`src/modules/launch/acceptance.ts`) is separate and never opens it. The gate lists the reasons. Some depend on data (an empty or unpublished policy, unconfigured delivery charges, no reviewed product) and disappear when the data is there; the rest are unconditional because they need decisions this system cannot record:
 
 | Blocker | Rests on |
 |---|---|
@@ -22,7 +22,7 @@ Opening the shop is a founder-approved code change, not a setting.
 
 ## 2. Launch readiness page
 
-`/office/launch-readiness` (permission `launch:read`) shows the blockers above and four sections: catalogue, commerce, policies, operations. Each row has a status, the evidence, what happens next and the requirement it rests on. No score or percentage.
+`/admin/launch-readiness` (permission `launch:read`) shows the blockers above and four sections: catalogue, commerce, policies, operations. Each row has a status, the evidence, what happens next and the requirement it rests on. No score or percentage.
 
 | Status | Meaning |
 |---|---|
@@ -36,7 +36,7 @@ Live checks: catalogue counts over draft products (the readiness checklist, avai
 
 ## 3. Policy drafts
 
-`/office/policies` (read `policies:read`, write `policies:write`, publish `policies:publish`) holds one draft per kind: delivery, return and exchange, privacy, checkout notices.
+`/admin/policies` (read `policies:read`, write `policies:write`, publish `policies:publish`) holds one draft per kind: delivery, return and exchange, privacy, checkout notices.
 
 - Write the real wording yourself, in English and Bangla. Nothing is generated, translated or filled in.
 - Beside each editor, "Questions to answer" lists what is already decided (with the rule or requirement) and what is still open. It is guidance, never inserted into the draft (`src/modules/policies/checklist.ts`).
@@ -53,9 +53,9 @@ Live checks: catalogue counts over draft products (the readiness checklist, avai
 
 The product page has **Publish to the shop** and **Withdraw from the shop** (`catalog:publish`). Publishing needs a publication rule: none is approved for the public (I-6), so on the development or a production database it refuses; on the staging-marked database the PROPOSED rule applies for founder acceptance, and each publication records it. The readiness page flags a product found published on any other database as a change to investigate.
 
-1. **Prepare** each product until the readiness checklist is met (`/office/catalogue-preparation`, the product page).
-2. **Check** how it would look in the customer preview (`/office/storefront-preview`).
-3. **Review** it: `/office/product-reviews` lists every draft with what is missing (each item links to where it is fixed) and its review state. On the product page, "Mark the current content as reviewed" records a review (permission `catalog:review`) in `product_reviews` (append-only): who, when, what was still open, and the SHA-256 of the reviewable content.
+1. **Prepare** each product until the readiness checklist is met (`/admin/catalogue-preparation`, the product page).
+2. **Check** how it would look in the customer preview (`/admin/storefront-preview`).
+3. **Review** it: `/admin/product-reviews` lists every draft with what is missing (each item links to where it is fixed) and its review state. On the product page, "Mark the current content as reviewed" records a review (permission `catalog:review`) in `product_reviews` (append-only): who, when, what was still open, and the SHA-256 of the reviewable content.
 4. A review is **current** only while the content still has that digest. Any change to names, descriptions, fabric (or its confirmation), care, size guidance, category, a SKU's size, colour, price or status, a new SKU, the size chart or a photo (file, description or order) makes it **outdated**. Stock, the featured flag and category names do not.
 5. A review needs the founder-stated items (both names, both descriptions, an active priced SKU). It is refused if the content changed after the page was loaded.
 

@@ -14,7 +14,7 @@ import { trustedClientHeaders } from "../rate-limit/client";
 //   never merged), and only an address Google reports as verified can create an account;
 // - the minimum scopes (openid, email, profile) and no stored OAuth token: Google's tokens are dropped before every write
 //   (the table's check refuses them too);
-// - nothing here can grant an Office permission: user_access references auth_users only, and getPrincipal and
+// - nothing here can grant an Admin permission: user_access references auth_users only, and getPrincipal and
 //   getBearerPrincipal verify the Owner instance only.
 // Only three HTTP paths are reachable (CUSTOMER_AUTH_ROUTES, enforced by the route); the rest of Better Auth's endpoints
 // answer 404 there.

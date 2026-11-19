@@ -77,7 +77,7 @@ async function main(): Promise<void> {
         : ["- Database: not checked until DATABASE_URL is valid."];
   for (const l of database) console.log(l);
   const ready = configReady(checks) && conflicts.length === 0 && database.every((l) => !l.startsWith("✗"));
-  console.log(ready ? "Ready: the Owner Office can start and sign-in can work." : "Not ready: fix the lines marked ✗, then run npm run config:check again.");
+  console.log(ready ? "Ready: Admin can start and sign-in can work." : "Not ready: fix the lines marked ✗, then run npm run config:check again.");
   if (!ready) process.exitCode = 1;
 }
 

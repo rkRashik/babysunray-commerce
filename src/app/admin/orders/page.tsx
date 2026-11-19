@@ -1,0 +1,152 @@
+import { Plus } from "lucide-react";
+import Link from "next/link";
+import { productCursorCodec } from "@/api/v1/schemas";
+import { getDb } from "@/db/client";
+import { DomainError } from "@/modules/domain-error";
+import { isOrderQueue, listOrders, ORDER_QUEUES } from "@/modules/orders/queries";
+import { formatOrderNumber, type OrderStatus, verificationOverdue } from "@/modules/orders/rules";
+import { AdminShell, formatTime } from "../_components/shell";
+import { requireAdmin } from "../_lib/session";
+import { bdt, Dimensions, relative } from "./_components/labels";
+
+export const metadata = { title: "Orders · Admin" };
+
+const STATUSES: OrderStatus[] = ["pending_verification", "verification_expired", "confirmed", "cancelled", "closed"];
+const STATUS_LABELS: Record<OrderStatus, string> = {
+  pending_verification: "Pending verification",
+  verification_expired: "Verification expired",
+  confirmed: "Confirmed",
+  cancelled: "Cancelled",
+  closed: "Closed",
+};
+const PAGE_SIZE = 25;
+const FIELD = "of-input mt-1.5";
+
+const href = (params: Record<string, string | undefined>) => {
+  const query = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => Boolean(e[1])));
+  return query.size ? `/admin/orders?${query}` : "/admin/orders";
+};
+
+// Orders newest first. Filters live in the URL; only the order number is searchable, so no phone number or
+// name ever appears in a URL.
+export default async function OrdersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await requireAdmin("orders:read");
+  const query = await searchParams;
+  const status = STATUSES.find((s) => s === query.status);
+  const attention = query.attention === "true";
+  const queue = isOrderQueue(query.queue) ? query.queue : undefined;
+  const number = typeof query.number === "string" ? query.number.trim() : "";
+  const after = typeof query.cursor === "string" ? (productCursorCodec.decode(query.cursor) ?? undefined) : undefined;
+  let error: string | undefined;
+  let page: Awaited<ReturnType<typeof listOrders>> = { items: [], hasMore: false };
+  try {
+    page = await listOrders(getDb(), { limit: PAGE_SIZE, status, attention, queue, number: number || undefined, after });
+  } catch (e) {
+    if (!(e instanceof DomainError)) throw e;
+    error = "Enter an order number such as ORD-000042 or 42.";
+  }
+  const now = new Date();
+  const last = page.items.at(-1);
+  const next = page.hasMore && last ? href({ status, attention: attention ? "true" : undefined, queue, number: number || undefined, cursor: productCursorCodec.encode(last.key) }) : null;
+
+  return (
+    <AdminShell title="Orders" current="orders">
+      <div className="flex flex-wrap gap-3">
+        <Link href="/admin/orders/new" className="of-btn of-btn-primary">
+          <Plus aria-hidden="true" size={18} strokeWidth={2} />
+          New assisted order
+        </Link>
+        <Link href={href({ attention: "true" })} className="of-btn of-btn-line">
+          Needs attention
+        </Link>
+      </div>
+      {queue ? (
+        <p role="status" className="text-sm text-gray-700">
+          Showing the queue: <strong>{ORDER_QUEUES[queue]}</strong>. <Link href="/admin/orders" className="underline">Show all orders</Link>.
+        </p>
+      ) : null}
+      <div role="search" aria-label="Find orders">
+        <form method="get" action="/admin/orders" className="of-card flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <label htmlFor="order-number" className="block text-sm font-semibold">
+              Order number
+            </label>
+            <input id="order-number" name="number" defaultValue={number} maxLength={20} inputMode="text" className={FIELD} aria-describedby="order-number-hint" />
+            <p id="order-number-hint" className="mt-1 text-xs text-gray-600">
+              For example ORD-000042 or 42. Names and phone numbers are not searchable.
+            </p>
+          </div>
+          <div>
+            <label htmlFor="order-status" className="block text-sm font-semibold">
+              Order status
+            </label>
+            <select id="order-status" name="status" defaultValue={status ?? ""} className={FIELD}>
+              <option value="">All</option>
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-2 sm:pb-[1.375rem]">
+            <button type="submit" className="of-btn of-btn-primary">
+              Show
+            </button>
+            {status || number || attention || queue ? (
+              <Link href="/admin/orders" className="of-btn of-btn-line">
+                Clear
+              </Link>
+            ) : null}
+          </div>
+        </form>
+      </div>
+
+      {error ? (
+        <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+          {error}
+        </p>
+      ) : page.items.length === 0 ? (
+        <p role="status" className="text-sm text-gray-700">
+          {status || number || attention || queue ? "No orders match." : "No orders yet."} <Link href="/admin/orders/new" className="underline">Create an assisted order</Link>.
+        </p>
+      ) : (
+        <ul aria-label="Orders" className="of-card divide-y divide-gray-200 overflow-hidden">
+          {page.items.map((o) => (
+            <li key={o.id} className="space-y-2.5 px-4 py-3.5 transition-colors hover:bg-[#fbf8f3] lg:px-5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <Link href={`/admin/orders/${o.id}`} className="inline-flex min-h-11 items-center text-[1.0625rem] font-bold underline-offset-4 hover:underline">
+                  {formatOrderNumber(o.number)}
+                </Link>
+                <span className="font-bold tabular-nums">{bdt(o.totalPaisa)}</span>
+              </div>
+              <p className="text-sm text-gray-600">
+                {o.customerName} · {formatTime(o.createdAt)}
+                {verificationOverdue(o, now) ? (
+                  <strong className="ml-2 text-red-800">Verification deadline passed</strong>
+                ) : o.orderStatus === "pending_verification" ? (
+                  <span className="ml-2 font-semibold text-amber-900">Verify {relative(o.verificationExpiresAt, now)}</span>
+                ) : null}
+              </p>
+              <Dimensions order={o} compact />
+            </li>
+          ))}
+        </ul>
+      )}
+      {next || after ? (
+        <nav aria-label="Pages" className="flex gap-2 text-sm">
+          {after ? (
+            <Link href={href({ status, attention: attention ? "true" : undefined, queue, number: number || undefined })} className="of-btn of-btn-line">
+              First page
+            </Link>
+          ) : null}
+          {next ? (
+            <Link href={next} className="of-btn of-btn-line">
+              Next page
+            </Link>
+          ) : null}
+        </nav>
+      ) : null}
+    </AdminShell>
+  );
+}

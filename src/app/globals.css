@@ -2,7 +2,7 @@
 
 /* =====================================================================================================================
    First Light: the BabySunray design system (docs/design/storefront-design-system.md). One family of tokens for the
-   storefront (the Owner-only preview and the guest tracking page, `.sf`) and the Owner Office (`.of`).
+   storefront (the Owner-only preview and the guest tracking page, `.sf`) and Admin (`.of`).
    Cocoa to read, amber to act, ivory to rest. The approved logo colours (BR-2) are the base: Deep Cocoa #332923, Muted
    Amber #C28B56, Warm Ivory #F9F6F1. An installation replaces ink, sun and paper with its own colours, checked for contrast
    (src/config/installation.ts).
@@ -38,7 +38,7 @@
   --color-sf-warn-soft: #fbefd0;
   --color-sf-info: #2e5a73;
   --color-sf-info-soft: #dfebf2;
-  /* The Owner Office's dark sidebar. */
+  /* Admin's dark sidebar. */
   --color-of-night: #2a211c;
   --color-of-night-2: #43362e;
   --color-of-canvas: #f4efe8;
@@ -50,7 +50,7 @@
   line-height: 1.7;
 }
 
-/* Printed Owner documents (src/app/office/print): A4, readable text, page numbers, and no screen-only controls. */
+/* Printed Owner documents (src/app/admin/print): A4, readable text, page numbers, and no screen-only controls. */
 @page {
   size: A4;
   margin: 14mm 12mm 16mm;
@@ -973,8 +973,8 @@
 }
 
 /* ---------------------------------------------------------------------------------------------------------------------
-   The Owner Office: the same family, denser. A dark cocoa sidebar, an ivory canvas, white cards, amber for the one primary
-   action of a form. The Office pages use Tailwind's neutral, red, amber, green and blue utilities; inside `.of` those scales
+   Admin: the same family, denser. A dark cocoa sidebar, an ivory canvas, white cards, amber for the one primary
+   action of a form. The Admin pages use Tailwind's neutral, red, amber, green and blue utilities; inside `.of` those scales
    are remapped to First Light tones, so every page shares one palette without a class per page.
    ------------------------------------------------------------------------------------------------------------------- */
 .of {
@@ -1159,7 +1159,7 @@
   .of .of-nav-link:focus-visible {
     outline-color: var(--color-sf-sun-glow);
   }
-  /* The phone's bottom bar and its Menu (shell.tsx, office-menu.tsx): icon and word together, the current item capped in amber. */
+  /* The phone's bottom bar and its Menu (shell.tsx, admin-menu.tsx): icon and word together, the current item capped in amber. */
   .of {
     --of-bar-h: 4.25rem;
   }

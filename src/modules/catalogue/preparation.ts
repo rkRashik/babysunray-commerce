@@ -5,7 +5,7 @@ import { productMeasurements, productMedia, products, variants } from "@/db/sche
 import { assertPermission, type Principal } from "../auth/principal";
 import { type PreparationItem, READINESS_ITEMS } from "./readiness";
 
-// The readiness checklist (readiness.ts) as SQL, so the Office can count and filter products by what they still
+// The readiness checklist (readiness.ts) as SQL, so Admin can count and filter products by what they still
 // need without loading every product. Each expression is true when the item is MET for the product row; an
 // integration test checks that they agree with evaluateReadiness for real rows. Like the checklist, this is
 // advisory: it never makes a product eligible for publication (no publication rule is approved).

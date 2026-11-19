@@ -1,7 +1,7 @@
 # BabySunray: Product Requirements
 
 **Status:** Draft — Founder Review (revision A.6)
-**Purpose:** The single source of truth for what BabySunray's website and Owner Office must do. Technology choices live in [ADR-0001](../adr/0001-application-stack.md). Visual design is not specified here.
+**Purpose:** The single source of truth for what BabySunray's website and BabySunRay Admin must do. Technology choices live in [ADR-0001](../adr/0001-application-stack.md). Visual design is not specified here.
 **Last updated:** 2026-11-16
 
 ## How to read this document
@@ -21,8 +21,8 @@ Revision A.3 records the founder's Gate G.3 approval (14 Nov 2026) to implement 
 Revision A.4 records the founder's Gate G.3a technical defaults (SKU character set, strictly positive price, ASCII slugs, stock on inactive SKUs). Basis labels are unchanged.
 Revision A.5 records the founder's Gate H.2 approval (15 Nov 2026) of the authentication solution (open decision 3) and of the versioned REST and OpenAPI direction (open decision 17). What was built is recorded in [ADR-0003](../adr/0003-authentication-foundation.md). Basis labels are unchanged; OF-5's recovery path and API-10's native-client credentials remain open.
 Revision A.6 records batch H.2a + H.3 (15 Nov 2026): a read-only, Owner-only `/api/v1` with Bearer authentication and OpenAPI ([ADR-0004](../adr/0004-api-v1-and-bearer-transport.md)). Basis labels are unchanged.
-Revision A.7 records batch H.4–H.6 (15 Nov 2026): operation-level idempotency for stock and draft-catalogue writes ([ADR-0005](../adr/0005-operation-idempotency.md); API-8 for these operations, not O-3, since orders do not exist), Owner-only write endpoints, request-size limits, a no-CORS policy and per-user API rate limits (API-11, [ADR-0004](../adr/0004-api-v1-and-bearer-transport.md)), and a first functional Owner Office for draft products, variants, stock receipts, adjustments and movement history (part of OF-1; README.md, Owner Office). The Office's screens are functional only; final UI design (decision 4) stays open. Basis labels are unchanged.
-Revision A.8 records batch H.7–H.9 (15 Nov 2026): real-browser tests of the Owner Office; a local, operator-only Owner password reset (`npm run auth:reset-owner-password`), which is **not** the recovery path OF-5 asks for and leaves it open; editing of draft product text and of variant size, colour and price through the shared operations, `/api/v1` (PATCH) and the Office, with optimistic versions against stale overwrites; and Owner product search by slug, English or Bangla name and SKU with status filter and paging (part of I-12; order and stock listings do not exist or are not searchable yet). Three editing limits are technical defaults chosen in this batch, pending founder review rather than approved rules: archived products and their variants are not edited, inactive variants are not edited, and slug and SKU never change. Basis labels are unchanged.
+Revision A.7 records batch H.4–H.6 (15 Nov 2026): operation-level idempotency for stock and draft-catalogue writes ([ADR-0005](../adr/0005-operation-idempotency.md); API-8 for these operations, not O-3, since orders do not exist), Owner-only write endpoints, request-size limits, a no-CORS policy and per-user API rate limits (API-11, [ADR-0004](../adr/0004-api-v1-and-bearer-transport.md)), and a first functional BabySunRay Admin for draft products, variants, stock receipts, adjustments and movement history (part of OF-1; README.md, BabySunRay Admin). The Admin's screens are functional only; final UI design (decision 4) stays open. Basis labels are unchanged.
+Revision A.8 records batch H.7–H.9 (15 Nov 2026): real-browser tests of BabySunRay Admin; a local, operator-only Owner password reset (`npm run auth:reset-owner-password`), which is **not** the recovery path OF-5 asks for and leaves it open; editing of draft product text and of variant size, colour and price through the shared operations, `/api/v1` (PATCH) and the Admin, with optimistic versions against stale overwrites; and Owner product search by slug, English or Bangla name and SKU with status filter and paging (part of I-12; order and stock listings do not exist or are not searchable yet). Three editing limits are technical defaults chosen in this batch, pending founder review rather than approved rules: archived products and their variants are not edited, inactive variants are not edited, and slug and SKU never change. Basis labels are unchanged.
 Revision A.9 records the founder's approval of the order business rules (Gate H.10–H.12, 15 Nov 2026): reservation at submission, manual verification, cancellation by stage, 24-hour verification expiry, returns and exchanges, return shipping responsibility, RTO quarantine, order milestones, Owner-configured delivery zones, COD accounting, guest tracking, dispatch deduction, manual COD refunds and further defaults. The rules are reproduced in [order-policy-decisions.md](order-policy-decisions.md) with the states and engineering defaults derived from them. Rows that the founder decided now show the new basis with the old one in brackets (for example "F (was Q)") and a reference to the rule; the requirement text itself is unchanged. These rules authorise the internal Orders system only; public checkout still waits for S-17 and G-7.
 Choices the founder has not made are collected in [section 12](#12-open-decisions) rather than guessed. Earlier AI recommendations (the discarded prototype, the earlier Cloudflare proposal) have **not** been promoted to F.
 
@@ -55,7 +55,7 @@ Choices the founder has not made are collected in [section 12](#12-open-decision
 | Product and SKU/variant management | I-1, I-9 to I-11 | |
 | Secure guest cash-on-delivery checkout | S-3, S-4, S-17 | Public checkout waits for approved policies (G-7). |
 | Website orders and manual Messenger/WhatsApp orders | B-4, S-5, O-2 | |
-| Owner Office, with future Admin and Staff permissions | OF-1, OF-7, OF-10 | Staff roles are not built now (OF-7). |
+| BabySunRay Admin, with future Admin and Staff permissions | OF-1, OF-7, OF-10 | Staff roles are not built now (OF-7). |
 | Inventory receipts, adjustments, stock history and reconciliation | I-2, I-3, I-8 | Reservation meaning follows O-9 to O-12. |
 | Order, fulfilment, payment and return/refund lifecycles | O-1, section 4 | Values and transitions are not yet defined (O-9 to O-14). |
 | Courier tracking, COD collection and settlement | S-9, OF-3, OF-8 | Courier-tracking scope and the settlement process are not yet defined. |
@@ -96,7 +96,7 @@ The founder requires the outcome in B-11. The approach below is **proposed** unl
 | API-2 | External clients use a versioned HTTP API served by the existing Next.js application. No separate backend server is added. The style (proposed: REST under a `/api/v1` prefix, implemented with Next.js Route Handlers) awaits approval. | P |
 | API-3 | The website's own server-rendered pages and server actions call the shared services directly, not the application's own HTTP endpoints. | P |
 | API-4 | The API contract is described in an OpenAPI document, public and authorised endpoints both, and checked against behaviour (G-12). | P |
-| API-5 | Every endpoint validates and normalises input on the server, handles unexpected fields by an explicit and tested rule, and authenticates and authorises on the server. This extends OF-4 from Owner Office pages to every client. | P |
+| API-5 | Every endpoint validates and normalises input on the server, handles unexpected fields by an explicit and tested rule, and authenticates and authorises on the server. This extends OF-4 from BabySunRay Admin pages to every client. | P |
 | API-6 | Errors use one structure with stable error codes. Responses never contain stack traces, SQL, secrets or customer personal data (S-10). | P |
 | API-7 | List endpoints support pagination, filtering and a stable, deterministic sort. | P |
 | API-8 | Retry-sensitive operations (order submission, O-3, and other operations that move stock or money) are idempotent over the API as well. | P |
@@ -189,9 +189,9 @@ O-9 to O-14 were left to the founder. **Decided in Revision A.9** (founder instr
 | I-9 | A product has one or more variants. Each variant is a sellable SKU with its own price and its own stock (extends I-1). Implementation approved by the founder (Gate G.3). | P |
 | I-10 | SKUs are entered by the founder, normalised (case and surrounding whitespace) and unique across the catalogue. Normalisation and uniqueness: implementation approved by the founder (Gate G.3). Technical default approved in Gate G.3a: 1–64 ASCII uppercase letters, digits, hyphens and underscores. How a SKU is structured and what its parts mean is still to be agreed. | P |
 | I-11 | Products and variants that are referenced by stock history, orders or audit records are deactivated or archived, never silently deleted. Audit-relevant records are never removed without a recorded, authorised action. | P |
-| I-12 | Owner Office product, stock and order listings are searchable, filterable and paginated with a stable sort. Customer-facing search is undecided (S-14). | P |
+| I-12 | BabySunRay Admin product, stock and order listings are searchable, filterable and paginated with a stable sort. Customer-facing search is undecided (S-14). | P |
 
-## 6. Owner Office
+## 6. BabySunRay Admin
 
 A private area for the founder, with security boundaries that anticipate later staff roles.
 
@@ -200,7 +200,7 @@ A private area for the founder, with security boundaries that anticipate later s
 | OF-1 | Manage products, pricing, stock, orders (website and assisted), expenses, fulfilment, configuration and reports. Phased delivery is acceptable. | F |
 | OF-2 | A practical dashboard, not an executive analytics page. No fictional KPIs. | P |
 | OF-3 | Cash-on-delivery money is shown in separate buckets: expected, collected by the courier, settled to the owner. Whether an order counts as *expected* depends on verification (O-10). *Founder rule J (A.9).* | F (was P) |
-| OF-4 | Every Office page and API enforces authentication and authorisation. Each is covered by a negative test. | P |
+| OF-4 | Every Admin page and API enforces authentication and authorisation. Each is covered by a negative test. | P |
 | OF-5 | Authentication uses an established solution, not a custom-designed protocol. It includes session expiry, CSRF protection and a recovery path for a lost device. Which solution is open. | P + Q |
 | OF-6 | Privileged and sensitive actions (exports, stock adjustments, status changes) are written to an audit log with actor and time. | P |
 | OF-7 | Staff roles are not built now. Permission checks are written so roles can be added without rewriting them. | F |
@@ -253,7 +253,7 @@ An export is a readable snapshot. It is **not** a disaster-recovery backup. Spre
 
 ### 7.4 Implementation status (Gate H.13–H.16)
 
-What exists for the items above and the related Owner Office items, as of 15 Nov 2026. Basis labels are unchanged: implementing a **P** item does not approve it. Details: [runbook](../operations/runbook.md), [export formats](../operations/exports.md).
+What exists for the items above and the related BabySunRay Admin items, as of 15 Nov 2026. Basis labels are unchanged: implementing a **P** item does not approve it. Details: [runbook](../operations/runbook.md), [export formats](../operations/exports.md).
 
 | ID | Status | Notes |
 |---|---|---|
@@ -292,7 +292,7 @@ These must be demonstrated before the matching feature is called ready. Evidence
 |---|---|
 | G-1 | Under the approved reservation rules, parallel orders for the last unit never oversell. A failed reservation leaves no order, item or hold. Multi-item carts and retries are included. |
 | G-2 | A repeated submission with the same idempotency key yields one order, including after a timeout and retry. |
-| G-3 | Every Office route and API rejects unauthenticated and unauthorised requests. |
+| G-3 | Every Admin route and API rejects unauthenticated and unauthorised requests. |
 | G-4 | Tracking links cannot be enumerated or guessed. Expiry and revocation work. No link or personal data appears in logs, analytics, error reports, referrer headers or third-party requests. Generic errors and rate limits apply. |
 | G-5 | XLSX, CSV and JSON exports open correctly on Windows desktop Excel and common mobile browsers, with Bangla text, text phone numbers and no formula execution. |
 | G-6 | A full restore drill passes (K-6) and meets the approved RTO. The backup routine meets the approved RPO. |
@@ -330,7 +330,7 @@ What batch H.17–H.20 built, as of 15 Nov 2026. Basis labels are unchanged: imp
 | I-5, K-2 | Local development storage only | Owner photo upload with type, size and decoding checks, metadata removed, stored outside the repository; a manifest (`product_media`) and `npm run media:verify`. No production storage, no automatic photo backup. Decision 14 stays open ([ADR-0006](../adr/0006-product-media-storage.md)). |
 | I-6 | Advisory checklist only | A read-only readiness checklist separates approved requirements, this proposed rule and recommendations. No publish action exists. |
 | D-8 | Extended | Three more export datasets: product content, size charts and the photo manifest. |
-| S-1, S-2, S-6, S-7, S-8, S-13 | Owner-only preview, not live | A bilingual storefront prototype under `/office/storefront-preview` with product list, search and filters, product page with sizes in cm, a cart re-checked against the database and the delivery charge shown before checkout. Visual design is a prototype (BR-6, decision 4). Checkout wording stays P. Accessibility checked with axe (WCAG 2.2 A and AA rules) and keyboard tests; no usability test with people yet (G-9). |
+| S-1, S-2, S-6, S-7, S-8, S-13 | Owner-only preview, not live | A bilingual storefront prototype under `/admin/storefront-preview` with product list, search and filters, product page with sizes in cm, a cart re-checked against the database and the delivery charge shown before checkout. Visual design is a prototype (BR-6, decision 4). Checkout wording stays P. Accessibility checked with axe (WCAG 2.2 A and AA rules) and keyboard tests; no usability test with people yet (G-9). |
 | S-1, S-2, S-12, S-13 (Gate H.23) | Preview improved, still not live | Photo gallery with keyboard thumbnails and image fallbacks, clearer size and colour choice, category links and same-category products, results kept across navigation, cart announcements and retry, a three-step checkout simulation, Bangla digits accepted in phone numbers; axe (WCAG 2.2 A and AA rules) on the new states in both languages and a 360-pixel phone test. Interface wording remains Draft — Founder Review; no usability test with people yet (G-9). |
 | S-3, S-4, S-17 | Simulated only | Guest COD checkout runs as a simulation that records nothing. Public checkout stays disabled until G-7 is met. |
 | RU-1, RU-4, G-14 | Partly verified (Gate H.24) | The shop's name, bilingual description, contact and preview colours are per-installation settings with neutral defaults and validation (`src/config/installation.ts`); business rules stay in code and policy. `npm run test:install` rehearses a separate installation on this machine: a clean clone, an offline locked install, the clone's backup and photo drills, a fresh schema, new secrets and Owner, fictional branding, and every browser test against its production build, with checks that no page or database row mentions BabySunray ([installation.md](../operations/installation.md) section 5). Not shown: an independent PostgreSQL server, a second machine, an online install. The licence list is an inventory with exact versions, not a review (RU-5). G-14 is not met. |
@@ -404,7 +404,7 @@ As of 19 Nov 2026. Basis labels are unchanged except where the founder's instruc
 | Phase | Outcome | Basis |
 |---|---|---|
 | 0 | Documentation and decisions: requirements, stack ADR, business rules (O-9 to O-14), RPO and RTO, hosting and ORM decisions, design research and approved design system | P |
-| 1 | Local PostgreSQL development and tests (only after separate founder approval): catalogue, stock and Owner Office foundation, with exports and backup working on demo data | P |
+| 1 | Local PostgreSQL development and tests (only after separate founder approval): catalogue, stock and BabySunRay Admin foundation, with exports and backup working on demo data | P |
 | 2 | Guest COD checkout, confirmation, tracking, assisted orders | P |
 | 3 | Reports, print, restore drill, outage procedure, then launch review against section 9 | P |
 
@@ -457,7 +457,7 @@ Also out of scope: a separate backend server, Express, microservices, a monorepo
 | Founder instruction, Gate H.10–H.12 (15 Nov 2026) | Order business rules A to N (O-9 to O-14 and related) | Founder statement; reproduced in order-policy-decisions.md, section 1. |
 | Founder instruction, Gate H.2 (15 Nov 2026) | Authentication solution and its scope (decision 3); REST and OpenAPI direction (decision 17) | Approves implementation of the named scope only; basis labels unchanged. |
 | Founder instruction, batch H.2a + H.3 (15 Nov 2026) | Authentication audit fixes; read-only `/api/v1` with Bearer and OpenAPI | Approves the named scope only; basis labels unchanged. |
-| Founder instruction, batch H.4–H.6 (15 Nov 2026) | Operation idempotency; stock and draft-catalogue write API; API limits, CORS policy and rate limits; a minimal functional Owner Office (not a UI design) | Approves the named scope only; basis labels unchanged. |
+| Founder instruction, batch H.4–H.6 (15 Nov 2026) | Operation idempotency; stock and draft-catalogue write API; API limits, CORS policy and rate limits; a minimal functional BabySunRay Admin (not a UI design) | Approves the named scope only; basis labels unchanged. |
 | Founder instruction, batch H.13–H.16 (15 Nov 2026) | Dashboard, reports, exports, stock reconciliation, print, local backup and recovery tooling | Approves the named engineering scope only; basis labels unchanged; no schedule, retention, off-device copy or RPO/RTO decided. |
 | Founder instruction, batch H.21–H.24 (15 Nov 2026) | Bulk catalogue import, catalogue preparation, media backup and restore tooling, storefront preview improvements, installation configuration and rehearsal | Approves the named engineering scope only; basis labels unchanged; no publication, public checkout, hosting, backup schedule or RPO/RTO approved. |
 | Founder instruction, Gate H.30 (16 Nov 2026) | Storefront design research, a proposed hybrid concept, customer-journey review, one launch decision document | Approves the named engineering scope only; final design approval stays with the founder; no public storefront, checkout or policy approved. |

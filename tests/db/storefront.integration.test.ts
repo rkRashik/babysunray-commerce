@@ -23,7 +23,7 @@ vi.mock("next/navigation", () => ({
     throw Object.assign(new Error("NEXT_REDIRECT"), { url });
   },
 }));
-const actions = await import("../../src/app/office/storefront-preview/actions");
+const actions = await import("../../src/app/admin/storefront-preview/actions");
 
 let db: Db;
 let pool: Pool;
@@ -116,7 +116,7 @@ describe("preview reads", () => {
     expect(await errorCodeOf(simulateCheckout(db, forged, { name: "x", phone: "x", address: "x", zone: "dhaka_city", lines: [] }))).toBe("UNAUTHENTICATED");
     state.headers = new Headers();
     for (const call of [() => actions.quoteCartAction({ lines: [], zone: null }), () => actions.simulateCheckoutAction(null, new FormData())]) {
-      await expect(call()).rejects.toMatchObject({ url: "/office/login" });
+      await expect(call()).rejects.toMatchObject({ url: "/admin/login" });
     }
   });
 });

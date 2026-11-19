@@ -1,5 +1,5 @@
 // `npm run auth:bootstrap-owner:staging`: creates the founder's Owner account on the hosted STAGING database, so the founder
-// can sign in to the Office on the staging site for founder acceptance (ADR-0011). For the founder to run in an interactive
+// can sign in to Admin on the staging site for founder acceptance (ADR-0011). For the founder to run in an interactive
 // terminal; never run by the application, a test or a scheduler. It asks for the email, name and password (the password
 // without echo), so nothing lands in arguments, history or logs.
 //
@@ -29,7 +29,7 @@ async function main(): Promise<void> {
     const name = await askVisible("Owner display name: ");
     const password = await askNewPassword();
     await bootstrapStagingOwner(client, { email, name, password });
-    console.log("Owner account created on the staging database. Sign in at <site>/office/login.");
+    console.log("Owner account created on the staging database. Sign in at <site>/admin/login.");
   } finally {
     await client.end();
   }

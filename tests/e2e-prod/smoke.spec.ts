@@ -9,7 +9,7 @@ import { clearSignInLimits, ensureZones, seedSku, signIn } from "../e2e/support"
 test.beforeAll(ensureZones);
 test.beforeEach(clearSignInLimits);
 
-test("sign-in sets a Secure, HttpOnly session cookie; Office pages are private", async ({ page, context }) => {
+test("sign-in sets a Secure, HttpOnly session cookie; Admin pages are private", async ({ page, context }) => {
   await signIn(page);
   const cookies = await context.cookies();
   const session = cookies.filter((c) => /session_token/.test(c.name));
@@ -19,7 +19,7 @@ test("sign-in sets a Secure, HttpOnly session cookie; Office pages are private",
     expect(c.httpOnly).toBe(true);
     expect(c.sameSite).toBe("Lax");
   }
-  const response = await page.goto("/office/dashboard");
+  const response = await page.goto("/admin/dashboard");
   const headers = response?.headers() ?? {};
   expect(headers["cache-control"]).toContain("no-store");
   expect(headers["x-frame-options"]).toBe("DENY");
@@ -31,7 +31,7 @@ test("an order, a stock count and an export work end to end in the production bu
   page.on("dialog", (dialog) => void dialog.accept());
   await signIn(page);
   const sku = await seedSku(3);
-  await page.goto("/office/orders/new");
+  await page.goto("/admin/orders/new");
   await page.getByLabel("WhatsApp").check();
   await page.getByLabel("Customer name").fill("Test Customer");
   await page.getByLabel("Phone").fill("01711000009");
@@ -42,7 +42,7 @@ test("an order, a stock count and an export work end to end in the production bu
   await page.getByRole("button", { name: "Create order" }).click();
   await expect(page.locator('[data-dimension="order"]')).toHaveText("Pending verification");
 
-  await page.goto("/office/stock-counts");
+  await page.goto("/admin/stock-counts");
   await page.getByLabel("Only the SKUs listed below").check();
   await page.getByLabel("SKUs to count").fill(sku);
   await page.getByRole("button", { name: "Start count" }).click();
@@ -53,7 +53,7 @@ test("an order, a stock count and an export work end to end in the production bu
   await page.getByRole("button", { name: "Apply corrections" }).click();
   await expect(page.getByTestId("count-status")).toContainText("applied");
 
-  await page.goto("/office/exports");
+  await page.goto("/admin/exports");
   await page.getByRole("combobox", { name: /^Dataset/ }).selectOption("stock");
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download" }).click()]);
   const sheets = await readXlsxFile(readFileSync((await download.path()) as string));
@@ -63,9 +63,9 @@ test("an order, a stock count and an export work end to end in the production bu
   expect(row[header.indexOf("reserved")]).toBe(1);
 
   await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page).toHaveURL(/\/office\/login$/);
-  await page.goto("/office/exports");
-  await expect(page).toHaveURL(/\/office\/login$/);
+  await expect(page).toHaveURL(/\/admin\/login$/);
+  await page.goto("/admin/exports");
+  await expect(page).toHaveURL(/\/admin\/login$/);
 });
 
 test("the tracking page and the storefront preview send their private headers in the production build", async ({ page, request, baseURL }) => {
@@ -77,7 +77,7 @@ test("the tracking page and the storefront preview send their private headers in
   expect(track.headers()["cache-control"]).toContain("no-store");
 
   await signIn(page);
-  const preview = await page.goto("/office/storefront-preview/en");
+  const preview = await page.goto("/admin/storefront-preview/en");
   const headers = preview?.headers() ?? {};
   expect(headers["x-frame-options"]).toBe("DENY");
   expect(headers["x-robots-tag"]).toContain("noindex");

@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
 
 async function createProductWithVariant(page: Page, prefix: string, names = { en: "Edit Me Romper", bn: "সম্পাদনার রম্পার" }) {
   const { slug, sku } = uniqueName(prefix);
-  await page.goto("/office/products/new");
+  await page.goto("/admin/products/new");
   await page.getByLabel("Slug").fill(slug);
   await page.getByLabel("Name (English)").fill(names.en);
   await page.getByLabel("Name (Bangla)").fill(names.bn);
@@ -69,7 +69,7 @@ test("a stale edit form is refused instead of overwriting a newer change", async
 
 test("edit a variant's price exactly, without changing its stock", async ({ page }) => {
   const { sku, productUrl } = await createProductWithVariant(page, "e2e-price");
-  await page.goto(`/office/skus/${sku}`);
+  await page.goto(`/admin/skus/${sku}`);
   const receive = page.getByRole("region", { name: "Receive stock" });
   await receive.getByLabel("Units received").fill("4");
   await receive.getByRole("button", { name: "Record receipt" }).click();
@@ -130,7 +130,7 @@ test("search by English name, Bangla name, slug and SKU, filter by status, and k
   const one = await createProductWithVariant(page, "e2e-find", { en: `Muslin Wrap ${tag}`, bn: `মসলিন মোড়ক ${tag}` });
   await createProductWithVariant(page, "e2e-find", { en: `Cotton Cap ${tag}`, bn: `সুতির টুপি ${tag}` });
 
-  await page.getByRole("navigation", { name: "Owner Office" }).getByRole("link", { name: "Products" }).click();
+  await page.getByRole("navigation", { name: "Admin" }).getByRole("link", { name: "Products" }).click();
   const search = page.getByRole("search", { name: "Search products" });
   const results = page.getByRole("list", { name: "Products" });
   for (const term of [`muslin wrap ${tag}`, `মসলিন মোড়ক ${tag}`, one.slug.toUpperCase(), one.sku.toLowerCase()]) {
@@ -159,10 +159,10 @@ test("search by English name, Bangla name, slug and SKU, filter by status, and k
     await expect(page.getByRole("main").getByRole("status")).toContainText("No products match");
   }
   await expect(search.getByLabel("Search")).toHaveAttribute("maxlength", "100");
-  await page.goto(`/office?q=${"x".repeat(101)}`);
+  await page.goto(`/admin?q=${"x".repeat(101)}`);
   await expect(page.getByRole("main").getByRole("alert")).toContainText("at most 100 characters");
   await page.getByRole("link", { name: "Clear" }).click();
-  await expect(page).toHaveURL(/\/office$/);
+  await expect(page).toHaveURL(/\/admin$/);
 });
 
 test("search results page through with Next and First links, keeping the search", async ({ page }) => {
@@ -177,7 +177,7 @@ test("search results page through with Next and First links, keeping the search"
   } finally {
     await db.end();
   }
-  await page.goto(`/office?q=${encodeURIComponent(`paged bib ${tag}`)}`);
+  await page.goto(`/admin?q=${encodeURIComponent(`paged bib ${tag}`)}`);
   const results = page.getByRole("list", { name: "Products" });
   await expect(results.getByRole("listitem")).toHaveCount(25);
   await expect(results.getByRole("listitem").first()).toContainText(`Paged Bib ${tag} 1`);

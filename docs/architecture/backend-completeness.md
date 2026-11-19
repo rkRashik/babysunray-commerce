@@ -14,7 +14,7 @@
 | **Fully implemented and locally verified** | Everything in section 1 that is not marked "not run on Supabase": Owner system, catalogue, stock, orders, COD, reports and exports, `/api/v1`, tracking, auth and audit, local backups and drills, maintenance and its backlog report, backup freshness check (`backup:status`), hosted-backup logic against mocks |
 | **Implemented, awaiting real staging verification** | Supabase pool behaviour, `babysunray_app` grants and the privilege audit on Supabase, the Storage adapter and the staging photo commands against a real bucket, the staging migration and backup commands, Data API refusal, role-level statement timeout through the pooler. **REAL SUPABASE STAGING: NOT RUN — AWAITING FOUNDER CONFIGURATION** |
 | **Implemented but intentionally disabled** | Product publication (`APPROVED_PUBLICATION_RULE` is `null`), published-only catalogue, quote and guest checkout (unrouted), the public photo route (routed, answers `503` before touching data), Supabase as photo store, HTTP maintenance (off without a secret), hosted photo restore (function only, no command) |
-| **Still missing technical implementation** | An executable production migration and backup procedure (the design and its read-only checks exist, [production-migration.md](../operations/production-migration.md)), a bucket restore command (blocked below), per-client limits, a caching policy for photos, Office screens for the audit and statement check |
+| **Still missing technical implementation** | An executable production migration and backup procedure (the design and its read-only checks exist, [production-migration.md](../operations/production-migration.md)), a bucket restore command (blocked below), per-client limits, a caching policy for photos, Admin screens for the audit and statement check |
 | **Blocked by founder decisions** | Section 4 |
 | **Blocked by production infrastructure** | Section 5 |
 
@@ -72,7 +72,7 @@ Built nowhere yet, and not blocked only by a decision:
 - A passing run of `npm run test:staging` on a real staging project.
 - Per-client rate limits (needs a trusted client address from the proxy, decision 1).
 - A scheduler that calls the maintenance endpoint (none is activated). The `GET` adapter exists, off by default; no host scheduler has been configured or tried.
-- Office screens for the audit and the statement check (the API and the exports serve them; screens are frontend work).
+- Admin screens for the audit and the statement check (the API and the exports serve them; screens are frontend work).
 
 ## 4. Blocked by founder approval
 

@@ -15,7 +15,7 @@ import { E2E_OWNER, ensureZones, signIn, testDatabase, uniqueName } from "./supp
 
 const OUT = process.env.DESIGN_SHOTS_DIR;
 const PHOTOS = process.env.DESIGN_PHOTOS_DIR;
-const PREVIEW = "/office/storefront-preview";
+const PREVIEW = "/admin/storefront-preview";
 const outside = (dir: string) => !path.resolve(dir).toLowerCase().startsWith(path.resolve(process.cwd()).toLowerCase());
 
 type Seed = { name: [string, string]; category: "rompers" | "sets" | "accessories"; featured: boolean; price: number; colour: string; photo: string | null; stock: number[] };
@@ -292,7 +292,7 @@ test("design review screenshots and walkthrough (opt-in: DESIGN_SHOTS_DIR)", asy
   const owner = await browser.newContext({ ignoreHTTPSErrors: true });
   const ownerPage = await owner.newPage();
   await signIn(ownerPage);
-  await ownerPage.goto("/office/orders/new");
+  await ownerPage.goto("/admin/orders/new");
   await ownerPage.getByLabel("WhatsApp").check();
   await ownerPage.getByLabel("Customer name").fill("Fictional Customer");
   await ownerPage.getByLabel("Phone").fill("+880 1711-000071");
@@ -308,35 +308,35 @@ test("design review screenshots and walkthrough (opt-in: DESIGN_SHOTS_DIR)", asy
   const link = await tracking.getByRole("textbox").inputValue();
   await owner.close();
 
-  // The Owner Office: sign-in and the main screens, desktop and phone.
+  // Admin: sign-in and the main screens, desktop and phone.
   for (const [device, viewport, mobile] of [["desktop", { width: 1440, height: 900 }, false], ["phone", { width: 390, height: 844 }, true]] as const) {
     const label = device === "phone" ? "Phone 390 px" : "Desktop 1440 px";
     const signedOut = await browser.newContext({ viewport, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile, ignoreHTTPSErrors: true, locale: "en-GB" });
     const login = await signedOut.newPage();
-    await login.goto("/office/login");
+    await login.goto("/admin/login");
     await expect(login.getByRole("heading", { level: 1 })).toBeVisible();
-    await capture(login, `${device}-30-office-login.png`, `${label}: Owner Office sign-in`, "Owner Office");
+    await capture(login, `${device}-30-admin-login.png`, `${label}: Admin sign-in`, "Admin");
     await signedOut.close();
     const { context, page } = await open(viewport, mobile);
     const screens: [string, string, string][] = [
-      ["/office/dashboard", "31-office-dashboard", "dashboard"],
-      ["/office/orders", "32-office-orders", "orders"],
-      [orderUrl.replace(/^https?:\/\/[^/]+/, ""), "33-office-order", "one order"],
-      ["/office", "34-office-products", "products"],
-      ["/office/stock-counts", "36-office-stock-counts", "stock counts"],
-      ["/office/reports", "37-office-reports", "reports"],
-      ["/office/exports", "38-office-exports", "exports"],
-      ["/office/launch-readiness", "39-office-launch", "launch readiness"],
+      ["/admin/dashboard", "31-admin-dashboard", "dashboard"],
+      ["/admin/orders", "32-admin-orders", "orders"],
+      [orderUrl.replace(/^https?:\/\/[^/]+/, ""), "33-admin-order", "one order"],
+      ["/admin", "34-admin-products", "products"],
+      ["/admin/stock-counts", "36-admin-stock-counts", "stock counts"],
+      ["/admin/reports", "37-admin-reports", "reports"],
+      ["/admin/exports", "38-admin-exports", "exports"],
+      ["/admin/launch-readiness", "39-admin-launch", "launch readiness"],
     ];
     for (const [url, file, caption] of screens) {
       await page.goto(url);
       await expect(page.locator("main h1").first()).toBeVisible();
-      await capture(page, `${device}-${file}.png`, `${label}: Office ${caption}`, "Owner Office");
+      await capture(page, `${device}-${file}.png`, `${label}: Admin ${caption}`, "Admin");
     }
-    await page.goto("/office");
+    await page.goto("/admin");
     await page.getByRole("link", { name: "Grey Button Romper" }).first().click();
     await expect(page.locator("main h1")).toHaveText("Grey Button Romper");
-    await capture(page, `${device}-35-office-product.png`, `${label}: Office product, readiness and variants`, "Owner Office");
+    await capture(page, `${device}-35-admin-product.png`, `${label}: Admin product, readiness and variants`, "Admin");
     await context.close();
   }
   for (const [device, viewport, mobile] of [["desktop", { width: 1440, height: 900 }, false], ["phone", { width: 390, height: 844 }, true]] as const) {

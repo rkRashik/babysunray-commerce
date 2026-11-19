@@ -46,7 +46,7 @@ export async function publishedPolicy(db: Db, kind: unknown): Promise<PublishedP
   return (await publishedPolicies(db)).find((p) => p.kind === kind) ?? null;
 }
 
-/** Per kind: the published draft version and when, for the Office (null when not published now). */
+/** Per kind: the published draft version and when, for Admin (null when not published now). */
 export async function publicationStates(db: Db, principal: Principal): Promise<Record<PolicyKind, { draftVersion: number; publishedAt: Date } | null>> {
   assertPermission(principal, "policies:read");
   const published = await publishedPolicies(db);

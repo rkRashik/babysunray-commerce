@@ -2,8 +2,8 @@
 // answer is always no. Public checkout stays disabled until the founder has approved and PUBLISHED the delivery,
 // return/exchange and privacy policies (S-17, G-7), and the launch needs decisions this system cannot record (a publication
 // rule, recovery objectives, the production database, the launch itself). There is deliberately no switch, environment
-// variable, setting or Office action that opens it: `open` is the literal `false`, and opening it is a founder-approved code
-// change. Founder acceptance (acceptance.ts) is separate: it never opens this gate. Pure functions, so the Office page and
+// variable, setting or Admin action that opens it: `open` is the literal `false`, and opening it is a founder-approved code
+// change. Founder acceptance (acceptance.ts) is separate: it never opens this gate. Pure functions, so Admin page and
 // the tests share them.
 
 export type PolicyState = "empty" | "drafted" | "reviewed" | "published";

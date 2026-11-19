@@ -26,7 +26,7 @@ import {
 } from "./service";
 import { recordProductReview } from "./review";
 
-// Draft catalogue changes for every client (the /api/v1 routes and the Owner Office). Each requires
+// Draft catalogue changes for every client (the /api/v1 routes and Admin). Each requires
 // `catalog:write` and runs once per idempotency key. A replay returns the resource as it is now (a product
 // may have been archived since); nothing here publishes a product (requirement I-6 is open).
 

@@ -8,7 +8,7 @@ import { ORIGINAL_BRAND, REHEARSAL_IDENTITY as ID } from "./identity";
 test("the rehearsal copy shows its own identity in both languages and nothing of the original business", async ({ page }) => {
   await signIn(page);
   for (const lang of ["en", "bn"] as const) {
-    await page.goto(`/office/storefront-preview/${lang}`);
+    await page.goto(`/admin/storefront-preview/${lang}`);
     await expect(page.getByRole("banner").getByRole("link", { name: ID.STORE_NAME })).toBeVisible();
     await expect(page.getByRole("heading", { level: 1, name: ID.STORE_NAME })).toBeVisible();
     await expect(page.getByText(lang === "en" ? ID.STORE_LINE_EN : ID.STORE_LINE_BN).first()).toBeVisible();
@@ -20,14 +20,14 @@ test("the rehearsal copy shows its own identity in both languages and nothing of
     // The copy's logo files were deleted at handover: the name is shown as text, no logo image is requested.
     await expect(page.locator('img[src^="/brand/"]')).toHaveCount(0);
   }
-  for (const pathname of ["/", "/office", "/office/import", "/office/catalogue-preparation", "/office/media-health", "/office/dashboard", "/office/storefront-preview/en/cart", "/office/storefront-preview/bn/checkout", "/track"]) {
+  for (const pathname of ["/", "/admin", "/admin/import", "/admin/catalogue-preparation", "/admin/media-health", "/admin/dashboard", "/admin/storefront-preview/en/cart", "/admin/storefront-preview/bn/checkout", "/track"]) {
     await page.goto(pathname);
     expect(await page.title(), pathname).not.toMatch(ORIGINAL_BRAND);
     expect(await page.content(), pathname).not.toMatch(ORIGINAL_BRAND);
   }
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(`${ID.STORE_NAME}: development build`);
-  const template = await page.request.get("/office/import/template?format=csv");
+  const template = await page.request.get("/admin/import/template?format=csv");
   expect(template.status()).toBe(200);
   expect(await template.text()).not.toMatch(ORIGINAL_BRAND);
 });

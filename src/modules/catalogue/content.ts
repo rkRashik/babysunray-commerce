@@ -1,7 +1,7 @@
 import { invalidInput } from "../domain-error";
 import { optionalText } from "./rules";
 
-// Structured product content (migration 0011): pure rules shared by the services, the Office, the storefront
+// Structured product content (migration 0011): pure rules shared by the services, Admin, the storefront
 // preview and the tests. Every value is entered by the Owner; nothing here writes or translates text.
 
 /** Garment measuring points. The same list as the CHECK in src/db/schema.ts (a unit test keeps them equal). */

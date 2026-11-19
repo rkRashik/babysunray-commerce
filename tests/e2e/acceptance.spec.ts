@@ -3,7 +3,7 @@ import { clearSignInLimits, ensureZones, seedStorefrontProduct, signIn, testData
 
 // The founder acceptance rehearsal (ADR-0011), end to end in real browsers against the real server and PostgreSQL (the
 // test database is marked staging by global-setup): the shop does not exist without a pass; the Owner reviews and publishes;
-// a separate shopper starts acceptance, leaves the Office and places a real Cash on Delivery order; the Owner verifies,
+// a separate shopper starts acceptance, leaves Admin and places a real Cash on Delivery order; the Owner verifies,
 // confirms, packs, dispatches, records delivery and the cash; stock, history and tracking agree; a withdrawn product is gone.
 // Fictional customer only.
 
@@ -18,7 +18,7 @@ async function step(page: Page, button: string) {
 
 test.beforeAll(ensureZones);
 
-test("founder acceptance: publish, shop as a separate customer, place a real COD order, fulfil it in the Office and track it", async ({ page, browser, baseURL }) => {
+test("founder acceptance: publish, shop as a separate customer, place a real COD order, fulfil it in Admin and track it", async ({ page, browser, baseURL }) => {
   test.setTimeout(300_000);
   page.on("dialog", (dialog) => void dialog.accept());
   await clearSignInLimits();
@@ -37,7 +37,7 @@ test("founder acceptance: publish, shop as a separate customer, place a real COD
 
   // The Owner reviews and publishes: on this staging-marked database the proposed rule applies.
   await signIn(page);
-  await page.goto(`/office/products/${product.productId}`);
+  await page.goto(`/admin/products/${product.productId}`);
   await page.getByRole("button", { name: "Mark the current content as reviewed" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Review recorded" })).toBeVisible();
   await expect(page.getByTestId("publication-rule")).toContainText("PROPOSED rule");
@@ -46,19 +46,19 @@ test("founder acceptance: publish, shop as a separate customer, place a real COD
   // Publishing opens nothing to the public.
   expect((await outsider.goto(`/en/products/${product.slug}`))?.status()).toBe(404);
 
-  // A separate shopper: starts acceptance in that browser, then leaves the Office there.
+  // A separate shopper: starts acceptance in that browser, then leaves Admin there.
   const shopperContext = await browser.newContext();
   const shopper = await shopperContext.newPage();
   await clearSignInLimits();
   await signIn(shopper);
-  await shopper.goto("/office/acceptance");
+  await shopper.goto("/admin/acceptance");
   await expect(shopper.getByTestId("database-state")).toContainText("Marked as the staging database");
   await expect(shopper.getByTestId("gate-state")).toContainText("Closed");
   await shopper.getByRole("button", { name: "Start acceptance in this browser" }).click();
   await expect(shopper.getByTestId("pass-state")).toContainText("Holds an acceptance pass");
   await shopperContext.clearCookies({ name: "better-auth.session_token" });
-  await shopper.goto("/office");
-  await expect(shopper).toHaveURL(/\/office\/login$/);
+  await shopper.goto("/admin");
+  await expect(shopper).toHaveURL(/\/admin\/login$/);
 
   // Shopping as a guest, with the real prices and stock.
   await shopper.goto(`/en/products/${product.slug}`);
@@ -105,9 +105,9 @@ test("founder acceptance: publish, shop as a separate customer, place a real COD
   }
 
   // The Owner sees that exact order and runs the whole workflow.
-  await page.goto(`/office/skus/${sku}`);
+  await page.goto(`/admin/skus/${sku}`);
   await expect(page.getByTestId("reservation")).toHaveText("Reserved for orders: 2 · Available for new orders: 3");
-  await page.goto("/office/orders");
+  await page.goto("/admin/orders");
   await page.getByRole("link", { name: reference, exact: true }).click();
   await expect(dimension(page, "order")).toHaveText("Pending verification");
   await step(page, "Confirm order (verified with the customer)");
@@ -130,16 +130,16 @@ test("founder acceptance: publish, shop as a separate customer, place a real COD
   await expect(page.getByRole("list", { name: "Order history" })).toContainText("cod settled");
 
   // Stock moved out exactly once; the customer's tracking link shows the same order.
-  await page.goto(`/office/skus/${sku}`);
+  await page.goto(`/admin/skus/${sku}`);
   await expect(page.getByTestId("on-hand")).toHaveText("3");
   await expect(page.getByTestId("reservation")).toHaveText("Reserved for orders: 0 · Available for new orders: 3");
   await shopper.goto(trackingUrl);
   await expect(shopper.getByTestId("guest-order-status")).toHaveText("Confirmed");
   await expect(shopper.getByText(reference)).toBeVisible();
-  for (const path of ["/office/dashboard", "/office/reports"]) expect((await page.goto(path))?.status(), path).toBe(200);
+  for (const path of ["/admin/dashboard", "/admin/reports"]) expect((await page.goto(path))?.status(), path).toBe(200);
 
   // Withdrawn, the product disappears from the shop at once.
-  await page.goto(`/office/products/${product.productId}`);
+  await page.goto(`/admin/products/${product.productId}`);
   await page.getByRole("button", { name: "Withdraw from the shop" }).click();
   await expect(page.getByTestId("publication-state")).toContainText("Draft");
   expect((await shopper.goto(`/en/products/${product.slug}`))?.status()).toBe(404);

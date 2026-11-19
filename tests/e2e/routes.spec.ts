@@ -29,7 +29,7 @@ function watch(page: Page): { problems: Problem[]; seen: Set<string> } {
   return { problems, seen };
 }
 
-test("every storefront, tracking and Owner Office route loads cleanly on a desktop and a phone, with its logo, fonts and images", async ({ page }) => {
+test("every storefront, tracking and Admin route loads cleanly on a desktop and a phone, with its logo, fonts and images", async ({ page }) => {
   test.setTimeout(420_000);
   const sku = await seedSku(3);
   const shop = await seedStorefrontProduct({ featured: true });
@@ -47,7 +47,7 @@ test("every storefront, tracking and Owner Office route loads cleanly on a deskt
   await signIn(page);
 
   // One order, made through the form, for the order routes.
-  await page.goto("/office/orders/new");
+  await page.goto("/admin/orders/new");
   await page.getByLabel("Messenger").check();
   await page.getByLabel("Customer name").fill("Fictional Customer");
   await page.getByLabel("Phone").fill("01711000090");
@@ -59,17 +59,17 @@ test("every storefront, tracking and Owner Office route loads cleanly on a deskt
   await expect(page.getByRole("status").first()).toContainText("Order created");
   const orderPath = new URL(page.url()).pathname;
   // Founder acceptance in this browser, so the real shop answers (the test database is marked staging).
-  await page.goto("/office/acceptance");
+  await page.goto("/admin/acceptance");
   await page.getByRole("button", { name: "Start acceptance in this browser" }).click();
   await expect(page.getByTestId("pass-state")).toContainText("Holds an acceptance pass");
 
-  const shopBase = "/office/storefront-preview";
+  const shopBase = "/admin/storefront-preview";
   const routes = [
-    "/office", "/office/dashboard", "/office/orders", "/office/orders/new", orderPath, "/office/products/new", `/office/products/${productId}`,
-    `/office/products/${productId}/edit`, `/office/products/${productId}/measurements`, `/office/products/${productId}/photos`, `/office/variants/${variantId}/edit`,
-    `/office/skus/${sku}`, "/office/import", "/office/catalogue-preparation", "/office/product-reviews", "/office/categories", "/office/settings/delivery",
-    "/office/reports", "/office/stock-counts", "/office/exports", "/office/media-health", "/office/policies", "/office/launch-readiness",
-    "/office/print/picking", "/office/print/cod", "/office/acceptance", shopBase,
+    "/admin", "/admin/dashboard", "/admin/orders", "/admin/orders/new", orderPath, "/admin/products/new", `/admin/products/${productId}`,
+    `/admin/products/${productId}/edit`, `/admin/products/${productId}/measurements`, `/admin/products/${productId}/photos`, `/admin/variants/${variantId}/edit`,
+    `/admin/skus/${sku}`, "/admin/import", "/admin/catalogue-preparation", "/admin/product-reviews", "/admin/categories", "/admin/settings/delivery",
+    "/admin/reports", "/admin/stock-counts", "/admin/exports", "/admin/media-health", "/admin/policies", "/admin/launch-readiness",
+    "/admin/print/picking", "/admin/print/cod", "/admin/acceptance", shopBase,
     ...["en", "bn"].flatMap((l) => [`${shopBase}/${l}`, `${shopBase}/${l}/products`, `${shopBase}/${l}/products/${shop.slug}`, `${shopBase}/${l}/cart`, `${shopBase}/${l}/checkout`, `${shopBase}/${l}/order`]),
     "/",
     ...["en", "bn"].flatMap((l) => [`/${l}`, `/${l}/products`, `/${l}/products/${shop.slug}`, `/${l}/cart`, `/${l}/checkout`, `/${l}/order`]),
@@ -102,7 +102,7 @@ test("every storefront, tracking and Owner Office route loads cleanly on a deskt
 
   // The guest tracking page and the sign-in page, signed out.
   await page.context().clearCookies();
-  for (const route of ["/track", "/office/login"]) {
+  for (const route of ["/track", "/admin/login"]) {
     const { problems } = watch(page);
     const response = await page.goto(route);
     expect(response?.status(), route).toBe(200);

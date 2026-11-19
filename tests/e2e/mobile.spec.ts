@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { clearSignInLimits, ensureZones, seedSku, seedStorefrontProduct, signIn, testDatabase, uniqueName } from "./support";
 
-// The Office on a phone-sized screen (Pixel 7 profile: touch, 412 px wide).
+// The Admin on a phone-sized screen (Pixel 7 profile: touch, 412 px wide).
 
 test.beforeEach(async ({ page }) => {
   await clearSignInLimits();
@@ -105,17 +105,17 @@ test("navigation and the main screens work without sideways scrolling", async ({
   await expect(page.getByLabel("Name (English)")).toHaveValue("Mobile Romper");
   await noSideScroll(page);
   await page.getByRole("button", { name: "Sign out" }).tap();
-  await expect(page).toHaveURL(/\/office\/login$/);
+  await expect(page).toHaveURL(/\/admin\/login$/);
 });
 
 test("dashboard, reports, exports and a stock count on a phone, without sideways scrolling", async ({ page }) => {
   const sku = await seedSku(2);
-  for (const path of ["/office/dashboard", "/office/reports", "/office/exports", "/office/stock-counts", "/office/print/picking"]) {
+  for (const path of ["/admin/dashboard", "/admin/reports", "/admin/exports", "/admin/stock-counts", "/admin/print/picking"]) {
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await noSideScroll(page);
   }
-  await page.goto("/office/stock-counts");
+  await page.goto("/admin/stock-counts");
   await page.getByLabel("Only the SKUs listed below").tap();
   await page.getByLabel("SKUs to count").fill(sku);
   await page.getByRole("button", { name: "Start count" }).tap();
@@ -132,7 +132,7 @@ test("dashboard, reports, exports and a stock count on a phone, without sideways
 test("storefront preview on a phone: the tab bar, search sheet, size and colour by touch, the bag and checkout, without sideways scrolling", async ({ page }) => {
   await ensureZones();
   const product = await seedStorefrontProduct();
-  await page.goto("/office/storefront-preview/en");
+  await page.goto("/admin/storefront-preview/en");
   await noSideScroll(page);
   await expect(page.getByTestId("tab-bar")).toBeVisible();
   // Search opens from the tab bar with the field focused, so the keyboard comes up at once.
@@ -175,14 +175,14 @@ test("checkout simulation on a 360-pixel-wide phone: every step fits, nothing is
   await ensureZones();
   await page.setViewportSize({ width: 360, height: 740 });
   const product = await seedStorefrontProduct();
-  await page.goto(`/office/storefront-preview/bn/products/${product.slug}`);
+  await page.goto(`/admin/storefront-preview/bn/products/${product.slug}`);
   await noSideScroll(page);
   const chip = (text: string) => page.locator("label").filter({ has: page.getByRole("radio", { name: new RegExp(`^${text}`) }) });
   await chip("0-3M").tap();
   await chip("Ivory").tap();
   await page.getByRole("button", { name: /^কার্টে যোগ করুন/ }).tap();
   await expect(page.getByTestId("cart-count")).toHaveText("১");
-  await page.goto("/office/storefront-preview/bn/checkout");
+  await page.goto("/admin/storefront-preview/bn/checkout");
   await noSideScroll(page);
   await page.getByLabel("পুরো নাম").fill("পরীক্ষামূলক গ্রাহক");
   await page.getByLabel("মোবাইল নম্বর").fill("01711000053");
@@ -206,10 +206,10 @@ test("checkout simulation on a 360-pixel-wide phone: every step fits, nothing is
 
 test("on a phone: search in the tab bar, Add to Bag and its answer always on screen, no sideways scrolling", async ({ page }) => {
   const product = await seedStorefrontProduct();
-  await page.goto("/office/storefront-preview/en");
+  await page.goto("/admin/storefront-preview/en");
   await expect(page.getByTestId("tab-search")).toBeInViewport();
   await noSideScroll(page);
-  await page.goto(`/office/storefront-preview/en/products/${product.slug}`);
+  await page.goto(`/admin/storefront-preview/en/products/${product.slug}`);
   const add = page.getByRole("button", { name: /^Add to Bag/ });
   await expect(add).toBeInViewport();
   await add.tap();
@@ -240,13 +240,13 @@ test("the storefront on a 360-pixel phone: every page fits, every control is at 
   await ensureZones();
   const product = await seedStorefrontProduct({ featured: true });
   await page.setViewportSize({ width: 360, height: 740 });
-  await page.goto("/office/storefront-preview/en");
+  await page.goto("/admin/storefront-preview/en");
   const axe = async () => {
     const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
     expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
   };
   const check = async (path: string) => {
-    await page.goto(`/office/storefront-preview/${path}`);
+    await page.goto(`/admin/storefront-preview/${path}`);
     await expect(page.locator("main h1")).toBeVisible();
     await noSideScroll(page);
     expect(await smallTargets(page), path).toEqual([]);
@@ -259,7 +259,7 @@ test("the storefront on a 360-pixel phone: every page fits, every control is at 
   }
 
   // The buying panel: Add to Bag in the fixed bar at once, its answer just above it.
-  await page.goto(`/office/storefront-preview/en/products/${product.slug}`);
+  await page.goto(`/admin/storefront-preview/en/products/${product.slug}`);
   await expect(page.getByRole("button", { name: /^Add to Bag/ })).toBeInViewport();
   await page.locator("label").filter({ has: page.getByRole("radio", { name: /^0-3M/ }) }).tap();
   await page.locator("label").filter({ has: page.getByRole("radio", { name: /^Ivory/ }) }).tap();

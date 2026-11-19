@@ -34,7 +34,7 @@ The Bearer integration was reviewed again before writes were exposed (browser to
 
 | Area | Decision |
 |---|---|
-| Endpoints | `POST /products`, `/products/{productId}/variants`, `/products/{productId}/archive`, `/variants/{variantId}/deactivate` (`catalog:write`); `POST /stock-receipts` (`stock:receive`), `/stock-adjustments` (`stock:adjust`). Each calls a shared operation in `src/modules/*/operations.ts`, the same one the Owner Office uses; no SQL in routes. |
+| Endpoints | `POST /products`, `/products/{productId}/variants`, `/products/{productId}/archive`, `/variants/{variantId}/deactivate` (`catalog:write`); `POST /stock-receipts` (`stock:receive`), `/stock-adjustments` (`stock:adjust`). Each calls a shared operation in `src/modules/*/operations.ts`, the same one BabySunRay Admin uses; no SQL in routes. |
 | Wrapper | `apiPost` next to `apiGet` in `src/api/v1/http.ts`, one pipeline: origin policy → Bearer principal → rate limit → permission → `Idempotency-Key` → body. |
 | Bodies | At most 64 KiB, checked against `Content-Length` before reading and counted while streaming (a missing or false length does not help). `application/json` with UTF-8 only (415 otherwise); malformed JSON or invalid UTF-8 is 400 `MALFORMED_JSON`; strict zod schemas (unknown fields, also nested, are 400). |
 | Actor | Always `actorFor(principal)` of the Bearer token's user; the body cannot carry an actor, user id or role. |

@@ -14,7 +14,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function configureZones(page: Page) {
-  await page.getByRole("navigation", { name: "Owner Office" }).getByRole("link", { name: "Delivery charges" }).click();
+  await page.getByRole("navigation", { name: "Admin" }).getByRole("link", { name: "Delivery charges" }).click();
   for (const zone of ["Dhaka City", "Outside Dhaka"]) {
     const section = page.getByRole("region", { name: zone });
     await section.getByLabel("Charge (BDT)").fill(zone === "Dhaka City" ? "60" : "120");
@@ -25,7 +25,7 @@ async function configureZones(page: Page) {
 }
 
 async function createOrder(page: Page, sku: string, quantity = 2) {
-  await page.goto("/office/orders/new");
+  await page.goto("/admin/orders/new");
   await page.getByLabel("WhatsApp").check();
   await page.getByLabel("Customer name").fill("Test Customer");
   await page.getByLabel("Phone").fill("+880 1711-000005");
@@ -57,7 +57,7 @@ async function save(page: Page, click: () => Promise<void>) {
 }
 
 async function stock(page: Page, sku: string) {
-  await page.goto(`/office/skus/${sku}`);
+  await page.goto(`/admin/skus/${sku}`);
   return { onHand: await page.getByTestId("on-hand").textContent(), reservation: await page.getByTestId("reservation").textContent() };
 }
 
@@ -111,7 +111,7 @@ test("delivery charges, an assisted order, reservation, verification, packing, d
   await step(page, "Close order");
   await expect(dimension(page, "order")).toHaveText("Closed");
   await expect(page.getByRole("list", { name: "Order history" })).toContainText("cod settled");
-  for (const path of [orderUrl, "/office/orders", "/office/orders/new", "/office/settings/delivery"]) {
+  for (const path of [orderUrl, "/admin/orders", "/admin/orders/new", "/admin/settings/delivery"]) {
     await page.goto(path);
     await expectLabelledFields(page);
   }
@@ -126,7 +126,7 @@ test("an order past its 24-hour deadline shows for review and is confirmed only 
   } finally {
     await db.end();
   }
-  await page.goto("/office/orders?attention=true");
+  await page.goto("/admin/orders?attention=true");
   await expect(page.getByRole("list", { name: "Orders" })).toContainText("Verification deadline passed");
   await page.goto(orderUrl);
   await expect(page.getByTestId("verification")).toContainText("Verification expired — Owner review");
@@ -140,7 +140,7 @@ test("an order past its 24-hour deadline shows for review and is confirmed only 
 
 test("readable errors: short stock, a wrong phone number, an unknown SKU", async ({ page }) => {
   const sku = await seedSku(1);
-  await page.goto("/office/orders/new");
+  await page.goto("/admin/orders/new");
   await page.getByLabel("Messenger").check();
   await page.getByLabel("Customer name").fill("Test Customer");
   await page.getByLabel("Phone").fill("12345");

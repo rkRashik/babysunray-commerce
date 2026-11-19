@@ -8,7 +8,7 @@ import { type AltText, addPhoto, describePhoto, movePhoto, removePhoto } from ".
 import { getMediaStore } from "./provider";
 import type { MediaStore } from "./storage";
 
-// Photo operations for the Owner Office (catalog:write, once per idempotency key, ADR-0005). The order of work
+// Photo operations for Admin (catalog:write, once per idempotency key, ADR-0005). The order of work
 // keeps files and records in step: a new file is written before its record; if the record is not committed
 // (refused, failed, or a replay of an earlier upload) the new file is deleted again. A replaced or removed
 // file is deleted only after its record is gone for good. A crash between the two steps can leave a file with

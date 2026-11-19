@@ -294,6 +294,6 @@ export async function closeOrder(tx: Db, orderId: string, expectedVersion: numbe
   return updated;
 }
 
-/** For tests and the Office: orders whose open cancellation request awaits review. */
+/** For tests and Admin: orders whose open cancellation request awaits review. */
 export const hasOpenRequest = async (db: Db, orderId: string) =>
   (await db.select({ id: cancellationRequests.id }).from(cancellationRequests).where(and(eq(cancellationRequests.orderId, orderId), eq(cancellationRequests.status, "open")))).length > 0;

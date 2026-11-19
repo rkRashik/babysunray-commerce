@@ -172,7 +172,7 @@ describe("customers and the Owner", () => {
     expect((await pool.query("select 1 from customer_orders o join orders r on r.id = o.order_id where r.number::text = $1", [guest.order.reference.replace(/\D/g, "")])).rowCount).toBe(0);
   });
 
-  it("can never give a customer Office access, even with the Owner's email", async () => {
+  it("can never give a customer Admin access, even with the Owner's email", async () => {
     const email = "acceptance-owner@example.test";
     const twin = await pool.query<{ id: string }>("insert into customer_users (name, email, email_verified) values ('Same Email', $1, true) returning id", [email]);
     // Separate tables: the same address is a different person here, and user_access can only point at auth_users.

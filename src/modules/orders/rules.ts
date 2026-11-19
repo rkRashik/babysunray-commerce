@@ -1,7 +1,7 @@
 import { invalidInput } from "../domain-error";
 
 // Order input validation and the lifecycle rules (docs/product/order-policy-decisions.md). Pure functions, so
-// the services, the Office (which buttons to show) and the tests share one definition.
+// the services, Admin (which buttons to show) and the tests share one definition.
 
 export const ORDER_SOURCES = ["website", "messenger", "whatsapp", "other"] as const;
 export type OrderSource = (typeof ORDER_SOURCES)[number];

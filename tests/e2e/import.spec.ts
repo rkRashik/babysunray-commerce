@@ -30,7 +30,7 @@ async function counts(prefix: string) {
 
 test("templates, a file with problems, the corrected import, a lost answer retried without duplicates", async ({ page }) => {
   const { slug: tag } = uniqueName("e2e-imp");
-  await page.goto("/office/import");
+  await page.goto("/admin/import");
   for (const format of ["csv", "xlsx"]) {
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("link", { name: `Download the ${format.toUpperCase()} template` }).click()]);
     expect(download.suggestedFilename()).toBe(`catalogue-import-template.${format}`);
@@ -74,7 +74,7 @@ test("templates, a file with problems, the corrected import, a lost answer retri
 
   // The server imports, but the answer never reaches the browser: pressing Import again returns the first result.
   let dropped = false;
-  await page.route("**/office/import/confirm", async (route) => {
+  await page.route("**/admin/import/confirm", async (route) => {
     if (dropped) return route.continue();
     dropped = true;
     await route.fetch();
@@ -93,13 +93,13 @@ test("templates, a file with problems, the corrected import, a lost answer retri
   await expect(page.getByTestId("import-issues")).toContainText("already exists");
   await expect(page.getByRole("button", { name: /^Import \d/ })).toHaveCount(0);
 
-  await page.goto(`/office?q=${tag}&missing=photo`);
+  await page.goto(`/admin?q=${tag}&missing=photo`);
   const romper = page.getByTestId(`product-${tag}-romper`);
   await expect(romper).toContainText("Fictional Romper");
   await expect(romper.getByTestId("readiness-tally")).toContainText("approved 2/3");
   await romper.getByRole("link", { name: /fabric statement/ }).click();
   await expect(page).toHaveURL(/\/edit$/);
-  await page.goto("/office/catalogue-preparation");
+  await page.goto("/admin/catalogue-preparation");
   await expect(page.getByTestId("preparation-fabric")).toBeVisible();
   await expect(page.getByRole("button", { name: /publish/i })).toHaveCount(0);
 });

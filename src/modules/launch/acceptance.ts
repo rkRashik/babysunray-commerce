@@ -10,7 +10,7 @@ import { publicShopGate } from "./gate";
 //
 //   public      the launch gate is open (gate.ts). In this version it never is: opening it is a founder-approved code change.
 //   acceptance  this browser holds a valid ACCEPTANCE PASS (a signed, HttpOnly cookie the signed-in Owner starts in the
-//               Office), the pass's Owner still has active access, and the connected database carries the STAGING marker
+//               Admin), the pass's Owner still has active access, and the connected database carries the STAGING marker
 //               (schema babysunray_target with the comment 'babysunray:staging', set by the founder in the staging project).
 //   closed      anything else. Answered before any database work: without a pass that verifies, no query runs.
 //
@@ -22,7 +22,7 @@ import { publicShopGate } from "./gate";
 export type ShopAccess = "public" | "acceptance" | "closed";
 
 export const ACCEPTANCE_COOKIE = "bsr_acceptance";
-/** How long a pass lasts. A new one can be started from the Office at any time. */
+/** How long a pass lasts. A new one can be started from Admin at any time. */
 export const PASS_HOURS = 8;
 const PASS_VERSION = "v1";
 const TARGET_SCHEMA = "babysunray_target";
@@ -76,7 +76,7 @@ export function forgetStagingMarker(): void {
   markerCache = null;
 }
 
-/** What the Office's acceptance page shows: whether acceptance can run here, and what the shop would show now. */
+/** What Admin's acceptance page shows: whether acceptance can run here, and what the shop would show now. */
 export async function acceptanceFacts(db: Db): Promise<{ staging: boolean; schemaReady: boolean; publishedProducts: number; activeZones: number }> {
   const staging = await isStagingDatabase(db);
   const { rows } = await db.execute<{ products: number; zones: number; ready: boolean }>(sql`select

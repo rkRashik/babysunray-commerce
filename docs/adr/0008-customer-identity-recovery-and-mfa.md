@@ -58,7 +58,7 @@ Evaluated in the installed `better-auth` 1.7.25 (`dist/plugins/two-factor`, `@be
 | Secret storage | TOTP secret encrypted with the application secret (`symmetricEncrypt`) |
 | Backup codes | Stored **encrypted, not hashed** by default (`storeBackupCodes: "encrypted"`); a custom encrypt or decrypt hook is possible |
 | Brute force | Failed attempts are counted and the second factor locks after repeated failures |
-| Sign-in flow | A sign-in with 2FA answers with a "two-factor required" step and a temporary cookie; the Office sign-in page, Bearer clients and the e2e tests would all need that step |
+| Sign-in flow | A sign-in with 2FA answers with a "two-factor required" step and a temporary cookie; the Admin sign-in page, Bearer clients and the e2e tests would all need that step |
 | Schema | A `twoFactor` table and a `two_factor_enabled` column on users |
 
 Not activated. The replay window and the reversible backup codes are acceptable for many sites but fall short of the bar ADR-0003 set (no weaker credential than the password), and enabling the plugin needs a sign-in screen change, which this batch excludes. Proposal for the gate that adds 2FA: TOTP with a replay guard (store the last accepted time step per user and refuse it again), backup codes hashed through the plugin's custom hooks, re-authentication (password) before enabling, disabling or regenerating, and no automatic enrolment of the existing Owner.

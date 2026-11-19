@@ -16,9 +16,9 @@ import { buildXlsx, sharedStringsSheet } from "../support/xlsx";
 const state = vi.hoisted(() => ({ db: undefined as unknown, auth: undefined as unknown }));
 vi.mock("@/db/client", () => ({ getDb: () => state.db }));
 vi.mock("@/modules/auth/server", () => ({ getAuth: () => state.auth }));
-const previewRoute = await import("../../src/app/office/import/preview/route");
-const confirmRoute = await import("../../src/app/office/import/confirm/route");
-const templateRoute = await import("../../src/app/office/import/template/route");
+const previewRoute = await import("../../src/app/admin/import/preview/route");
+const confirmRoute = await import("../../src/app/admin/import/confirm/route");
+const templateRoute = await import("../../src/app/admin/import/template/route");
 
 let db: Db;
 let pool: Pool;
@@ -201,7 +201,7 @@ describe("import", () => {
   });
 });
 
-describe("Office import routes", () => {
+describe("Admin import routes", () => {
   const post = (route: { POST: (r: Request) => Promise<Response> }, path: string, fields: Record<string, string | Blob>, headers: Record<string, string> = { origin: BASE_URL, cookie }) => {
     const form = new FormData();
     for (const [k, v] of Object.entries(fields)) form.append(k, v);
@@ -211,33 +211,33 @@ describe("Office import routes", () => {
   it("preview and confirm work only from this origin with a session, within the size limit, and return no stack or SQL", async () => {
     const { bytes } = file(valid);
     const blob = new Blob([new Uint8Array(bytes)], { type: "text/csv" });
-    expect((await post(previewRoute, "/office/import/preview", { file: blob }, { origin: "https://elsewhere.example", cookie })).status).toBe(403);
-    expect((await post(previewRoute, "/office/import/preview", { file: blob }, { origin: BASE_URL })).status).toBe(401);
-    expect((await post(previewRoute, "/office/import/preview", { file: blob }, { origin: BASE_URL, cookie, "content-length": String(3 * 1024 * 1024) })).status).toBe(413);
-    const preview = await (await post(previewRoute, "/office/import/preview", { file: blob })).json();
+    expect((await post(previewRoute, "/admin/import/preview", { file: blob }, { origin: "https://elsewhere.example", cookie })).status).toBe(403);
+    expect((await post(previewRoute, "/admin/import/preview", { file: blob }, { origin: BASE_URL })).status).toBe(401);
+    expect((await post(previewRoute, "/admin/import/preview", { file: blob }, { origin: BASE_URL, cookie, "content-length": String(3 * 1024 * 1024) })).status).toBe(413);
+    const preview = await (await post(previewRoute, "/admin/import/preview", { file: blob })).json();
     expect(preview).toMatchObject({ ok: true, counts: { products: 2 }, errorReport: null });
     expect(preview.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/);
     const before = await snapshot();
-    const confirm = async () => post(confirmRoute, "/office/import/confirm", { file: blob, fingerprint: preview.fingerprint, idempotencyKey: preview.idempotencyKey });
+    const confirm = async () => post(confirmRoute, "/admin/import/confirm", { file: blob, fingerprint: preview.fingerprint, idempotencyKey: preview.idempotencyKey });
     const first = await confirm();
     expect(first.status).toBe(200);
     const again = await (await confirm()).json();
     expect(again.replayed).toBe(true);
     expect((await snapshot()).products).toBe(before.products + 2);
-    const conflict = await post(confirmRoute, "/office/import/confirm", { file: blob, fingerprint: preview.fingerprint, idempotencyKey: randomUUID() });
+    const conflict = await post(confirmRoute, "/admin/import/confirm", { file: blob, fingerprint: preview.fingerprint, idempotencyKey: randomUUID() });
     const body = await conflict.json();
     expect([conflict.status, body.error]).toEqual([409, "VERSION_CONFLICT"]);
     expect(JSON.stringify(body)).not.toMatch(/select|insert|stack|at \//i);
 
-    const broken = await (await post(previewRoute, "/office/import/preview", { file: new Blob(['product_slug,sku,price_bdt\n"open,X,1']) })).json();
+    const broken = await (await post(previewRoute, "/admin/import/preview", { file: new Blob(['product_slug,sku,price_bdt\n"open,X,1']) })).json();
     expect(broken).toMatchObject({ ok: false, fingerprint: null });
     expect(broken.errorReport).toContain("malformed_csv");
   });
 
   it("serves the template only to a signed-in Owner", async () => {
-    const get = (headers: Record<string, string>) => templateRoute.GET(new Request(`${BASE_URL}/office/import/template?format=csv`, { headers }));
+    const get = (headers: Record<string, string>) => templateRoute.GET(new Request(`${BASE_URL}/admin/import/template?format=csv`, { headers }));
     const anonymous = await get({});
-    expect([anonymous.status, anonymous.headers.get("location")]).toEqual([303, "/office/login"]);
+    expect([anonymous.status, anonymous.headers.get("location")]).toEqual([303, "/admin/login"]);
     const owner = await get({ cookie });
     expect([owner.status, owner.headers.get("cache-control")]).toEqual([200, "no-store"]);
     expect(await owner.text()).toMatch(/^﻿?product_slug,/);

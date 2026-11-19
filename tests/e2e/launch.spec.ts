@@ -29,9 +29,9 @@ test("signed out, no launch, policy or review page is shown, and no draft text l
   );
   const anonymous = await browser.newContext({ ignoreHTTPSErrors: true });
   const page = await anonymous.newPage();
-  for (const path of ["/office/launch-readiness", "/office/policies", "/office/product-reviews"]) {
+  for (const path of ["/admin/launch-readiness", "/admin/policies", "/admin/product-reviews"]) {
     await page.goto(path);
-    await expect(page, path).toHaveURL(/\/office\/login$/);
+    await expect(page, path).toHaveURL(/\/admin\/login$/);
     const raw = await anonymous.request.get(`${baseURL}${path}`, { maxRedirects: 0 });
     expect([303, 307, 308], path).toContain(raw.status());
     expect(await raw.text()).not.toContain("Secret fictional privacy draft");
@@ -41,7 +41,7 @@ test("signed out, no launch, policy or review page is shown, and no draft text l
 
 test("policy drafts: unsaved state, plain-text markup, a stale tab, review only with both languages, and the gate stays closed", async ({ page, context }) => {
   await signIn(page);
-  await page.goto("/office/policies");
+  await page.goto("/admin/policies");
   await expect(page.getByRole("heading", { level: 1, name: "Policies" })).toBeVisible();
   const editor = page.getByTestId("policy-editor-delivery");
   const state = page.getByTestId("policy-state-delivery");
@@ -52,7 +52,7 @@ test("policy drafts: unsaved state, plain-text markup, a stale tab, review only 
 
   // A second tab opened before the save.
   const stale = await context.newPage();
-  await stale.goto("/office/policies");
+  await stale.goto("/admin/policies");
 
   await editor.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Draft saved. It is private and not published." })).toBeVisible();
@@ -76,7 +76,7 @@ test("policy drafts: unsaved state, plain-text markup, a stale tab, review only 
   const events = await sql("select event, version from policy_draft_events where kind = 'delivery' order by id");
   expect(events.map((e) => e.event)).toEqual(["saved", "saved", "marked_reviewed"]);
 
-  await page.goto("/office/launch-readiness");
+  await page.goto("/admin/launch-readiness");
   await expect(page.getByRole("note")).toContainText("The public shop is closed.");
   await expect(page.getByTestId("gate-blockers")).toContainText("Not published: the");
   await expect(page.getByTestId("check-policy_delivery")).toContainText("Requires founder approval");
@@ -88,10 +88,10 @@ test("policy drafts: unsaved state, plain-text markup, a stale tab, review only 
 test("product reviews: the queue, a review on the product page, outdated after a price change, and nothing published", async ({ page }) => {
   const product = await seedStorefrontProduct();
   await signIn(page);
-  await page.goto(`/office/product-reviews?q=${product.slug}`);
+  await page.goto(`/admin/product-reviews?q=${product.slug}`);
   const row = page.getByTestId(`review-row-${product.slug}`);
   await expect(page.getByTestId(`review-status-${product.slug}`)).toHaveText("Not reviewed");
-  await expect(row.getByRole("link", { name: "Customer preview" })).toHaveAttribute("href", `/office/storefront-preview/en/products/${product.slug}`);
+  await expect(row.getByRole("link", { name: "Customer preview" })).toHaveAttribute("href", `/admin/storefront-preview/en/products/${product.slug}`);
   await expectNoAxeViolations(page);
 
   await row.getByRole("link", { name: product.nameEn }).click();
@@ -99,7 +99,7 @@ test("product reviews: the queue, a review on the product page, outdated after a
   await page.getByRole("button", { name: "Mark the current content as reviewed" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Review recorded" })).toBeVisible();
   await expect(page.getByTestId("review-state")).toContainText("the content has not changed since");
-  await page.goto(`/office/product-reviews?q=${product.slug}`);
+  await page.goto(`/admin/product-reviews?q=${product.slug}`);
   await expect(page.getByTestId(`review-status-${product.slug}`)).toContainText("Current");
 
   await sql("update variants set price_paisa = price_paisa + 100, version = version + 1 where sku = $1", [product.skus[0]]);

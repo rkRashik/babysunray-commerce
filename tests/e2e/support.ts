@@ -18,11 +18,11 @@ export function ownerPassword(): string {
 
 /** Signs in through the real sign-in form and waits for the product list. */
 export async function signIn(page: Page): Promise<void> {
-  await page.goto("/office/login");
+  await page.goto("/admin/login");
   await page.getByLabel("Email").fill(E2E_OWNER.email);
   await page.getByLabel("Password").fill(ownerPassword());
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/office$/);
+  await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByRole("heading", { level: 1, name: "Products" })).toBeVisible();
 }
 

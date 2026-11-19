@@ -134,17 +134,17 @@ async function explain(name: string, query: ReturnType<typeof sql>) {
   results[`explain:${name}`] = { medianMs: Number(/Execution Time: ([0-9.]+)/.exec(plan.at(-1) ?? "")?.[1] ?? NaN), maxMs: NaN, note: plan.filter((l) => /Scan|Execution|Sort Method|Hash/.test(l)).slice(0, 8).map((l) => l.trim()).join(" | ") };
 }
 
-it("catalogue: Office list, search, filters, preparation and the storefront preview", async () => {
+it("catalogue: Admin list, search, filters, preparation and the storefront preview", async () => {
   const [{ id: categoryId }] = (await pool.query<{ id: string }>("select id from product_categories where slug = 'perf-cat-7'")).rows;
-  expect((await measure("office.listProducts.firstPage", () => listProducts(db, { limit: 25 }))).items).toHaveLength(25);
+  expect((await measure("admin.listProducts.firstPage", () => listProducts(db, { limit: 25 }))).items).toHaveLength(25);
   const deep = (await listProducts(db, { limit: 100 })).items.at(-1)!.key;
-  await measure("office.listProducts.secondPage", () => listProducts(db, { limit: 25, after: deep }));
-  expect((await measure("office.listProducts.search", () => listProducts(db, { limit: 25, q: "Romper 4999" }))).items.length).toBeGreaterThan(0);
-  await measure("office.listProducts.searchSku", () => listProducts(db, { limit: 25, q: "PERF-4321" }));
-  await measure("office.listProducts.category", () => listProducts(db, { limit: 25, categoryId }));
-  await measure("office.listProducts.missingFabric", () => listProducts(db, { limit: 25, missing: "fabric" }));
-  await measure("office.listProducts.inStock", () => listProducts(db, { limit: 25, stock: "in" }));
-  await measure("office.preparationOverview", () => preparationOverview(db, owner));
+  await measure("admin.listProducts.secondPage", () => listProducts(db, { limit: 25, after: deep }));
+  expect((await measure("admin.listProducts.search", () => listProducts(db, { limit: 25, q: "Romper 4999" }))).items.length).toBeGreaterThan(0);
+  await measure("admin.listProducts.searchSku", () => listProducts(db, { limit: 25, q: "PERF-4321" }));
+  await measure("admin.listProducts.category", () => listProducts(db, { limit: 25, categoryId }));
+  await measure("admin.listProducts.missingFabric", () => listProducts(db, { limit: 25, missing: "fabric" }));
+  await measure("admin.listProducts.inStock", () => listProducts(db, { limit: 25, stock: "in" }));
+  await measure("admin.preparationOverview", () => preparationOverview(db, owner));
   await measure("preview.list", () => listPreviewProducts(db, owner, {}));
   await measure("preview.list.page50", () => listPreviewProducts(db, owner, { page: 50 }));
   await measure("preview.list.search", () => listPreviewProducts(db, owner, { q: "রম্পার 4" }));

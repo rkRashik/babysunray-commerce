@@ -14,7 +14,7 @@ paths:
 
 ## Authentication and authorisation
 
-- Every Owner Office page, server action, route handler and export is protected **on the server**. Hiding a link or button is not access control.
+- Every Admin page, server action, route handler and export is protected **on the server**. Hiding a link or button is not access control.
 - Check authorisation in the domain module or handler that performs the action, not only in middleware or layout.
 - Each protected route and action gets a negative test (anonymous and unauthorised requests are rejected).
 - Use the authentication solution the founder approves. Do not write a custom authentication or session protocol.

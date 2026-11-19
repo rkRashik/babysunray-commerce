@@ -52,7 +52,7 @@ What the checks cover: `db:check` checks only that the migration files and snaps
 
 ## 5. The first admin account
 
-No account exists until you create one, and there is no public sign-up. The admin panel's sign-in page is `/office/login`.
+No account exists until you create one, and there is no public sign-up. The admin panel's sign-in page is `/admin/login`.
 
 ```
 npm run auth:bootstrap-owner

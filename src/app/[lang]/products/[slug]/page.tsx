@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireShop } from "@/app/_shop/access";
-import { ProductView } from "@/app/office/storefront-preview/_components/views/product-view";
+import { ProductView } from "@/app/admin/storefront-preview/_components/views/product-view";
 import { getDb } from "@/db/client";
 import { publishedPolicies } from "@/modules/policies/publication";
 import { isLang } from "@/modules/storefront/i18n";

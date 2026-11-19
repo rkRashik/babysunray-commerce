@@ -23,8 +23,8 @@ import { createTestDb } from "../support/test-database";
 const state = vi.hoisted(() => ({ db: undefined as unknown, auth: undefined as unknown }));
 vi.mock("@/db/client", () => ({ getDb: () => state.db }));
 vi.mock("@/modules/auth/server", () => ({ getAuth: () => state.auth }));
-const mediaRoute = await import("../../src/app/office/media/[mediaId]/route");
-const uploadRoute = await import("../../src/app/office/products/[productId]/photos/upload/route");
+const mediaRoute = await import("../../src/app/admin/media/[mediaId]/route");
+const uploadRoute = await import("../../src/app/admin/products/[productId]/photos/upload/route");
 
 let db: Db;
 let pool: Pool;
@@ -237,13 +237,13 @@ describe("storage configuration", () => {
   });
 });
 
-describe("Office photo routes", () => {
+describe("Admin photo routes", () => {
   const get = (mediaId: string, query = "", headers: Record<string, string> = {}) =>
-    mediaRoute.GET(new Request(`${BASE_URL}/office/media/${mediaId}${query}`, { headers }), { params: Promise.resolve({ mediaId }) });
+    mediaRoute.GET(new Request(`${BASE_URL}/admin/media/${mediaId}${query}`, { headers }), { params: Promise.resolve({ mediaId }) });
   const post = async (productId: string, fields: Record<string, string | Blob>, headers: Record<string, string> = { origin: BASE_URL, cookie }) => {
     const form = new FormData();
     for (const [name, value] of Object.entries(fields)) form.append(name, value);
-    return uploadRoute.POST(new Request(`${BASE_URL}/office/products/${productId}/photos/upload`, { method: "POST", headers, body: form }), { params: Promise.resolve({ productId }) });
+    return uploadRoute.POST(new Request(`${BASE_URL}/admin/products/${productId}/photos/upload`, { method: "POST", headers, body: form }), { params: Promise.resolve({ productId }) });
   };
 
   it("serves a photo only to a signed-in Owner, privately, as an image, with smaller copies and revalidation", async () => {
@@ -272,16 +272,16 @@ describe("Office photo routes", () => {
     const fields = async () => ({ idempotencyKey: key(), version: String(await version(productId)), image: png, altEn: "Fictional front view" });
     expect((await post(productId, await fields(), { origin: "https://elsewhere.example", cookie })).status).toBe(403);
     const anonymous = await post(productId, await fields(), { origin: BASE_URL });
-    expect([anonymous.status, anonymous.headers.get("location")]).toEqual([303, "/office/login"]);
+    expect([anonymous.status, anonymous.headers.get("location")]).toEqual([303, "/admin/login"]);
     const ok = await post(productId, await fields());
-    expect([ok.status, ok.headers.get("location")]).toEqual([303, `/office/products/${productId}/photos?done=photo-uploaded`]);
+    expect([ok.status, ok.headers.get("location")]).toEqual([303, `/admin/products/${productId}/photos?done=photo-uploaded`]);
     expect((await getProductWithVariants(db, productId)).media.map((m) => m.altEn)).toEqual(["Fictional front view"]);
     const svg = await post(productId, { ...(await fields()), image: new Blob(["<svg xmlns='http://www.w3.org/2000/svg'/>"], { type: "image/png" }) });
-    expect(svg.headers.get("location")).toBe(`/office/products/${productId}/photos?error=type`);
+    expect(svg.headers.get("location")).toBe(`/admin/products/${productId}/photos?error=type`);
     const stale = await post(productId, { ...(await fields()), version: "1" });
-    expect(stale.headers.get("location")).toBe(`/office/products/${productId}/photos?error=conflict`);
+    expect(stale.headers.get("location")).toBe(`/admin/products/${productId}/photos?error=conflict`);
     const huge = await post(productId, await fields(), { origin: BASE_URL, cookie, "content-length": String(11 * 1024 * 1024) });
-    expect(huge.headers.get("location")).toBe(`/office/products/${productId}/photos?error=too_large`);
+    expect(huge.headers.get("location")).toBe(`/admin/products/${productId}/photos?error=too_large`);
     expect((await post("not-a-uuid", await fields())).status).toBe(404);
     expect(await count(pool, "select count(*) from product_media where product_id = $1", [productId])).toBe(1);
     expect(mediaHealthy(await verifyMediaStore(db, store))).toBe(true);

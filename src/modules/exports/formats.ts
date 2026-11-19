@@ -94,7 +94,7 @@ export async function* jsonChunks(meta: Record<string, unknown>, columns: Column
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// XLSX (Office Open XML, ECMA-376): a ZIP of a few XML parts. Written here rather than with a library because
+// XLSX (Admin Open XML, ECMA-376): a ZIP of a few XML parts. Written here rather than with a library because
 // the subset needed (one data sheet, one "About" sheet, inline strings, integers, booleans) is small and
 // streams; no formula element is ever written.
 

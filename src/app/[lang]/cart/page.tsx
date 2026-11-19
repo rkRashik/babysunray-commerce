@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireShop } from "@/app/_shop/access";
-import { CartView } from "@/app/office/storefront-preview/_components/cart-view";
+import { CartView } from "@/app/admin/storefront-preview/_components/cart-view";
 import { dictionary, isLang } from "@/modules/storefront/i18n";
 
 export default async function ShopCart({ params }: { params: Promise<{ lang: string }> }) {

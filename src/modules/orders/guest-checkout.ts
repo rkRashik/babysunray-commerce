@@ -42,7 +42,7 @@ import { createTrackingLink } from "./tracking";
 // - the order's tracking link is created in the same transaction and its token returned once, in this answer.
 //   A replay never creates another link (that would revoke the first) and cannot show the token again: only its
 //   digest is stored. A customer whose first answer was lost still sees that the order was received, and the
-//   Owner, who verifies every order by hand (rule B), issues a new link through the Office.
+//   Owner, who verifies every order by hand (rule B), issues a new link through Admin.
 
 /** Same alphabet as base64url and UUIDs; at least 32 characters (a UUID v4 has 122 random bits). */
 const KEY = /^[A-Za-z0-9_-]{32,128}$/;

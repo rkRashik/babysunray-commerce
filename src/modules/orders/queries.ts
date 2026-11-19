@@ -18,7 +18,7 @@ import { DomainError, invalidInput } from "../domain-error";
 import type { Order } from "./internal";
 import { type OrderStatus, parseOrderNumber } from "./rules";
 
-// Read models for the Owner (Office and API). The guest view is in tracking.ts and shows far less.
+// Read models for the Owner (Admin and API). The guest view is in tracking.ts and shows far less.
 
 export type OrderItem = typeof orderItems.$inferSelect;
 export type OrderDetail = Order & {

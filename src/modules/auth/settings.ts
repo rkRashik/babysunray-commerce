@@ -52,7 +52,7 @@ export function validateBaseURL(raw: string | undefined, nodeEnv: string | undef
 }
 
 /**
- * Why sign-in cannot work with this environment, one entry per variable, or [] when it can. For the Office
+ * Why sign-in cannot work with this environment, one entry per variable, or [] when it can. For Admin
  * sign-in page and `npm run config:check`: names and rules only, never a value.
  */
 export function authSettingProblems(env: Env): { name: string; problem: string }[] {

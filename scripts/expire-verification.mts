@@ -4,7 +4,7 @@
 // each order is handled in its own short transaction and skipped if another operation holds it.
 //
 // Logical correctness does not depend on this command: submissions, stock adjustments and confirmations
-// release overdue holds themselves. This is the physical clean-up, so the Office shows the expired state
+// release overdue holds themselves. This is the physical clean-up, so Admin shows the expired state
 // promptly. No scheduler runs it; with production hosting, the host's scheduler should run the same
 // operation every few minutes (docs/product/order-policy-decisions.md, section 3).
 import { drizzle } from "drizzle-orm/node-postgres";

@@ -125,7 +125,7 @@ export const photoSchema = z
   })
   .register(apiRegistry, {
     id: "Photo",
-    description: "A product photo's metadata (added in 1.4.0). Uploading and viewing photos happen in the Owner Office only; there is no API for the files yet.",
+    description: "A product photo's metadata (added in 1.4.0). Uploading and viewing photos happen in Admin only; there is no API for the files yet.",
   });
 
 export const productSchema = productSummarySchema

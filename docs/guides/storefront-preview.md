@@ -3,7 +3,7 @@
 **Status:** Draft — Founder Review
 **Purpose:** The private, bilingual prototype of the customer shop: what it shows, how it is protected, and what was tested.
 
-A prototype of the customer shop at `/office/storefront-preview` (`src/app/office/storefront-preview`, `src/modules/storefront`). It shows **draft** products as customers might see them, so it is admin-only: every page, Server Action and photo checks the session and the `storefront:preview` permission on the server, and as an `/office` route it is never indexed, framed or cached. Labelled "Storefront Preview — Not Live" on every page. **It is not deployed and no customer can see it.** The visual design is not decided.
+A prototype of the customer shop at `/admin/storefront-preview` (`src/app/admin/storefront-preview`, `src/modules/storefront`). It shows **draft** products as customers might see them, so it is admin-only: every page, Server Action and photo checks the session and the `storefront:preview` permission on the server, and as an `/admin` route it is never indexed, framed or cached. Labelled "Storefront Preview — Not Live" on every page. **It is not deployed and no customer can see it.** The visual design is not decided.
 
 **Design:** First Light ([design system](../design/storefront-design-system.md)), the design the founder chose for implementation (2026-11-18): ivory ground, cocoa text, one amber action per screen, product photos in the arch, the installation's logo, English and Bangla always one tap apart. A phone tab bar with Home, Shop, Search, Bag and My order (an explanation of the private tracking link, `/[lang]/order`). The earlier Concepts A, B and C were rejected and removed.
 

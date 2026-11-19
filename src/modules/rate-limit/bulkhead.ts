@@ -85,7 +85,7 @@ export const anonymousCheckoutWork: Bulkhead = sharedOr(() => createBulkhead(CHE
 
 /**
  * Better Auth's HTTP endpoints (/api/auth). Sign-in is anonymous until it succeeds, so it cannot be told apart from a
- * flood; its own bulkhead keeps the Office's pages and the API, which verify sessions in server code rather than over
+ * flood; its own bulkhead keeps Admin's pages and the API, which verify sessions in server code rather than over
  * /api/auth, working during one. The bulkheads together use at most 80% of the pool (8 of 10 by default), or the shared bulkhead plus 1 below 5.
  */
 export const AUTH_CONCURRENCY = PLAN.auth;

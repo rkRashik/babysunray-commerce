@@ -11,7 +11,7 @@ A bilingual (English and Bangla) e-commerce platform and admin panel for a baby 
 - **Orders:** admin-entered orders that reserve every line atomically or create nothing; four separate lifecycle dimensions (order, fulfilment, payment, return); a 24-hour verification window that releases holds without depending on a scheduler; cash-on-delivery collection, settlement and courier deductions kept apart, with a read-only courier statement check; returns, refunds and returned parcels with quarantine and inspection before restocking.
 - **Concurrency and idempotency:** row locks in a fixed order, conditional updates whose affected rows are checked, and one idempotency record per client key committed in the same transaction as the operation. Tests race real connections for the last unit and prove the lock waits.
 - **Private order tracking:** 256-bit random links stored only as SHA-256 digests, a masked view, revocation and rate limits.
-- **Admin panel** (`/office`): product, stock, order, delivery-charge and category management, a dashboard of work queues, period reports, audited XLSX/CSV/JSON exports protected against formula injection, A4 print views, a launch-readiness overview and private policy drafts.
+- **Admin panel** (`/admin`): product, stock, order, delivery-charge and category management, a dashboard of work queues, period reports, audited XLSX/CSV/JSON exports protected against formula injection, A4 print views, a launch-readiness overview and private policy drafts.
 - **REST API** (`/api/v1`): Bearer-token authentication, OpenAPI 3.1, strict input validation, RFC 9457 errors, keyset pagination, idempotency keys, per-user rate limits, request size limits and no CORS.
 - **Security:** Better Auth sessions, no public sign-up, an append-only sign-in and access audit, server-side permission checks on every page, Server Action and endpoint, audit actors that only a verified session can produce, and security headers on every admin response.
 - **Recovery:** encrypted database and photo backups, verification, restore into an empty target only, and restore drills on fictional data.
@@ -65,7 +65,7 @@ psql -U postgres -f db/local-setup.sql   # creates the local dev and test databa
 cp .env.example .env.local               # then fill in the connection strings and auth settings
 npm run db:migrate                       # applies migrations to the local development database only
 npm run auth:bootstrap-owner             # creates the first admin account (interactive)
-npm run dev                              # http://localhost:3000/office
+npm run dev                              # http://localhost:3000/admin
 ```
 
 Passwords for the database roles are set with `\password` in `psql`, never in a file. Full setup, configuration and every npm script: [docs/getting-started.md](docs/getting-started.md).

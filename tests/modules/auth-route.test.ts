@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ANONYMOUS_QUEUE, AUTH_CONCURRENCY } from "../../src/modules/rate-limit/bulkhead";
 
 // The /api/auth route runs Better Auth's handler inside its own bulkhead (Gate H.42 review): a flood of anonymous
-// sign-in requests is refused quickly instead of taking the connections the rest of the Office needs.
+// sign-in requests is refused quickly instead of taking the connections the rest of Admin needs.
 
 const held: (() => void)[] = [];
 let calls = 0;

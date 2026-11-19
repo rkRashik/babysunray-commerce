@@ -1,8 +1,8 @@
 # Bulk catalogue import
 
-**Status:** Draft — Founder Review. **Purpose:** The file format and rules of the Owner Office's bulk import of new draft products (Office → Import), for the Owner preparing a file and for a developer changing the import.
+**Status:** Draft — Founder Review. **Purpose:** The file format and rules of BabySunRay Admin's bulk import of new draft products (Admin → Import), for the Owner preparing a file and for a developer changing the import.
 
-Code: `src/modules/catalogue/import-file.ts` (reading), `import-plan.ts` (rows to products), `import-service.ts` (preview and import), routes under `src/app/office/import`. Implemented and tested; the format itself is an engineering proposal, not a founder decision.
+Code: `src/modules/catalogue/import-file.ts` (reading), `import-plan.ts` (rows to products), `import-service.ts` (preview and import), routes under `src/app/admin/import`. Implemented and tested; the format itself is an engineering proposal, not a founder decision.
 
 ## What it does and does not do
 
@@ -17,7 +17,7 @@ Updating existing drafts from a file is not built. It needs an explicit identity
 
 ## Steps
 
-1. Office → Import → download the XLSX or CSV template (column names only; the XLSX template's second sheet explains each column).
+1. Admin → Import → download the XLSX or CSV template (column names only; the XLSX template's second sheet explains each column).
 2. Fill one row per SKU. Save as **.xlsx** or **CSV UTF-8** (Excel: Save As → "CSV UTF-8 (Comma delimited)").
 3. Check file. The preview reads the file and the database and **saves nothing**. It lists every problem by row and column, with a downloadable problem list (row, column, problem; cell values are not repeated in it).
 4. Fix the file until there are no problems, check it again, then press Import. The server reads the same file again; if anything changed since the preview (the file, a category, or a slug or SKU now taken), nothing is imported and it asks for a new preview.
@@ -32,7 +32,7 @@ Column names are matched without regard to case. Unknown, repeated or missing re
 | `product_slug` | yes | New product's web name: lowercase a–z, digits, single hyphens, at most 100. Rows with the same slug are one product. |
 | `name_en`, `name_bn` | one of them on the product's first row | At most 200 characters. |
 | `description_en`, `description_bn` | no | At most 5,000; line breaks allowed. |
-| `category_slug` | no | An existing category's slug (Office → Categories). |
+| `category_slug` | no | An existing category's slug (Admin → Categories). |
 | `fabric_en`, `fabric_bn`, `care_en`, `care_bn`, `size_guidance_en`, `size_guidance_bn` | no | At most 1,000; line breaks allowed. Fabric is imported **not confirmed**. |
 | `featured` | no | `yes` or `no` (empty means no). |
 | `sku` | yes | One row per SKU; A–Z, digits, hyphen, underscore, at most 64; stored in capitals; new and unique. |
@@ -56,5 +56,5 @@ fictional-romper,,,FIC-ROMPER-3-6,3-6M,Ivory,850.50,26
 - Text is stored as Unicode NFC; control characters, broken Unicode and line breaks in one-line fields are refused.
 - A cell starting with `=`, `+`, `@` or `-` followed by a non-space (after trimming) is refused, so the data cannot become a formula when it is later opened in a spreadsheet (CSV injection).
 - XLSX: the first sheet only. A formula cell is refused and its stored result is never used. Macro-enabled, password-protected, ZIP64 and old .xls files are refused. The reader inflates only the parts it needs, each with a size limit (40 MB in total, so a "zip bomb" stops), checks every part's CRC, and refuses XML with a DOCTYPE or ENTITY.
-- Owner only (`catalog:write`), session cookie, a POST from the Office's own origin, a byte limit while reading.
+- Owner only (`catalog:write`), session cookie, a POST from the Admin's own origin, a byte limit while reading.
 - Every import is recorded in `catalogue_imports` (append-only): who, when, the file's SHA-256 (never its content), the format and what it created.

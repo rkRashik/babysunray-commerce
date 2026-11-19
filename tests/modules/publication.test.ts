@@ -50,14 +50,14 @@ describe("publication rules", () => {
     expect(APPROVED_PUBLICATION_RULE).not.toBe(PROPOSED_PUBLICATION_RULE);
   });
 
-  it("only the Owner's product page and Office actions reach the publication services, and nothing on the API or the shop", () => {
+  it("only the Owner's product page and Admin actions reach the publication services, and nothing on the API or the shop", () => {
     const reachable = [...files("src/app"), ...files("src/api")].filter((f) => /\.(ts|tsx)$/.test(f));
     expect(reachable.length).toBeGreaterThan(50);
     const offenders = reachable.filter((f) => /from "[^"]*catalogue\/publication"/.test(readFileSync(path.join(ROOT, f), "utf8")));
-    expect(offenders.sort()).toEqual(["src/app/office/actions.ts", "src/app/office/products/[productId]/page.tsx"]);
-    const actions = readFileSync(path.join(ROOT, "src/app/office/actions.ts"), "utf8");
-    expect(actions).toMatch(/requireOffice\("catalog:publish"\)[\s\S]*publishProductOnce/);
+    expect(offenders.sort()).toEqual(["src/app/admin/actions.ts", "src/app/admin/products/[productId]/page.tsx"]);
+    const actions = readFileSync(path.join(ROOT, "src/app/admin/actions.ts"), "utf8");
+    expect(actions).toMatch(/requireAdmin\("catalog:publish"\)[\s\S]*publishProductOnce/);
     const importers = files("src").filter((f) => f !== "src/modules/catalogue/publication.ts" && /from "[^"]*catalogue\/publication"/.test(readFileSync(path.join(ROOT, f), "utf8")));
-    expect(importers.sort()).toEqual(["src/app/office/actions.ts", "src/app/office/products/[productId]/page.tsx", "src/modules/launch/readiness.ts"]);
+    expect(importers.sort()).toEqual(["src/app/admin/actions.ts", "src/app/admin/products/[productId]/page.tsx", "src/modules/launch/readiness.ts"]);
   });
 });

@@ -14,7 +14,7 @@
 |---|---|---|
 | Who | A browser holding an acceptance pass that a signed-in Owner started | Anyone |
 | Where | Only a database that carries the staging marker (schema `babysunray_target`, comment `babysunray:staging`) | Any database, once opened |
-| Opened by | "Start acceptance in this browser" in the Office (`/office/acceptance`, permission `acceptance:run`) | A reviewed code change to `src/modules/launch/gate.ts` after the founder's launch approval |
+| Opened by | "Start acceptance in this browser" in the Admin (`/admin/acceptance`, permission `acceptance:run`) | A reviewed code change to `src/modules/launch/gate.ts` after the founder's launch approval |
 | Services | The same catalogue, checkout, order, stock, tracking and publication services | The same |
 | Publication rule | The proposed I-6 rule (`i6-proposed-acceptance`, recorded with each publication) | Only an approved rule (`APPROVED_PUBLICATION_RULE`, null today) |
 
@@ -24,7 +24,7 @@ There is no query parameter, header, environment variable or setting that opens 
 
 - An HttpOnly, `SameSite=Lax` cookie (`bsr_acceptance`, `Secure` on https), valid for 8 hours: `v1.<owner id>.<expiry>.<random>.<HMAC>`. The HMAC key is derived from `BETTER_AUTH_SECRET` for this purpose only, so a pass can never stand in for a session cookie or the reverse.
 - Verified on every shop page, Server Action and route: a missing, forged, altered or expired pass is "closed" **before any database work**. A valid pass also needs the pass's Owner to still have active access and the connected database to carry the staging marker (read from PostgreSQL, cached for one minute per process).
-- It is independent of the Owner's session, so the founder can sign out of the Office and shop as a separate customer in the same browser, or in a private window.
+- It is independent of the Owner's session, so the founder can sign out of the Admin and shop as a separate customer in the same browser, or in a private window.
 - Closed, the shop answers like a page that does not exist (404); the checkout answers 503 `checkout_closed`; customer sign-in answers 404; product photos answer 503.
 
 **After the switch to production:** the production database is not marked staging, so no pass can open acceptance there, and staging orders, customers and tracking links stay in the staging database. Real catalogue data is moved by a separate, controlled procedure ([production-migration.md](../operations/production-migration.md), section 7); rehearsal orders, customers, tracking links and money records are never moved.
@@ -39,7 +39,7 @@ There is no query parameter, header, environment variable or setting that opens 
 
 Implements the first option of ADR-0008 section 1, which the founder chose on 19 Nov 2026 (S-14), with migration 0020:
 
-- A second Better Auth instance (`src/modules/customers/auth.ts`) with its own tables (`customer_users`, `customer_sessions`, `customer_accounts`, `customer_verifications`, `customer_rate_limits`), cookie prefix `bsr-customer`, base path `/api/customer-auth` and a derived secret. `user_access` references only `auth_users`, and the Office and `/api/v1` verify only the Owner instance, so a customer can never hold an Office permission (a database test inserts the Owner's own email as a customer and shows `user_access` refuses it).
+- A second Better Auth instance (`src/modules/customers/auth.ts`) with its own tables (`customer_users`, `customer_sessions`, `customer_accounts`, `customer_verifications`, `customer_rate_limits`), cookie prefix `bsr-customer`, base path `/api/customer-auth` and a derived secret. `user_access` references only `auth_users`, and the Admin and `/api/v1` verify only the Owner instance, so a customer can never hold an Admin permission (a database test inserts the Owner's own email as a customer and shows `user_access` refuses it).
 - Google only, scopes `openid email profile` (the provider's defaults), `prompt=select_account`, no ID-token sign-in, **no account linking** (a different Google account with an existing address is refused, never merged), only an address Google reports as verified creates an account, and no OAuth token is stored (dropped before every write; a database check refuses them).
 - Only three endpoints are reachable, each behind the shop access check: `POST /api/customer-auth/sign-in/social`, `POST /api/customer-auth/sign-out`, and the callback. The redirect URI registered with Google is `https://babysunray.com/api/auth/callback/google`; that path is a dedicated route that hands the request to the customer instance (the Owner instance keeps refusing every social path).
 - Guest checkout is unchanged. A signed-in customer's order is linked to their account in the order's own transaction (`customer_orders`, from the verified session, never from the body), and "My order" lists those orders.

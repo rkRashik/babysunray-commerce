@@ -50,7 +50,7 @@ export async function waitForServer(baseURL: string, child: ChildProcess, output
   while (Date.now() < deadline) {
     if (child.exitCode !== null) throw new Error(`The E2E server exited early.\n${output()}`);
     try {
-      const response = await fetch(`${baseURL}/office/login`, { redirect: "manual" });
+      const response = await fetch(`${baseURL}/admin/login`, { redirect: "manual" });
       if (response.status === 200) return;
     } catch {
       // Not listening yet.

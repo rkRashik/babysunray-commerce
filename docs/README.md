@@ -46,7 +46,7 @@ The machine-readable contract is served by the application at `/api/v1/openapi.j
 | [Catalogue and inventory](guides/catalogue-and-inventory.md) | Products, variants, content, readiness, reviews, import, search, stock and its ledger |
 | [Orders](guides/orders.md) | Submission, reservations, lifecycle, verification expiry, COD, returns, RTO, guest tracking, the inactive guest checkout |
 | [Authentication and authorisation](guides/authentication.md) | Sign-in, sessions, permissions, Bearer tokens, the local account commands |
-| [Admin panel](guides/admin-panel.md) | Every `/office` screen, its permissions, and how pages and forms are protected |
+| [Admin panel](guides/admin-panel.md) | Every `/admin` screen, its permissions, and how pages and forms are protected |
 | [Product photos](guides/product-photos.md) | Upload checks, storage, serving, consistency and photo backups |
 | [Storefront preview](guides/storefront-preview.md) | The private bilingual shop prototype, cart and checkout simulation |
 | [Bulk catalogue import](operations/catalogue-import.md) | The import file format, rules and limits |
@@ -81,6 +81,6 @@ These record the business's own requirements, decisions and plans. They are not 
 | [Order policy decisions](product/order-policy-decisions.md) | The approved order rules, lifecycle states and engineering defaults |
 | [Storefront launch decisions](product/storefront-launch-decisions.md) | Every decision still needed before the public storefront opens: approved, recommended, open |
 | [Launch readiness](operations/launch-readiness.md) | The launch gate, readiness page, policy drafting, product reviews, guest checkout contract |
-| [First Light design system](design/storefront-design-system.md) | The design of the storefront, the tracking page and the Owner Office (chosen by the founder for implementation): direction, libraries, tokens, components, motion, accessibility |
+| [First Light design system](design/storefront-design-system.md) | The design of the storefront, the tracking page and BabySunRay Admin (chosen by the founder for implementation): direction, libraries, tokens, components, motion, accessibility |
 | [Storefront concepts](design/storefront-concepts.md) | The earlier (rejected) design concepts, customer wording awaiting approval, customer sign-in options |
 | [Public-release privacy audit](private/public-release-privacy-audit.md) | What must be reviewed before any part of this repository is made public |

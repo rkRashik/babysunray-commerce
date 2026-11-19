@@ -5,7 +5,7 @@
 
 ## 1. Architecture
 
-One Next.js modular monolith (App Router, TypeScript) with PostgreSQL through Drizzle and reviewed SQL migrations, Better Auth for Owner sign-in, no separate backend server. Business rules (catalogue, stock, orders, COD, returns, reports, exports) live in `src/modules/*`; the Owner Office pages, `/api/v1` and every future client call the same operations, so pricing, stock and authorisation are written once. Stock is an append-only ledger; orders reserve stock inside one transaction; writes are idempotent per user and key. See [ADR-0001](../adr/0001-application-stack.md) to [ADR-0009](../adr/0009-hosted-database-security-boundary.md) and [backend-completeness.md](backend-completeness.md) (feature by feature, with the verification of each).
+One Next.js modular monolith (App Router, TypeScript) with PostgreSQL through Drizzle and reviewed SQL migrations, Better Auth for Owner sign-in, no separate backend server. Business rules (catalogue, stock, orders, COD, returns, reports, exports) live in `src/modules/*`; BabySunRay Admin pages, `/api/v1` and every future client call the same operations, so pricing, stock and authorisation are written once. Stock is an append-only ledger; orders reserve stock inside one transaction; writes are idempotent per user and key. See [ADR-0001](../adr/0001-application-stack.md) to [ADR-0009](../adr/0009-hosted-database-security-boundary.md) and [backend-completeness.md](backend-completeness.md) (feature by feature, with the verification of each).
 
 ## 2. The Owner API
 
@@ -27,7 +27,7 @@ Customer-facing API design: [api/public-api.md](../api/public-api.md).
 
 ## 4. How a future storefront connects
 
-Server-rendered pages call the same domain modules directly (the Owner Office does this today); they do not call their own HTTP endpoints. The storefront reads only published products through `src/modules/storefront/public-catalogue.ts` and places orders through the guest checkout service (`src/modules/orders/guest-checkout.ts`, transport `src/api/guest-checkout.ts`). Both are unrouted: routing them is a gate for the founder, after published policies (S-17, G-7), a publication rule (I-6) and a host that can give a trusted client address (open decision 1). The storefront preview in the Office (`/office/storefront-preview`) is a prototype, not a design.
+Server-rendered pages call the same domain modules directly (BabySunRay Admin does this today); they do not call their own HTTP endpoints. The storefront reads only published products through `src/modules/storefront/public-catalogue.ts` and places orders through the guest checkout service (`src/modules/orders/guest-checkout.ts`, transport `src/api/guest-checkout.ts`). Both are unrouted: routing them is a gate for the founder, after published policies (S-17, G-7), a publication rule (I-6) and a host that can give a trusted client address (open decision 1). The storefront preview in the Admin (`/admin/storefront-preview`) is a prototype, not a design.
 
 ## 5. Windows and Android clients
 

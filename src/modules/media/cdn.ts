@@ -92,7 +92,7 @@ export function cdnClient(config: CdnConfig, fetchImpl: typeof fetch = fetch): C
   };
 }
 
-/** Widths offered in srcset: the same as the Office renditions (images.ts), kept here so a readiness probe does not load the image library. */
+/** Widths offered in srcset: the same as Admin renditions (images.ts), kept here so a readiness probe does not load the image library. */
 const WIDTHS = [320, 640, 1280] as const;
 export type CdnImages = { src: string; srcSet: string };
 

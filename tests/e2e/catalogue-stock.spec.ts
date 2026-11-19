@@ -21,7 +21,7 @@ async function createProduct(page: Page, slug: string, nameEn = "E2E Cotton Romp
   await page.getByLabel("Description (Bangla)").fill(BANGLA_DESCRIPTION);
   await page.getByRole("button", { name: "Create draft" }).click();
   await expect(page.getByRole("status")).toHaveText("Draft product created.");
-  const match = /\/office\/products\/([0-9a-f-]{36})/.exec(page.url());
+  const match = /\/admin\/products\/([0-9a-f-]{36})/.exec(page.url());
   if (!match) throw new Error("Not on a product page.");
   return match[1];
 }
@@ -96,7 +96,7 @@ test("create a draft product with a Bangla name, add a SKU, receive and adjust s
   await expect(ledger.getByRole("row").nth(2)).toContainText("Two damaged in storage");
   await expect(ledger.getByRole("row").nth(2)).toContainText("You");
 
-  await page.goto(`/office/products/${productId}`);
+  await page.goto(`/admin/products/${productId}`);
   await expect(page.getByRole("row", { name: new RegExp(sku) })).toContainText("10");
   expect(await movementsOf(sku)).toEqual([
     { type: "receipt", delta: 12, reason: "E2E delivery 1" },
@@ -108,7 +108,7 @@ test("a double-click on a stock form records one movement", async ({ page }) => 
   const { slug, sku } = uniqueName("e2e-dbl");
   await createProduct(page, slug);
   await addVariant(page, sku);
-  await page.goto(`/office/skus/${sku}`);
+  await page.goto(`/admin/skus/${sku}`);
   const receive = page.getByRole("region", { name: "Receive stock" });
   await receive.getByLabel("Units received").fill("5");
   await receive.getByRole("button", { name: "Record receipt" }).dblclick();
@@ -121,11 +121,11 @@ test("a retry after a lost response does not record the movement twice", async (
   const { slug, sku } = uniqueName("e2e-retry");
   await createProduct(page, slug);
   await addVariant(page, sku);
-  await page.goto(`/office/skus/${sku}`);
+  await page.goto(`/admin/skus/${sku}`);
 
   // The first submission reaches the server and is committed, but the browser never sees the answer.
   let dropped = false;
-  await page.route(`**/office/skus/${sku}`, async (route) => {
+  await page.route(`**/admin/skus/${sku}`, async (route) => {
     if (route.request().method() === "POST" && !dropped) {
       dropped = true;
       await route.fetch();
@@ -186,7 +186,7 @@ test("wrong inputs get understandable errors and keep what was typed", async ({ 
   await form.getByRole("button", { name: "Add variant" }).click();
   await expect(form.getByRole("alert")).toContainText("already exists");
 
-  await page.goto(`/office/skus/${sku}`);
+  await page.goto(`/admin/skus/${sku}`);
   const receive = page.getByRole("region", { name: "Receive stock" });
   for (const quantity of ["0", "-3", "2.5", "many"]) {
     await receive.getByLabel("Units received").fill(quantity);

@@ -227,7 +227,7 @@ function aboutRows(v: ValidExport, created: string, id: number): [string, string
   ];
 }
 
-/** The latest export audit rows, newest first (Owner Office). */
+/** The latest export audit rows, newest first (Admin). */
 export async function listRecentExports(db: Db, principal: Principal, limit = 20) {
   assertPermission(principal, "exports:create");
   return db.select().from(exportRequests).orderBy(desc(exportRequests.id)).limit(limit);

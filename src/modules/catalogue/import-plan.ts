@@ -195,7 +195,7 @@ export function buildPlan(header: string[], rows: RawRow[], readIssues: ReadIssu
       try {
         validateSlug(value("category_slug"));
       } catch {
-        problem(row.line, "category_slug", "invalid_category", "category_slug must be a category's slug as shown in the Office (lowercase letters, digits, hyphens).");
+        problem(row.line, "category_slug", "invalid_category", "category_slug must be a category's slug as shown in Admin (lowercase letters, digits, hyphens).");
       }
     }
 
@@ -242,7 +242,7 @@ export function buildPlan(header: string[], rows: RawRow[], readIssues: ReadIssu
   }
 
   if ([...products.values()].some((p) => p.fabricEn || p.fabricBn)) {
-    warnings.push({ line: null, column: "fabric_en", code: "fabric_unconfirmed", message: "Fabric statements are imported as not confirmed. Confirm each one in the Office only after checking the label or supplier document." });
+    warnings.push({ line: null, column: "fabric_en", code: "fabric_unconfirmed", message: "Fabric statements are imported as not confirmed. Confirm each one in Admin only after checking the label or supplier document." });
   }
   const plan: ImportPlan = {
     products: [...products.values()].map((p) => ({

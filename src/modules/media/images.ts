@@ -12,7 +12,7 @@ import { invalidInput } from "../domain-error";
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const IMAGE_BOUNDS = { minSide: 200, maxSide: 8000, maxPixels: 40_000_000, storedMaxSide: 2400 } as const;
-/** Widths the Office serves (srcset); anything else gets the stored size. */
+/** Widths Admin serves (srcset); anything else gets the stored size. */
 export const RENDITION_WIDTHS = [320, 640, 1280] as const;
 
 const FORMATS = {

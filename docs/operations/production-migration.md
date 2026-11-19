@@ -68,7 +68,7 @@ There are no down migrations and none will be written: they are untested code th
   a new empty database, verify it (`npm run recovery:check`), and point the application at it. Orders, payments and stock written
   after the backup are lost unless they are re-entered from other records: this is the RPO, which the founder has not set.
   Restore time (RTO) is unmeasured on real data; `docs/operations/performance.md` has the figure for fictional data only.
-- Stop taking orders while a migration or a restore runs (the shop is closed to the public until launch; the Owner Office is
+- Stop taking orders while a migration or a restore runs (the shop is closed to the public until launch; BabySunRay Admin is
   the only writer).
 
 ## 6. What remains before a production migration command can exist
@@ -101,7 +101,7 @@ The founder creates the production database last. The site keeps running on stag
 | Data | Moves? | How |
 |---|---|---|
 | Categories, products (as drafts), variants, prices, size charts | Yes, if the founder wants them | Exports "Product content" and "Size charts" from the source, then the existing create-only catalogue import into production (previewed, all or nothing). Every product arrives as a draft and is reviewed and published again under the approved rule. |
-| Product photos | Yes | Uploaded again in the production Office from the founder's originals (simple and checked by the upload pipeline). A bucket-to-bucket transfer tool is not built. |
+| Product photos | Yes | Uploaded again in the production Admin from the founder's originals (simple and checked by the upload pipeline). A bucket-to-bucket transfer tool is not built. |
 | Stock | No | Received in production from a physical count (stock counts), so the ledger starts from real stock. |
 | Delivery charges, store identity | No | Entered again by the founder in production. |
 | Policy texts | Text only, if wanted | Copied into production drafts by the founder; published again with approval. |

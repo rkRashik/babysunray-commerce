@@ -19,7 +19,7 @@ export type Product = typeof products.$inferSelect;
 export type Variant = typeof variants.$inferSelect;
 export type Category = typeof productCategories.$inferSelect;
 export type ProductMedia = typeof productMedia.$inferSelect;
-/** A product with everything the Office, the API and the storefront preview show about it. */
+/** A product with everything Admin, the API and the storefront preview show about it. */
 export type ProductDetail = Product & { variants: Variant[]; measurements: Measurement[]; media: ProductMedia[]; category: Category | null };
 
 export type NewProduct = {
@@ -357,7 +357,7 @@ function matches(term: string) {
 /**
  * Products oldest first, ordered by (created_at, id) so rows created in the same microsecond still have a
  * fixed order. `after` continues from the last row of the previous page; filters (status, search) apply to
- * every page alike. For the Owner Office only: products of every status; nothing here is a public read.
+ * every page alike. For Admin only: products of every status; nothing here is a public read.
  * Without an index the search reads every product row, which suits a small catalogue.
  */
 export async function listProducts(

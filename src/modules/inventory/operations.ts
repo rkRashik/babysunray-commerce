@@ -7,7 +7,7 @@ import { releaseOverdue } from "../orders/service";
 import { applyStockCount, type CountDetail, type CountEntry, discardStockCount, getStockCount, parseSkuList, recordCounts, startStockCount } from "./counts";
 import { adjustStock, getStockMovement, receiveStock, type StockMovement } from "./service";
 
-// Stock operations for every client (the /api/v1 routes and the Owner Office). Each checks the permission
+// Stock operations for every client (the /api/v1 routes and Admin). Each checks the permission
 // first, records the verified user as the actor, and runs once per idempotency key (src/modules/idempotency).
 
 export type StockOperationResult = { sku: string; variantId: string; onHand: number; movement: StockMovement };

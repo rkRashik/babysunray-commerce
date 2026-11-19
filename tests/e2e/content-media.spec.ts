@@ -20,7 +20,7 @@ const met = (page: import("@playwright/test").Page, id: string) => page.getByTes
 test("bilingual content, a confirmed fabric statement, a category and a size chart, with the readiness checklist", async ({ page }) => {
   const sku = await seedSku(2);
   const product = await productOf(sku);
-  await page.goto(`/office/products/${product.id}`);
+  await page.goto(`/admin/products/${product.id}`);
   await expect(page.getByTestId("readiness")).toContainText("Advisory only");
   await expect(met(page, "name")).toHaveAttribute("data-met", "false");
   await expect(met(page, "name")).toContainText("Missing: Bangla.");
@@ -28,14 +28,14 @@ test("bilingual content, a confirmed fabric statement, a category and a size cha
   await expect(page.getByRole("button", { name: /publish/i })).toHaveCount(0);
 
   const { slug } = uniqueName("e2e-cat");
-  await page.goto("/office/categories");
+  await page.goto("/admin/categories");
   await page.getByLabel("Slug").fill(slug);
   await page.getByLabel("Name (English)", { exact: true }).fill("Fictional sets");
   await page.getByLabel("Name (Bangla)", { exact: true }).fill("কাল্পনিক সেট");
   await submitAndWait(page, page.getByRole("button", { name: "Create category" }));
   await expect(page.getByRole("status")).toHaveText("Category created.");
 
-  await page.goto(`/office/products/${product.id}/edit`);
+  await page.goto(`/admin/products/${product.id}/edit`);
   await page.getByLabel("Name (Bangla)").fill("কাল্পনিক রম্পার");
   await page.getByLabel("Description (English)").fill("A fictional romper for the browser test.");
   await page.getByLabel("Description (Bangla)").fill("ব্রাউজার পরীক্ষার জন্য একটি কাল্পনিক রম্পার।");
@@ -47,14 +47,14 @@ test("bilingual content, a confirmed fabric statement, a category and a size cha
   await page.getByLabel("Care instructions (Bangla)").fill("কাল্পনিক যত্নের নির্দেশনা");
   await page.getByLabel(/^Featured/).check();
   await submitAndWait(page, page.getByRole("button", { name: "Save changes" }));
-  await expect(page).toHaveURL(new RegExp(`/office/products/${product.id}\\?done=updated$`));
+  await expect(page).toHaveURL(new RegExp(`/admin/products/${product.id}\\?done=updated$`));
   await expect(page.getByTestId("fabric-confirmation")).toContainText("Confirmed by you");
   for (const id of ["name", "description", "fabric", "care", "category"]) await expect(met(page, id), id).toHaveAttribute("data-met", "true");
   await expect(met(page, "measurements")).toHaveAttribute("data-met", "false");
   await expect(page.locator("main")).toContainText("কাল্পনিক রম্পার");
 
   // Changing the fabric text without confirming again withdraws the confirmation.
-  await page.goto(`/office/products/${product.id}/edit`);
+  await page.goto(`/admin/products/${product.id}/edit`);
   await page.getByLabel("Fabric (English)").fill("Changed fictional fabric statement");
   await page.getByLabel(/I confirm the fabric statement/).uncheck();
   await submitAndWait(page, page.getByRole("button", { name: "Save changes" }));
@@ -87,7 +87,7 @@ test("bilingual content, a confirmed fabric statement, a category and a size cha
 test("fictional photos: upload, refuse a fake image, describe, reorder, replace and remove, files kept in step", async ({ page, browser, baseURL }) => {
   const sku = await seedSku(1);
   const product = await productOf(sku);
-  await page.goto(`/office/products/${product.id}/photos`);
+  await page.goto(`/admin/products/${product.id}/photos`);
   const add = page.getByRole("region", { name: "Add a photo" });
   await add.getByLabel(/^Photo/).setInputFiles({ name: "front.png", mimeType: "image/png", buffer: await photo(200) });
   await add.getByLabel("What the photo shows (English)").fill("Fictional romper, front");
@@ -142,6 +142,6 @@ test("fictional photos: upload, refuse a fake image, describe, reorder, replace 
   await anonymous.close();
 
   // The photo storage check agrees: every record has its file.
-  await page.goto("/office/media-health");
+  await page.goto("/admin/media-health");
   await expect(page.getByTestId("media-summary")).toContainText("No record is missing its file.");
 });

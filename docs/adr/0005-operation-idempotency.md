@@ -5,11 +5,11 @@
 **Deciders:** Founder
 **Related:** [ADR-0002](0002-drizzle-and-inventory-foundation.md) (Not decided: idempotency), [ADR-0004](0004-api-v1-and-bearer-transport.md), [API guide](../api/README.md), [Product requirements](../product/requirements.md) (O-3, API-8)
 
-**In short:** The founder authorised operation-level idempotency in batch H.4–H.6 (2026-11-15). A client-generated key, scoped to the verified user, makes one business operation however often the request is retried. The record lives in PostgreSQL and commits in the same transaction as the operation. It is used by the stock and draft-catalogue writes (API and Owner Office). Retention and expiry of records are **not** decided.
+**In short:** The founder authorised operation-level idempotency in batch H.4–H.6 (2026-11-15). A client-generated key, scoped to the verified user, makes one business operation however often the request is retried. The record lives in PostgreSQL and commits in the same transaction as the operation. It is used by the stock and draft-catalogue writes (API and BabySunRay Admin). Retention and expiry of records are **not** decided.
 
 ## Context
 
-ADR-0002 deferred idempotency because a unique key on each ledger row would suit a single-SKU receipt but not an operation that changes several SKUs (a future order). Write endpoints and Office forms need retry safety now: a lost response or a double-click must not record a receipt twice (API-8).
+ADR-0002 deferred idempotency because a unique key on each ledger row would suit a single-SKU receipt but not an operation that changes several SKUs (a future order). Write endpoints and Admin forms need retry safety now: a lost response or a double-click must not record a receipt twice (API-8).
 
 ## Decision
 

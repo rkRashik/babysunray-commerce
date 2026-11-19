@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Real-browser tests of the Owner Office (`npm run test:e2e`). tests/e2e/global-setup.ts verifies and locks
+// Real-browser tests of Admin (`npm run test:e2e`). tests/e2e/global-setup.ts verifies and locks
 // babysunray_test, starts a dedicated Next.js server and sets E2E_BASE_URL; the tests then drive Chromium
 // against it. One worker: the tests share one database and one server. No traces, screenshots or videos are
 // kept, so no session cookie or page content is written to disk.

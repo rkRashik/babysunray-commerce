@@ -113,7 +113,7 @@ export async function launchReadiness(db: Db, principal: Principal): Promise<Lau
     evidence: drafts === 0 ? "No draft products yet." : missing === 0 ? `All ${plural(drafts, "draft product")}.` : `${missing} of ${plural(drafts, "draft product")} still missing this.`,
     next: missing > 0 || drafts === 0 ? (pending ? "Complete it, or ask the founder whether this proposed requirement applies." : "Complete it on each product page.") : null,
     source,
-    href: "/office/catalogue-preparation",
+    href: "/admin/catalogue-preparation",
   });
 
   // Without an approved rule the application publishes only on the staging database (founder acceptance); a published
@@ -137,7 +137,7 @@ export async function launchReadiness(db: Db, principal: Principal): Promise<Lau
       evidence: drafts === 0 ? "No draft products yet." : `${c.reviewed} of ${plural(drafts, "draft product")} have a current review.`,
       next: c.reviewed < drafts ? "Review products in Product reviews. A later change to a product makes its review outdated." : null,
       source: "engineering default",
-      href: "/office/product-reviews",
+      href: "/admin/product-reviews",
     },
     {
       id: "publication",
@@ -162,7 +162,7 @@ export async function launchReadiness(db: Db, principal: Principal): Promise<Lau
       evidence: facts.deliveryZonesConfigured ? "Both zones have an active charge you set." : `${activeZones.length} of ${DELIVERY_ZONES.length} zones have an active charge.`,
       next: facts.deliveryZonesConfigured ? null : "Set the real charges in Delivery charges.",
       source: "O-8, rule I",
-      href: "/office/settings/delivery",
+      href: "/admin/settings/delivery",
     },
     {
       id: "integrity",
@@ -183,7 +183,7 @@ export async function launchReadiness(db: Db, principal: Principal): Promise<Lau
       next: "After the launch (when the site is no longer behind visitor protection), schedule the maintenance call; see infrastructure.md.",
       source: "O-12, rule D",
     },
-    { id: "cod", label: "Cash on delivery: expected, collected, settled", status: "ready", evidence: "Built and tested for Owner-recorded collection, settlement and courier deductions, with a reconciliation report. Importing courier statements is not built (OF-8).", next: null, source: "OF-3, rule J", href: "/office/reports" },
+    { id: "cod", label: "Cash on delivery: expected, collected, settled", status: "ready", evidence: "Built and tested for Owner-recorded collection, settlement and courier deductions, with a reconciliation report. Importing courier statements is not built (OF-8).", next: null, source: "OF-3, rule J", href: "/admin/reports" },
     { id: "returns", label: "Returns, refunds and RTO with inspection", status: "ready", evidence: "Built and tested. Exchange execution (replacement charge, price difference) is not decided.", next: null, source: "O-13, O-14, rules E to G, M" },
     {
       id: "tracking",
@@ -218,7 +218,7 @@ export async function launchReadiness(db: Db, principal: Principal): Promise<Lau
     evidence: POLICY_EVIDENCE[policyStatus(kind)],
     next: policyStatus(kind) === "published" ? null : policyStatus(kind) === "reviewed" ? "If you approve the final text, publish it in Policies." : "Write it in both languages; have it checked where legal review is needed.",
     source: kind === "checkout_notices" ? "S-8, S-17" : "S-17, G-7",
-    href: `/office/policies#${kind}`,
+    href: `/admin/policies#${kind}`,
   }));
   const required = (["delivery", "returns", "privacy"] as const).filter((k) => policyStatus(k) !== "published");
   policies.push({
@@ -228,7 +228,7 @@ export async function launchReadiness(db: Db, principal: Principal): Promise<Lau
     evidence: required.length ? `Not published yet: ${required.map((k) => POLICY_TITLES[k].toLowerCase()).join(", ")}.` : "Delivery, return and exchange, and privacy policies are published.",
     next: required.length ? "Founder approves the wording and publishes it in Policies." : null,
     source: "S-17, G-7",
-    href: "/office/policies",
+    href: "/admin/policies",
   });
 
   const operations: ReadinessCheck[] = [
@@ -240,7 +240,7 @@ export async function launchReadiness(db: Db, principal: Principal): Promise<Lau
     { id: "recovery", label: "Production account recovery", status: "incomplete", evidence: "Only a local command-line password reset exists; no lost-device recovery path, no 2FA.", next: "Founder decides the recovery method (OF-5).", source: "OF-5, decision 3" },
     { id: "rate_limits", label: "Rate limiting", status: "not_verified", evidence: "Sign-in, API (per user), tracking (per link, global) and checkout (global; per client behind Netlify with TRUSTED_PROXY=netlify) limits exist and are tested locally. Not verified on the live site.", next: "Set TRUSTED_PROXY=netlify and check during acceptance.", source: "API-11, S-15" },
     { id: "usability", label: "Usability test with real people", status: "not_verified", evidence: "Automated accessibility and browser tests only. No test with people yet.", next: "Five informal testers, one first-time online buyer, on a mid-range Android phone.", source: "G-9" },
-    { id: "design", label: "Final visual design", status: "ready", evidence: "First Light, chosen by the founder on 2026-11-18 and built across the shop, the tracking page and the Owner Office.", next: null, source: "BR-6, decision 4", href: "/office/storefront-preview" },
+    { id: "design", label: "Final visual design", status: "ready", evidence: "First Light, chosen by the founder on 2026-11-18 and built across the shop, the tracking page and Admin.", next: null, source: "BR-6, decision 4", href: "/admin/storefront-preview" },
     { id: "licences", label: "Licences and portability", status: "not_verified", evidence: "A licence inventory and a rebranded-installation rehearsal exist; no licence review.", next: "Review the licence list before any handoff.", source: "RU-5, G-14" },
   ];
 

@@ -1,12 +1,12 @@
 # Export formats
 
-**Status:** Draft — Founder Review. **Purpose:** What the Owner Office exports contain and how to read them (requirements D-1 to D-8), for the Owner and for a future client that imports them.
+**Status:** Draft — Founder Review. **Purpose:** What BabySunRay Admin exports contain and how to read them (requirements D-1 to D-8), for the Owner and for a future client that imports them.
 
-Code: `src/modules/exports` (datasets in `datasets.ts`, encoders in `formats.ts`, the service in `service.ts`); route `POST /office/exports/download`. There is no API endpoint for exports yet.
+Code: `src/modules/exports` (datasets in `datasets.ts`, encoders in `formats.ts`, the service in `service.ts`); route `POST /admin/exports/download`. There is no API endpoint for exports yet.
 
 ## Request and security
 
-- Owner Office only, permission `exports:create`, session cookie, a POST from this site's own origin. Signed out, another origin, or a missing permission: no file.
+- BabySunRay Admin only, permission `exports:create`, session cookie, a POST from this site's own origin. Signed out, another origin, or a missing permission: no file.
 - Each request is written to `export_requests` (append-only) **before** any data is read: user id, time, dataset, format, complete or filtered, and the filters (dates and status values only).
 - The file is generated while it downloads and is never stored on the server; there is no download link to share or reuse. Responses are `Cache-Control: no-store`, `X-Robots-Tag: noindex`, `Content-Disposition: attachment`.
 - Never exported: passwords or their hashes, sessions, tracking tokens or their digests, idempotency records, rate-limit counters.

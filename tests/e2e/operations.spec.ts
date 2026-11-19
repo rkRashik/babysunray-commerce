@@ -15,10 +15,10 @@ test.beforeEach(async ({ page }) => {
   await signIn(page);
 });
 
-const nav = (page: Page) => page.getByRole("navigation", { name: "Owner Office" });
+const nav = (page: Page) => page.getByRole("navigation", { name: "Admin" });
 
 async function createOrder(page: Page, sku: string, quantity = 1) {
-  await page.goto("/office/orders/new");
+  await page.goto("/admin/orders/new");
   await page.getByLabel("WhatsApp").check();
   await page.getByLabel("Customer name").fill("Test Customer");
   await page.getByLabel("Phone").fill("01711000008");
@@ -48,7 +48,7 @@ test("the dashboard shows real queues and links to the matching order list; repo
   const orderUrl = await createOrder(page, sku);
   await step(page, "Confirm order (verified with the customer)");
 
-  const response = await page.goto("/office/dashboard");
+  const response = await page.goto("/admin/dashboard");
   const headers = response?.headers() ?? {};
   expect(headers["cache-control"]).toContain("no-store");
   expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
@@ -69,7 +69,7 @@ test("the dashboard shows real queues and links to the matching order list; repo
   expect(ids).toContain(orderUrl);
 
   // An Owner-chosen low-stock view, and a rejected value.
-  await page.goto("/office/dashboard?low=abc");
+  await page.goto("/admin/dashboard?low=abc");
   await expect(page.locator("main").getByRole("alert")).toContainText("whole number");
 
   await nav(page).getByRole("link", { name: "Reports" }).click();
@@ -77,7 +77,7 @@ test("the dashboard shows real queues and links to the matching order list; repo
   await expect(page.getByTestId("report-scope")).toContainText("up to, not including");
   await expect(page.getByTestId("reconciled").first()).toContainText("Check passed");
   await expectNoAxeViolations(page);
-  await page.goto("/office/reports?from=2026-11-20&to=2026-11-01");
+  await page.goto("/admin/reports?from=2026-11-20&to=2026-11-01");
   await expect(page.locator("main").getByRole("alert")).toContainText("start not after the end");
 });
 
@@ -86,7 +86,7 @@ test("printable documents: routine ones omit contact details; the order's shippi
   const orderUrl = await createOrder(page, sku, 2);
   await step(page, "Confirm order (verified with the customer)");
 
-  await page.goto("/office/print/picking");
+  await page.goto("/admin/print/picking");
   await expect(page.getByRole("heading", { level: 1, name: "Picking list and packing summary" })).toBeVisible();
   await expect(page.getByTestId("pick-table")).toContainText(sku);
   await expect(page.locator("main")).not.toContainText("01711000008");
@@ -98,11 +98,11 @@ test("printable documents: routine ones omit contact details; the order's shippi
   await page.emulateMedia({ media: "screen" });
 
   const orderId = orderUrl.split("/").at(-1);
-  await page.goto(`/office/print/orders/${orderId}`);
+  await page.goto(`/admin/print/orders/${orderId}`);
   await expect(page.getByTestId("ship-phone")).toHaveText("01711000008");
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
 
-  await page.goto("/office/print/cod");
+  await page.goto("/admin/print/cod");
   await expect(page.getByRole("heading", { level: 1, name: "COD reconciliation summary" })).toBeVisible();
   await expect(page.locator("main")).not.toContainText("01711000008");
 });
@@ -145,14 +145,14 @@ test("exports: XLSX and CSV downloads with text phone numbers, Bangla and an aud
 });
 
 test("exports refuse other origins and anyone signed out", async ({ page, playwright, baseURL }) => {
-  const crossSite = await page.request.post("/office/exports/download", { form: { dataset: "orders", format: "csv" }, headers: { origin: "https://evil.example" }, maxRedirects: 0 });
+  const crossSite = await page.request.post("/admin/exports/download", { form: { dataset: "orders", format: "csv" }, headers: { origin: "https://evil.example" }, maxRedirects: 0 });
   expect(crossSite.status()).toBe(403);
   const anonymous = await playwright.request.newContext({ baseURL });
   try {
-    const response = await anonymous.post("/office/exports/download", { form: { dataset: "orders", format: "csv" }, headers: { origin: baseURL as string }, maxRedirects: 0 });
+    const response = await anonymous.post("/admin/exports/download", { form: { dataset: "orders", format: "csv" }, headers: { origin: baseURL as string }, maxRedirects: 0 });
     expect(response.status()).toBe(303);
-    expect(response.headers().location).toBe("/office/login");
-    for (const path of ["/office/dashboard", "/office/reports", "/office/exports", "/office/stock-counts", "/office/print/picking", "/office/print/cod"]) {
+    expect(response.headers().location).toBe("/admin/login");
+    for (const path of ["/admin/dashboard", "/admin/reports", "/admin/exports", "/admin/stock-counts", "/admin/print/picking", "/admin/print/cod"]) {
       const page2 = await anonymous.get(path, { maxRedirects: 0 });
       expect([303, 307]).toContain(page2.status());
     }
@@ -161,8 +161,8 @@ test("exports refuse other origins and anyone signed out", async ({ page, playwr
   }
   // After signing out, the same browser can no longer export.
   await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page).toHaveURL(/\/office\/login$/);
-  const after = await page.request.post("/office/exports/download", { form: { dataset: "orders", format: "csv" }, headers: { origin: baseURL as string }, maxRedirects: 0 });
+  await expect(page).toHaveURL(/\/admin\/login$/);
+  const after = await page.request.post("/admin/exports/download", { form: { dataset: "orders", format: "csv" }, headers: { origin: baseURL as string }, maxRedirects: 0 });
   expect(after.status()).toBe(303);
 });
 
@@ -177,7 +177,7 @@ async function startCount(page: Page, sku: string) {
 }
 
 async function stockOf(page: Page, sku: string) {
-  await page.goto(`/office/skus/${sku}`);
+  await page.goto(`/admin/skus/${sku}`);
   return { onHand: await page.getByTestId("on-hand").textContent(), reservation: await page.getByTestId("reservation").textContent() };
 }
 
@@ -191,7 +191,7 @@ test("a stock count: enter, resume, review, refuse without a reason, apply once"
   await expect(page.getByRole("status").first()).toContainText("Counted quantities saved");
 
   // Interrupted: leave and come back later.
-  await page.goto("/office/stock-counts");
+  await page.goto("/admin/stock-counts");
   await page.getByRole("status").getByRole("link", { name: /^resume/ }).first().click();
   await expect(page.getByLabel(`Counted units of ${sku}`)).toHaveValue("7");
   await expect(page.getByTestId("review-summary")).toContainText("1 with a difference");
@@ -212,7 +212,7 @@ test("a stock count: enter, resume, review, refuse without a reason, apply once"
   } finally {
     await db.end();
   }
-  await page.goto(`${countUrl.replace("/office/stock-counts/", "/office/print/stock-counts/")}`);
+  await page.goto(`${countUrl.replace("/admin/stock-counts/", "/admin/print/stock-counts/")}`);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Stock reconciliation summary");
   await expect(page.getByTestId("count-sheet")).toContainText("+2");
 });

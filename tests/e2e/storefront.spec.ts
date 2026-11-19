@@ -8,7 +8,7 @@ import { clearSignInLimits, ensureZones, seedStorefrontProduct, signIn, testData
 // access, English and Bangla, size and colour choice with measurements, the cart re-checked against the
 // database, and the checkout simulation, which must never create an order. Fictional products only.
 
-const PREVIEW = "/office/storefront-preview";
+const PREVIEW = "/admin/storefront-preview";
 
 test.beforeAll(ensureZones);
 test.beforeEach(clearSignInLimits);
@@ -61,7 +61,7 @@ test("signed out, no preview page, product or photo is shown: every route goes t
   const page = await anonymous.newPage();
   for (const path of [PREVIEW, `${PREVIEW}/en`, `${PREVIEW}/bn/products`, `${PREVIEW}/en/products/${product.slug}`, `${PREVIEW}/en/cart`, `${PREVIEW}/en/checkout`]) {
     await page.goto(path);
-    await expect(page, path).toHaveURL(/\/office\/login$/);
+    await expect(page, path).toHaveURL(/\/admin\/login$/);
     await expect(page.locator("body")).not.toContainText(product.nameEn);
   }
   const html = await anonymous.request.get(`${baseURL}${PREVIEW}/en/products/${product.slug}`, { maxRedirects: 0 });
@@ -376,10 +376,10 @@ test("the storefront design: the same product, price and cart in both languages;
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByTestId("checkout-review")).toBeVisible();
   await expectNoAxeViolations(page);
-  await page.route("**/office/storefront-preview/en/checkout", (route) => (route.request().method() === "POST" ? route.abort() : route.continue()));
+  await page.route("**/admin/storefront-preview/en/checkout", (route) => (route.request().method() === "POST" ? route.abort() : route.continue()));
   await page.getByRole("button", { name: "Place order (simulation)" }).click();
   await expect(page.getByTestId("checkout-failure")).toHaveText("The order was not placed and nothing was recorded. Check your connection and try again, or contact the shop.");
-  await page.unroute("**/office/storefront-preview/en/checkout");
+  await page.unroute("**/admin/storefront-preview/en/checkout");
   await page.getByRole("button", { name: "Place order (simulation)" }).click();
   await expect(page.getByTestId("simulation-result")).toContainText("Order received (simulation)");
   expect(await counts()).toEqual(before);

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireShop } from "@/app/_shop/access";
-import { HomeView } from "@/app/office/storefront-preview/_components/views/home-view";
+import { HomeView } from "@/app/admin/storefront-preview/_components/views/home-view";
 import { isLang } from "@/modules/storefront/i18n";
 import { PUBLIC_SCOPE } from "@/modules/storefront/service";
 

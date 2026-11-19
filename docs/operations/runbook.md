@@ -10,7 +10,7 @@ For a hosted installation (not chosen, nothing deployed) see [infrastructure.md]
 
 | Task | Command |
 |---|---|
-| Start the development server | `npm run dev`, then open http://localhost:3000/office |
+| Start the development server | `npm run dev`, then open http://localhost:3000/admin |
 | Stop it | Ctrl+C in that terminal |
 | Production build, locally | `npm run build`, then `npm start` (needs an https `BETTER_AUTH_URL`; see section 3) |
 
@@ -31,7 +31,7 @@ It lists every variable as set, missing or invalid with the rule it breaks (neve
 | `BETTER_AUTH_SECRET` | sign-in | at least 32 random characters, not the placeholder |
 | `BETTER_AUTH_URL` | sign-in, origin checks | an origin only; `http://localhost:3000` allowed outside production |
 | `RESTORE_DATABASE_URL` | `backup:restore` only | must name local `babysunray_restore` and its role |
-| `MEDIA_STORAGE_DIR` | product photos (Office) and `media:verify` | an absolute path to an existing folder outside the project folder |
+| `MEDIA_STORAGE_DIR` | product photos (Admin) and `media:verify` | an absolute path to an existing folder outside the project folder |
 | `MEDIA_LOCAL_STORAGE_IN_PRODUCTION` | production only | must be `allow` for a local photo folder in production; leave empty locally |
 | `PG_BIN` (shell, optional) | backup commands | PostgreSQL's `bin` folder if `pg_dump` is not on the PATH, e.g. `C:\Program Files\PostgreSQL\18\bin` |
 | `STORE_NAME`, `STORE_LINE_EN`, `STORE_LINE_BN`, `STORE_CONTACT_PHONE`, `STORE_CONTACT_EMAIL`, `STORE_THEME_*` (optional) | the shop's name, description, contact and preview colours in the storefront preview | length, characters, phone and email shape, colour contrast ([installation.md](installation.md), section 3) |
@@ -78,7 +78,7 @@ The application's connection pool fails fast rather than hanging (`src/db/client
 
 - `npm run orders:expire-verification` releases the stock of orders still Pending Verification 24 hours after submission and marks them Verification Expired. It is safe to run any number of times, also while the app runs: each order is handled in its own short transaction and skipped if another operation holds it. Correctness never depends on it (submissions, adjustments and confirmations release overdue holds themselves). No scheduler runs it.
 - `npm run maintenance:run` (Gate H.41, `src/modules/maintenance/jobs.ts`) runs the expiry batch, removes sessions past their expiry (each recorded in the sign-in audit as `expired`) and rate-limit windows that ended more than an hour ago, in batches of at most 1,000, then checks that every stock balance matches its ledger and its holds, no finished order holds stock, every confirmed undispatched order holds its stock, and every order's COD totals match its payment entries. It prints counts only and exits with status 1 if a check fails. It is safe to run repeatedly and concurrently. It deletes nothing else: idempotency records, guest submissions, audit rows and orders are only counted, because no retention period is approved. No scheduler runs it; with hosting, run it every few minutes. Photos and backups have their own checks (`media:verify`, `backup:verify`, `recovery:check`).
-- A failed or interrupted action can be retried safely: every Office form and API write carries an idempotency key, so pressing the button again after a lost answer records the change once. A form refused with "changed after you loaded it" must be reloaded and checked, not forced.
+- A failed or interrupted action can be retried safely: every Admin form and API write carries an idempotency key, so pressing the button again after a lost answer records the change once. A form refused with "changed after you loaded it" must be reloaded and checked, not forced.
 
 ## 5a. Guest tracking links
 
@@ -89,7 +89,7 @@ The application's connection pool fails fast rather than hanging (`src/db/client
 
 ## 6. Exports
 
-Owner Office → Exports. Choose a dataset, a format and optional filters; the file downloads straight away and is never stored on the server. Formats and columns: [exports.md](exports.md).
+BabySunRay Admin → Exports. Choose a dataset, a format and optional filters; the file downloads straight away and is never stored on the server. Formats and columns: [exports.md](exports.md).
 
 - Every export is recorded (who, when, dataset, format, filters) and listed under "Recent exports". The record cannot be edited or deleted.
 - Files with customer contact details (the Orders dataset) are personal data: keep them private, do not email or upload them casually, delete copies you no longer need.
@@ -98,7 +98,7 @@ Owner Office → Exports. Choose a dataset, a format and optional filters; the f
 
 ## 7. Physical stock counts
 
-Owner Office → Stock counts.
+BabySunRay Admin → Stock counts.
 
 1. Start a count of every SKU or of a list of SKUs. The system quantities at that moment are kept as a snapshot; print the count sheet if you count on paper.
 2. Count the sellable units in the shop, **including** units set aside for orders that are not dispatched yet. **Do not** count returned or RTO goods waiting for inspection: they are held apart and a count never changes them.
@@ -115,9 +115,9 @@ Photos are kept in a folder you choose, outside the project folder, never in Git
 
 1. Create a folder, for example `D:/BabySunray-media` (not inside `D:/My Projects/BabySunray-commerce`).
 2. Add `MEDIA_STORAGE_DIR=D:/BabySunray-media` to `.env.local` and restart `npm run dev`. `npm run config:check` shows whether it is accepted.
-3. Owner Office → a product → Manage photos. Use only your own photos of the product. The system removes location and camera details and stores a copy at most 2,400 pixels a side; keep your originals.
+3. BabySunRay Admin → a product → Manage photos. Use only your own photos of the product. The system removes location and camera details and stores a copy at most 2,400 pixels a side; keep your originals.
 
-Health: Office → Photo storage (or `npm run media:verify`) compares the folder with the photo records: missing or changed files, files without a record (left by an interrupted upload or removal) and unexpected entries. The page can delete files without a record after an explicit tick, only if they have not changed for an hour; nothing is deleted automatically and unexpected entries are never touched.
+Health: Admin → Photo storage (or `npm run media:verify`) compares the folder with the photo records: missing or changed files, files without a record (left by an interrupted upload or removal) and unexpected entries. The page can delete files without a record after an explicit tick, only if they have not changed for an hour; nothing is deleted automatically and unexpected entries are never touched.
 
 ### Photo backups (founder only, interactive)
 
@@ -220,7 +220,7 @@ Uses only `babysunray_test`, under the same lock as the tests (it refuses to run
 
 ## 9. Outage procedure
 
-When the Office or the database is unavailable:
+When the Admin or the database is unavailable:
 
 1. Do not promise delivery dates or stock you cannot check. Tell customers you will confirm shortly.
 2. Write each new order on the [order sheet](offline-templates.md) with a temporary reference you make up (for example `OFF-1115-01`), never a real order number. Note stock you hand out on the stock sheet, and any cash or courier events on their sheets.

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireShop } from "@/app/_shop/access";
 import { SunMark } from "@/app/_design/sun-mark";
-import { CustomerSignOutButton, GoogleSignInButton } from "@/app/office/storefront-preview/_components/customer-auth";
+import { CustomerSignOutButton, GoogleSignInButton } from "@/app/admin/storefront-preview/_components/customer-auth";
 import { getDb } from "@/db/client";
 import { customerOrderList } from "@/modules/customers/orders";
 import { currentCustomer, customerSignInAvailable } from "@/modules/customers/server";

@@ -122,7 +122,7 @@ describe("the shop is reachable only through the access check", () => {
 
   it("the anonymous endpoints are tracking, the probes, the maintenance call, and the shop's gated routes; public pages are the status page, tracking and the gated shop", () => {
     const app = files("src/app");
-    const routes = app.filter((f) => /\/route\.ts$/.test(f) && !f.startsWith("src/app/office/") && !f.startsWith("src/app/api/v1/") && !(f.startsWith("src/app/api/auth/") && f !== "src/app/api/auth/callback/google/route.ts"));
+    const routes = app.filter((f) => /\/route\.ts$/.test(f) && !f.startsWith("src/app/admin/") && !f.startsWith("src/app/api/v1/") && !(f.startsWith("src/app/api/auth/") && f !== "src/app/api/auth/callback/google/route.ts"));
     expect(routes.sort()).toEqual([
       "src/app/api/auth/callback/google/route.ts",
       "src/app/api/customer-auth/[...all]/route.ts",
@@ -134,10 +134,10 @@ describe("the shop is reachable only through the access check", () => {
       "src/app/api/track/cancel/route.ts",
       "src/app/api/track/route.ts",
     ]);
-    const pages = app.filter((f) => /\/page\.tsx$/.test(f) && !f.startsWith("src/app/office/") && !f.startsWith("src/app/[lang]/"));
+    const pages = app.filter((f) => /\/page\.tsx$/.test(f) && !f.startsWith("src/app/admin/") && !f.startsWith("src/app/[lang]/"));
     expect(pages.sort()).toEqual(["src/app/page.tsx", "src/app/track/page.tsx"]);
-    // Server Actions outside the Office: the shop's, which only read and check shop access themselves.
-    const actions = app.filter((f) => !f.startsWith("src/app/office/") && /^\s*["']use server["']/m.test(read(f)));
+    // Server Actions outside Admin: the shop's, which only read and check shop access themselves.
+    const actions = app.filter((f) => !f.startsWith("src/app/admin/") && /^\s*["']use server["']/m.test(read(f)));
     expect(actions).toEqual(["src/app/[lang]/actions.ts"]);
   });
 });

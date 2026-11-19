@@ -27,7 +27,7 @@ import {
 } from "./service";
 import { createTrackingLink, revokeTrackingLink } from "./tracking";
 
-// Order operations for every client (the /api/v1 routes and the Owner Office). Each checks the permission
+// Order operations for every client (the /api/v1 routes and Admin). Each checks the permission
 // first, records the verified user as the actor, and runs once per idempotency key (ADR-0005). A replay
 // returns the order as it is now. Owner transitions name the order version the client saw.
 

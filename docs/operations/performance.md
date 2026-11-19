@@ -13,9 +13,9 @@ Machine: a laptop (Intel Core i7-9750H, 32 GB), Node.js 24, local PostgreSQL 18,
 
 | Scenario | ms | Notes |
 |---|---:|---|
-| Office product list, first page / keyset page 2 | 1.5 / 3.1 | index `products_created_at_id_idx` |
-| Office search by name / by SKU | 29 / 30 | `ILIKE` over every product: a sequential scan of 5,000 rows (22 ms in the plan) |
-| Office filters: category, missing fabric, in stock | 1.4–1.8 | |
+| Admin product list, first page / keyset page 2 | 1.5 / 3.1 | index `products_created_at_id_idx` |
+| Admin search by name / by SKU | 29 / 30 | `ILIKE` over every product: a sequential scan of 5,000 rows (22 ms in the plan) |
+| Admin filters: category, missing fabric, in stock | 1.4–1.8 | |
 | Catalogue preparation overview | 152 | ten counts over every draft product, one query |
 | Preview product list, page 1 / page 50 | 13 / 20 | offset paging; four queries per page |
 | Preview search, size and in-stock filters | 29–30 | |
