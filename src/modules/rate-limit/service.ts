@@ -28,18 +28,19 @@ export function readRateLimits(env: Record<string, string | undefined>): RateLim
   return limits;
 }
 
-/** A storewide counter for anonymous requests (no client is identified: see tracking_rate_limits in the schema). */
-export type PublicBucket = "failure" | "checkout" | `link:${string}`;
+/** A counter for anonymous requests: storewide, per tracking link, or per client behind a trusted proxy (tracking_rate_limits). */
+export type PublicBucket = "failure" | "checkout" | `link:${string}` | `checkout-client:${string}`;
 
 /**
- * Counts one anonymous request in `bucket`'s current one-minute window (fixed windows, one atomic upsert) and says
- * whether it is within `limit`. Storewide, so anyone can use a bucket up: it bounds how much work and how many
- * stock holds a flood can cause per minute, it does not stop one client from crowding out others.
+ * Counts one anonymous request in `bucket`'s current window (a minute, or an hour; fixed windows, one atomic upsert) and
+ * says whether it is within `limit`. A storewide bucket can be used up by anyone: it bounds how much work and how many
+ * stock holds a flood can cause, it does not stop one client from crowding out others (a per-client bucket does that).
  */
-export async function consumePublicLimit(db: Db, bucket: PublicBucket, limit: number): Promise<boolean> {
+export async function consumePublicLimit(db: Db, bucket: PublicBucket, limit: number, window: "minute" | "hour" = "minute"): Promise<boolean> {
+  const unit = window === "hour" ? sql`'hour'` : sql`'minute'`;
   const { rows } = await db.execute<{ count: number }>(sql`
     insert into tracking_rate_limits as r (bucket, window_start, count)
-    values (${bucket}, date_trunc('minute', now()), 1)
+    values (${bucket}, date_trunc(${unit}, now()), 1)
     on conflict (bucket) do update set
       count = case when r.window_start = excluded.window_start then r.count + 1 else 1 end,
       window_start = excluded.window_start

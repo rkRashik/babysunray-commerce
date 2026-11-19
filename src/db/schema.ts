@@ -862,10 +862,10 @@ export const orderTrackingTokens = pgTable(
   ],
 );
 
-// Anonymous request counters (src/modules/rate-limit/service.ts, consumePublicLimit). No client address is trusted,
-// so the keys are 'failure' (unknown, revoked or expired tracking tokens, all clients), 'link:<link id>' (one per
-// live tracking link, migration 0010) and 'checkout' (guest checkout submissions, all clients, migration 0015); a
-// per-client limit waits for the hosting and proxy decision.
+// Anonymous request counters (src/modules/rate-limit/service.ts, consumePublicLimit). The keys are 'failure' (unknown,
+// revoked or expired tracking tokens, all clients), 'link:<link id>' (one per live tracking link, migration 0010),
+// 'checkout' (guest checkout submissions, all clients, migration 0015) and 'checkout-client:<HMAC of the client
+// address>' (per client and hour, only behind a trusted proxy, migration 0020; the address itself is never stored).
 export const trackingRateLimits = pgTable(
   "tracking_rate_limits",
   {
@@ -876,7 +876,7 @@ export const trackingRateLimits = pgTable(
   (t) => [
     check(
       "tracking_rate_limits_bucket_valid",
-      sql`${t.bucket} in ('failure', 'checkout') or ${t.bucket} ~ '^link:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'`,
+      sql`${t.bucket} in ('failure', 'checkout') or ${t.bucket} ~ '^link:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' or ${t.bucket} ~ '^checkout-client:[0-9a-f]{64}$'`,
     ),
     check("tracking_rate_limits_count_positive", sql`${t.count} >= 1`),
   ],
@@ -1125,4 +1125,133 @@ export const policyDraftEvents = pgTable(
     check("policy_draft_events_version_positive", sql`${t.version} >= 1`),
     check("policy_draft_events_sha256_format", sql`${t.bodyEnSha256} ~ '^[0-9a-f]{64}$' and ${t.bodyBnSha256} ~ '^[0-9a-f]{64}$'`),
   ],
+);
+
+// Founder-approved, published versions of the customer policies (migration 0020; src/modules/policies/publication.ts).
+// Append-only (trigger as for export_requests): publishing copies the exact reviewed draft text with its digests, the
+// draft version and who approved it; withdrawing adds a row without text. A kind's newest row decides what customers
+// see: its text when it is a publication, nothing when it is a withdrawal or when the kind has no row.
+export const policyPublications = pgTable(
+  "policy_publications",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    kind: text("kind", { enum: POLICY_KINDS }).notNull(),
+    event: text("event", { enum: ["published", "withdrawn"] }).notNull(),
+    draftVersion: integer("draft_version"),
+    bodyEn: text("body_en"),
+    bodyBn: text("body_bn"),
+    bodyEnSha256: text("body_en_sha256"),
+    bodyBnSha256: text("body_bn_sha256"),
+    actorUserId: userRef("actor_user_id").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("policy_publications_kind_id_idx").on(t.kind, t.id),
+    check("policy_publications_kind_valid", sql`${t.kind} in ('delivery', 'returns', 'privacy', 'checkout_notices')`),
+    check("policy_publications_event_valid", sql`${t.event} in ('published', 'withdrawn')`),
+    check(
+      "policy_publications_content_consistent",
+      sql`case when ${t.event} = 'published' then ${t.draftVersion} >= 1 and btrim(${t.bodyEn}) <> '' and btrim(${t.bodyBn}) <> '' and length(${t.bodyEn}) <= 20000 and length(${t.bodyBn}) <= 20000 and ${t.bodyEnSha256} ~ '^[0-9a-f]{64}$' and ${t.bodyBnSha256} ~ '^[0-9a-f]{64}$' else ${t.draftVersion} is null and ${t.bodyEn} is null and ${t.bodyBn} is null and ${t.bodyEnSha256} is null and ${t.bodyBnSha256} is null end`,
+    ),
+  ],
+);
+
+// Customer accounts (migration 0020; ADR-0011): a SECOND Better Auth instance (src/modules/customers/auth.ts) with its
+// own tables, cookies and path, Google sign-in only. Nothing here can reach the Owner's tables: user_access references
+// auth_users only, and the Office and /api/v1 verify only the Owner instance, so a customer can never become a principal.
+// OAuth tokens from Google are never stored (the instance clears them before every write).
+export const customerUsers = pgTable(
+  "customer_users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    email: text("email").notNull().unique("customer_users_email_key"),
+    emailVerified: boolean("email_verified").notNull().default(false),
+    image: text("image"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [check("customer_users_email_lowercase", sql`${t.email} = lower(${t.email})`)],
+);
+
+export const customerSessions = pgTable(
+  "customer_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    token: text("token").notNull().unique("customer_sessions_token_key"),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => customerUsers.id, { onDelete: "cascade" }),
+  },
+  (t) => [index("customer_sessions_user_id_idx").on(t.userId)],
+);
+
+export const customerAccounts = pgTable(
+  "customer_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => customerUsers.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
+    scope: text("scope"),
+    password: text("password"),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    index("customer_accounts_user_id_idx").on(t.userId),
+    uniqueIndex("customer_accounts_provider_account_key").on(t.providerId, t.accountId),
+    // Google only, and no credential of any kind is kept.
+    check("customer_accounts_provider_valid", sql`${t.providerId} = 'google'`),
+    check("customer_accounts_no_secrets", sql`${t.accessToken} is null and ${t.refreshToken} is null and ${t.idToken} is null and ${t.password} is null`),
+  ],
+);
+
+export const customerVerifications = pgTable(
+  "customer_verifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("customer_verifications_identifier_idx").on(t.identifier)],
+);
+
+export const customerRateLimits = pgTable("customer_rate_limits", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  key: text("key").notNull().unique("customer_rate_limits_key_key"),
+  count: integer("count").notNull(),
+  lastRequest: bigint("last_request", { mode: "number" }).notNull(),
+});
+
+// Which website orders a signed-in customer placed (migration 0020). Written only by the checkout, in the order's own
+// transaction, from the server-verified customer session (never from the request body). An order without a row was a
+// guest order. Deleting a customer removes the link, never the order.
+export const customerOrders = pgTable(
+  "customer_orders",
+  {
+    orderId: uuid("order_id")
+      .primaryKey()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    customerUserId: uuid("customer_user_id")
+      .notNull()
+      .references(() => customerUsers.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("customer_orders_customer_user_id_idx").on(t.customerUserId, t.createdAt)],
 );

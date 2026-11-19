@@ -1,16 +1,17 @@
-// The storewide activation barrier (Gate H.26). One place answers "may the public shop open?", and in this version
-// the answer is always no. Public checkout stays disabled until the founder has approved and PUBLISHED the
-// delivery, return/exchange and privacy policies (S-17, G-7), and the launch needs decisions this system cannot
-// record (hosting, recovery objectives, abuse protection, a publication rule). There is deliberately no switch,
-// environment variable, setting or Office action that opens it: `open` is the literal `false`, and opening it is a
-// founder-approved code change in a later gate. Pure functions, so the Office page and the tests share them.
+// The storewide activation barrier (Gate H.26). One place answers "may the PUBLIC shop open?", and in this version the
+// answer is always no. Public checkout stays disabled until the founder has approved and PUBLISHED the delivery,
+// return/exchange and privacy policies (S-17, G-7), and the launch needs decisions this system cannot record (a publication
+// rule, recovery objectives, the production database, the launch itself). There is deliberately no switch, environment
+// variable, setting or Office action that opens it: `open` is the literal `false`, and opening it is a founder-approved code
+// change. Founder acceptance (acceptance.ts) is separate: it never opens this gate. Pure functions, so the Office page and
+// the tests share them.
 
-export type PolicyState = "empty" | "drafted" | "reviewed";
+export type PolicyState = "empty" | "drafted" | "reviewed" | "published";
 export type LaunchFacts = {
   policies: { delivery: PolicyState; returns: PolicyState; privacy: PolicyState; checkout_notices: PolicyState };
   /** Both founder-approved zones (rule I) have an active Owner-configured charge. */
   deliveryZonesConfigured: boolean;
-  /** Draft products whose current content has an internal review. */
+  /** Products with a current internal review, or published (a publication needs one). */
   reviewedProducts: number;
 };
 
@@ -35,21 +36,23 @@ export function publicCheckoutGate(facts: LaunchFacts): PublicCheckoutGate {
       blockers.push({ id: `policy_${kind}_missing`, requirement: "S-17, G-7", reason: `No ${POLICY_NAMES[kind]} policy has been drafted.`, next: "Write it in Policy drafts, in English and Bangla." });
     }
   }
-  // Unconditional: no published state exists, so a reviewed draft never satisfies the gate.
-  blockers.push({
-    id: "policies_not_published",
-    requirement: "S-17, G-7",
-    reason: "No customer policy is founder-approved and published. This version has no way to publish one; a reviewed draft is not a published policy.",
-    next: "Founder approves the final wording; a later gate builds publication.",
-  });
+  const unpublished = (["delivery", "returns", "privacy"] as const).filter((kind) => facts.policies[kind] !== "published");
+  if (unpublished.length) {
+    blockers.push({
+      id: "policies_not_published",
+      requirement: "S-17, G-7",
+      reason: `Not published: the ${unpublished.map((k) => POLICY_NAMES[k]).join(", ")} ${unpublished.length === 1 ? "policy" : "policies"}. A reviewed draft is not a published policy.`,
+      next: "Founder approves the final wording and publishes it in Policies.",
+    });
+  }
   if (!facts.deliveryZonesConfigured) {
     blockers.push({ id: "delivery_charges", requirement: "O-8, rule I", reason: "Dhaka City and Outside Dhaka do not both have an active delivery charge.", next: "Set the real charges in Delivery charges." });
   }
   blockers.push({
     id: "publication_rule",
     requirement: "I-6, open decision 4",
-    reason: "No rule for publishing products is approved, so no product can be published and the published-only catalogue (built, not routed) shows nothing.",
-    next: "Founder decides what makes a product publishable (I-6); a later gate puts the approved rule in code.",
+    reason: "No rule for publishing products is approved for the public shop. The proposed rule applies only to founder acceptance on the staging database.",
+    next: "Founder approves the proposed rule (or a changed one); the approved rule is then set in code (APPROVED_PUBLICATION_RULE).",
   });
   if (facts.reviewedProducts === 0) {
     blockers.push({ id: "no_reviewed_products", requirement: "engineering default", reason: "No product has a current internal review.", next: "Review products in Product reviews." });
@@ -57,11 +60,11 @@ export function publicCheckoutGate(facts: LaunchFacts): PublicCheckoutGate {
   blockers.push({
     id: "abuse_protection",
     requirement: "S-15, API-11, open decision 1",
-    reason: "An anonymous order holds stock for 24 hours. Without a per-client limit, which needs a trusted proxy from the hosting decision, one visitor could hold all stock; the storewide limit on submissions per minute only slows that down.",
-    next: "Choose hosting; then design and test per-client limits for checkout.",
+    reason: "An anonymous order holds stock for 24 hours. Per-client checkout and sign-in limits are built for Netlify (TRUSTED_PROXY=netlify) but not yet verified with real traffic on the live site.",
+    next: "Set TRUSTED_PROXY=netlify, then check the limits on the live site during acceptance.",
   });
-  blockers.push({ id: "hosting", requirement: "G-8, open decision 1", reason: "No production host is chosen or verified for commercial use, limits and restore.", next: "Founder chooses hosting (C-1 to C-3)." });
+  blockers.push({ id: "production_database", requirement: "G-8, ADR-0010", reason: "The production Supabase project does not exist yet; the site runs on the staging database (the founder creates production last).", next: "Founder creates the production project; migrate, configure and verify it (production-migration.md)." });
   blockers.push({ id: "recovery_objectives", requirement: "K-9, G-6, open decision 6", reason: "No RPO or RTO is approved, so no backup schedule or off-device copy can be set.", next: "Founder approves RPO and RTO." });
-  blockers.push({ id: "transport", requirement: "S-17", reason: "No public catalogue or checkout endpoint exists; their services and transports are built and tested but not routed.", next: "Built only in the gate that opens checkout." });
+  blockers.push({ id: "launch_approval", requirement: "S-17", reason: "The founder has not approved the public launch. The shop and its checkout are built and answer only founder acceptance on the staging database.", next: "After acceptance and the items above, the founder approves the launch; opening this gate is then a reviewed code change." });
   return { open: false, blockers };
 }

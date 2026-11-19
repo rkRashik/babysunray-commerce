@@ -2,22 +2,30 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { type Db, pgErrorCode } from "@/db/database";
 import { DomainError } from "@/modules/domain-error";
-import { GuestCheckoutInvalid, placeGuestOrder, validateGuestCheckout } from "@/modules/orders/guest-checkout";
+import { type CheckoutPlacer, GuestCheckoutInvalid, placeGuestOrder, validateGuestCheckout } from "@/modules/orders/guest-checkout";
 import { anonymousCheckoutWork, type Bulkhead } from "@/modules/rate-limit/bulkhead";
 import { consumePublicLimit } from "@/modules/rate-limit/service";
 import { ApiProblem, readBody } from "./v1/http";
 
-// The future public checkout transport, prepared but NOT ROUTED: no file under src/app imports this module (a test
-// checks), so no request can reach it in development or production. Tests call it directly against babysunray_test
-// to prove the HTTP behaviour. Opening it needs a route file that passes the real launch gate
-// (src/modules/launch/gate.ts), which refuses in this version, and abuse protection the hosting decision allows.
+// The checkout transport, routed at POST /api/shop/checkout (src/app/api/shop/checkout/route.ts). The route decides the
+// gate per request (src/modules/launch/acceptance.ts): open only for founder acceptance on the staging database until the
+// founder opens the public launch gate. Closed, it answers 503 before reading anything.
 //
 // Order of checks: the gate (closed: answered before reading anything), origin (same origin only, no CORS), media
 // type, Idempotency-Key header, body size (64 KiB, counted while streaming), JSON, then the service. Answers carry
 // fixed messages only, never echoed input. The tracking token is in the first success answer only and is never
 // logged; errors log the error name and SQL state only.
 
-export type CheckoutDeps = { db: Db; baseUrl: string; gate: () => { open: boolean }; bulkhead?: Bulkhead };
+export type CheckoutDeps = {
+  db: Db;
+  baseUrl: string;
+  gate: () => { open: boolean };
+  bulkhead?: Bulkhead;
+  /** The signed-in customer, from the server's session check (absent for a guest). */
+  placer?: CheckoutPlacer;
+  /** An opaque per-client key from a trusted proxy (rate-limit/client.ts), or null when there is none. */
+  clientKey?: string | null;
+};
 
 const HEADERS = {
   "cache-control": "no-store",
@@ -47,6 +55,11 @@ const BUSINESS: Partial<Record<DomainError["code"], [number, string, string]>> =
  * blocks checkout for everyone until the minute ends; a per-client limit needs a trusted proxy (decision 1).
  */
 export const GUEST_CHECKOUTS_PER_MINUTE = 20;
+/**
+ * Submissions accepted per client and hour, behind a trusted proxy only (a technical bound against one client holding stock
+ * with many 24-hour orders; not policy). Many customers can share one address (mobile carriers), so it is generous.
+ */
+export const GUEST_CHECKOUTS_PER_CLIENT_PER_HOUR = 10;
 
 export async function guestCheckoutResponse(request: Request, deps: CheckoutDeps): Promise<Response> {
   const requestId = randomUUID();
@@ -79,7 +92,10 @@ async function respond(request: Request, deps: CheckoutDeps, requestId: string):
       if (!(await consumePublicLimit(deps.db, "checkout", GUEST_CHECKOUTS_PER_MINUTE))) {
         return answer(429, { error: "rate_limited", message: "Many orders are being placed right now. Please try again in a minute. Your order was not placed." }, { "retry-after": "60" });
       }
-      const result = await placeGuestOrder(deps.db, key[1] ?? key[2], body);
+      if (deps.clientKey && !(await consumePublicLimit(deps.db, `checkout-client:${deps.clientKey}`, GUEST_CHECKOUTS_PER_CLIENT_PER_HOUR, "hour"))) {
+        return answer(429, { error: "rate_limited", message: "Too many orders from this connection. Please try again later. Your order was not placed." }, { "retry-after": "3600" });
+      }
+      const result = await placeGuestOrder(deps.db, key[1] ?? key[2], body, deps.placer);
       return answer(result.replayed ? 200 : 201, { data: { order: result.order, trackingToken: result.trackingToken } }, { "idempotent-replayed": String(result.replayed) });
     });
     return done.ok ? done.value : answer(503, { error: "busy", message: "Ordering is busy right now. Please try again in a moment. Your order was not placed." }, { "retry-after": "1" });

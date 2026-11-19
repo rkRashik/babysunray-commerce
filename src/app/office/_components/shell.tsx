@@ -15,6 +15,7 @@ import {
   PackagePlus,
   Rocket,
   Shirt,
+  Store,
   Truck,
   Upload,
 } from "lucide-react";
@@ -26,7 +27,7 @@ import { SignOutButton } from "./auth-forms";
 import { OfficeMenu } from "./office-menu";
 
 type Crumb = { href: string; label: string; lang?: string };
-type Current = "dashboard" | "products" | "new" | "import" | "preparation" | "reviews" | "categories" | "orders" | "delivery" | "reports" | "counts" | "exports" | "media" | "preview" | "policies" | "launch";
+type Current = "dashboard" | "products" | "new" | "import" | "preparation" | "reviews" | "categories" | "orders" | "delivery" | "reports" | "counts" | "exports" | "media" | "preview" | "policies" | "launch" | "acceptance";
 
 // The Owner Office's navigation, grouped by the work it serves. Every Office screen is reachable from here.
 const NAV: { group: string; items: { key: Current; href: string; label: string; icon: LucideIcon }[] }[] = [
@@ -62,7 +63,8 @@ const NAV: { group: string; items: { key: Current; href: string; label: string; 
     items: [
       { key: "delivery", href: "/office/settings/delivery", label: "Delivery charges", icon: Truck },
       { key: "preview", href: "/office/storefront-preview", label: "Storefront preview", icon: Eye },
-      { key: "policies", href: "/office/policies", label: "Policy drafts", icon: FileText },
+      { key: "policies", href: "/office/policies", label: "Policies", icon: FileText },
+      { key: "acceptance", href: "/office/acceptance", label: "Founder acceptance", icon: Store },
       { key: "launch", href: "/office/launch-readiness", label: "Launch readiness", icon: Rocket },
     ],
   },
@@ -274,6 +276,12 @@ const NOTICES: Record<string, string> = {
   "photo-moved": "Photo order saved.",
   "photo-removed": "Photo removed and its stored file deleted.",
   reviewed: "Review recorded for the content as it is now. Nothing was published.",
+  published: "Published. Customers who can open the shop see this product now; its photos are being copied to the image CDN.",
+  withdrawn: "Withdrawn. The product is a draft again and no longer in the shop; its CDN photo copies are being removed.",
+  policyPublished: "Published. Customers who can open the shop now see this policy, exactly as you approved it.",
+  policyWithdrawn: "Withdrawn. Customers no longer see this policy.",
+  acceptanceStarted: "Acceptance started in this browser for a few hours. Open the shop below.",
+  acceptanceEnded: "Acceptance ended in this browser. The shop is closed to it again.",
   "policy-saved": "Draft saved. It is private and not published.",
   "policy-reviewed": "Marked as reviewed by you. This is not publication or legal approval.",
 };

@@ -115,7 +115,7 @@ describe("the maintenance run", () => {
     let calls = 0;
     // The first reading is the start; every later one is past the budget.
     const report = await runMaintenance(db, () => (calls++ === 0 ? 0 : MAX_RUN_MS + 1));
-    expect(report).toMatchObject({ status: "failed", skipped: ["verification_expiry", "expired_sessions", "stale_rate_limit_windows"] });
+    expect(report).toMatchObject({ status: "failed", skipped: ["verification_expiry", "expired_sessions", "stale_rate_limit_windows", "cdn_reconcile"] });
   });
 
   it("a failing job is reported by class and SQLSTATE only; the other jobs still run", async () => {

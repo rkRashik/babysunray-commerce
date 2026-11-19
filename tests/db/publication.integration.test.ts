@@ -81,7 +81,7 @@ describe("no approved publication rule", () => {
     expect(await errorCodeOf(publishProductOnce(db, { userId: randomUUID(), role: "owner" }, randomUUID(), { productId: p.productId, contentSha256: digest }))).toBe("UNAUTHENTICATED");
     expect(await statusOf(p.productId)).toBe("draft");
     expect(await events(p.productId)).toBe(0);
-    expect((await publicationState(db, p.productId)).blockers).toEqual(["no_approved_rule"]);
+    expect((await publicationState(db, p.productId, null)).blockers).toEqual(["no_approved_rule"]);
   });
 });
 

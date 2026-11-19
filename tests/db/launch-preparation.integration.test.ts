@@ -174,7 +174,8 @@ describe("launch readiness", () => {
     const policies = readiness.sections.find((s) => s.id === "policies")?.checks ?? [];
     expect(policies.map((c) => c.status)).toEqual(["founder_approval", "founder_approval", "founder_approval", "founder_approval", "founder_approval"]);
     const operations = readiness.sections.find((s) => s.id === "operations")?.checks ?? [];
-    expect(operations.some((c) => c.status === "ready")).toBe(false);
+    // Only the visual design is settled (First Light, chosen by the founder); nothing about hosting, recovery or backups is.
+    expect(operations.filter((c) => c.status === "ready").map((c) => c.id)).toEqual(["design"]);
     expect(readiness.sections.find((s) => s.id === "commerce")?.checks.find((c) => c.id === "checkout_disabled")?.status).toBe("ready");
   });
 

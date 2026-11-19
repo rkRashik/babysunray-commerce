@@ -19,6 +19,7 @@
     "db:migrate:staging": "node scripts/migrate-staging.mts",
     "auth:bootstrap-owner": "node scripts/bootstrap-owner.mts",
     "auth:reset-owner-password": "node scripts/reset-owner-password.mts",
+    "auth:bootstrap-owner:staging": "node scripts/bootstrap-owner-staging.mts",
     "config:check": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/config-check.mts",
     "media:backup": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/media-backup-create.mts",
     "media:backup:verify": "node --experimental-transform-types --no-warnings=ExperimentalWarning --import ./scripts/register-src.mts scripts/media-backup-verify.mts",

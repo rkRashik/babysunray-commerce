@@ -118,6 +118,12 @@ export default async function OrderPage({ params, searchParams }: Props) {
           <p className="text-sm text-gray-700">No lifecycle step is possible now.</p>
         )}
         {order.fulfilmentStatus === "packed" && request ? <p className="text-sm text-gray-700">Dispatch is blocked until the cancellation request is decided.</p> : null}
+        {allowed.has("deliver") ? (
+          <p className="text-xs text-gray-600" data-testid="deliver-note">
+            &quot;Mark delivered&quot; is your own record, made when you know the parcel arrived (for example from the courier or the customer). No courier system is connected, so nothing
+            here confirms a delivery by itself.
+          </p>
+        ) : null}
         {(order.fulfilmentStatus === "delivered" || order.fulfilmentStatus === "rto_received") && order.orderStatus === "confirmed" && !allowed.has("close") ? (
           <p className="text-sm text-gray-700" data-testid="close-hint">
             {windowEnd && now.getTime() <= windowEnd.getTime() ? `Can be closed after ${formatTime(windowEnd)}, when the 7-day return window has ended. ` : null}

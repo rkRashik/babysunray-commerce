@@ -7,10 +7,11 @@ import { SunMark } from "@/app/_design/sun-mark";
 import { parseQuantity, removeLine, setQuantity } from "@/modules/storefront/cart";
 import { dictionary, formatTaka, type Lang, localised, toBnDigits } from "@/modules/storefront/i18n";
 import type { Quote, QuotedLine } from "@/modules/storefront/service";
-import { quoteCartAction } from "../actions";
 import { useCart } from "./cart-store";
+import { useSurface } from "./frame";
+import { photoPath } from "./surface";
 
-// The bag. Each change asks the server for current prices, stock and the delivery charge (quoteCartAction); nothing
+// The bag. Each change asks the server for current prices, stock and the delivery charge (the surface's quote action); nothing
 // shown here comes from the browser except SKUs and quantities. Problems are named per line, and checkout stays blocked
 // until they are fixed. On a phone the total and Checkout sit in a bar under the thumb.
 
@@ -20,6 +21,7 @@ export function lineName(lang: Lang, line: QuotedLine, fallback: string) {
 
 export function useQuote(zone: string) {
   const [lines, setLines] = useCart();
+  const { actions } = useSurface();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
@@ -27,7 +29,7 @@ export function useQuote(zone: string) {
     let live = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- shows that a new check started
     setState("loading");
-    quoteCartAction({ lines, zone: zone || null })
+    actions.quote({ lines, zone: zone || null })
       .then((q) => {
         if (!live) return;
         setQuote(q);
@@ -37,17 +39,21 @@ export function useQuote(zone: string) {
     return () => {
       live = false;
     };
+    // The surface's quote action is the same Server Action for the life of the page; a new props object from a later server
+    // payload must not ask again (that would re-quote after the page settled).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, zone, attempt]);
   return { lines, setLines, quote, state, retry: () => setAttempt((a) => a + 1) };
 }
 
 /** A line's thumbnail: the product's first photo in a small arch, or the empty ground. */
 export function LineThumb({ line, className = "" }: { line: QuotedLine; className?: string }) {
+  const { surface } = useSurface();
   return (
     <div className={`sf-photo sf-arch shrink-0 bg-sf-oat ${className}`}>
       {line.photo ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={`/office/media/${line.photo.id}?w=320`} alt="" width={line.photo.width} height={line.photo.height} loading="lazy" />
+        <img src={photoPath(surface, line.photo.id, 320)} alt="" width={line.photo.width} height={line.photo.height} loading="lazy" />
       ) : null}
     </div>
   );
@@ -59,6 +65,7 @@ function LineRow({ line, lang, onQuantity, onRemove }: { line: QuotedLine; lang:
   const [typed, setTyped] = useState(String(line.quantity));
   const [error, setError] = useState<string | null>(null);
   const name = lineName(lang, line, line.sku);
+  const { root } = useSurface();
   const max = line.status === "unknown" || line.status === "unavailable" ? 1000 : Math.max(1, Math.min(1000, line.available));
   const commit = (raw: string) => {
     const n = parseQuantity(raw);
@@ -77,7 +84,7 @@ function LineRow({ line, lang, onQuantity, onRemove }: { line: QuotedLine; lang:
         <div className="flex items-start justify-between gap-3">
           <p className="font-semibold leading-snug">
             {line.productSlug ? (
-              <Link href={`/office/storefront-preview/${lang}/products/${line.productSlug}`} className="hover:underline hover:underline-offset-4">
+              <Link href={`${root}/${lang}/products/${line.productSlug}`} className="hover:underline hover:underline-offset-4">
                 {name}
               </Link>
             ) : (
@@ -188,11 +195,12 @@ export function Totals({ quote, lang, zone, onZone }: { quote: Quote | null; lan
 
 export function EmptyBag({ lang, message }: { lang: Lang; message: string }) {
   const t = dictionary(lang);
+  const { root } = useSurface();
   return (
     <div className="mx-auto flex max-w-md flex-col items-center gap-5 py-12 text-center" role="status">
       <SunMark className="h-10 w-16 text-sf-sun" />
       <p className="text-xl font-bold">{message}</p>
-      <Link href={`/office/storefront-preview/${lang}/products`} className="sf-btn sf-btn-ink">
+      <Link href={`${root}/${lang}/products`} className="sf-btn sf-btn-ink">
         {t.continueShopping}
       </Link>
     </div>
@@ -201,6 +209,7 @@ export function EmptyBag({ lang, message }: { lang: Lang; message: string }) {
 
 export function CartView({ lang }: { lang: Lang }) {
   const t = dictionary(lang);
+  const { root } = useSurface();
   const [zone, setZone] = useState("");
   const { lines, setLines, quote, state, retry } = useQuote(zone);
   // What just changed, read out by screen readers (polite) and shown under the heading.
@@ -217,7 +226,7 @@ export function CartView({ lang }: { lang: Lang }) {
     setAnnouncement(next.length ? t.removedFromCart(lineName(lang, line, line.sku)) : t.cartEmptied);
   };
   if (lines.length === 0) return <EmptyBag lang={lang} message={announcement && announcement !== t.cartEmptied ? announcement : t.cartEmpty} />;
-  const checkout = `/office/storefront-preview/${lang}/checkout`;
+  const checkout = `${root}/${lang}/checkout`;
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:gap-12">
       <div>

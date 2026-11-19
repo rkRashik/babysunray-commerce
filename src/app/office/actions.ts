@@ -11,6 +11,7 @@ import {
   updateProductOnce,
   updateVariantOnce,
 } from "@/modules/catalogue/operations";
+import { publishProductOnce, withdrawProductOnce } from "@/modules/catalogue/publication";
 import { DomainError } from "@/modules/domain-error";
 import { adjustStockOnce, receiveStockOnce } from "@/modules/inventory/operations";
 import { parseTakaToPaisa } from "@/modules/money";
@@ -184,4 +185,28 @@ export async function reviewProductAction(_: FormState, form: FormData): Promise
     return formError(error, form);
   }
   redirect(`/office/products/${productId}?done=reviewed`);
+}
+
+/** Publishes the product exactly as the page showed it (its content digest), under the rule that applies here (publication.ts). */
+export async function publishProductAction(_: FormState, form: FormData): Promise<FormState> {
+  const principal = await requireOffice("catalog:publish");
+  const productId = text(form, "productId");
+  try {
+    await publishProductOnce(getDb(), principal, text(form, "idempotencyKey"), { productId, contentSha256: text(form, "contentSha256") });
+  } catch (error) {
+    return formError(error, form);
+  }
+  redirect(`/office/products/${productId}?done=published`);
+}
+
+/** Takes a published product off the shop at once (back to draft); its CDN photo copies are removed after the commit. */
+export async function withdrawProductAction(_: FormState, form: FormData): Promise<FormState> {
+  const principal = await requireOffice("catalog:publish");
+  const productId = text(form, "productId");
+  try {
+    await withdrawProductOnce(getDb(), principal, text(form, "idempotencyKey"), { productId, expectedVersion: wholeNumber(text(form, "version"), "Version") });
+  } catch (error) {
+    return formError(error, form);
+  }
+  redirect(`/office/products/${productId}?done=withdrawn`);
 }

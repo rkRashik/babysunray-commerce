@@ -8,22 +8,23 @@ import { cartUnits } from "@/modules/storefront/cart";
 import { dictionary, type Lang, toBnDigits } from "@/modules/storefront/i18n";
 import type { Facets } from "@/modules/storefront/service";
 import { useCart } from "./cart-store";
-import { useWide } from "./frame";
+import { useSurface, useWide } from "./frame";
 import { Sheet } from "./sheet";
 
 // The storefront's browser-side navigation: the language switch, the bag with this browser's count, the search form and
 // sheet, and the phone's tab bar. The tab bar shows on browsing pages only; a product, the bag and checkout have their own
 // action bar instead, so two bars never stack.
 
-const root = (lang: Lang) => `/office/storefront-preview/${lang}`;
 
 /** Both languages always on screen, the current one filled: no menu to find, no guessing which is which. */
 export function LanguageSwitch({ lang }: { lang: Lang }) {
   const pathname = usePathname();
   const search = useSearchParams();
   const t = dictionary(lang);
+  const { root } = useSurface();
   const other: Lang = lang === "en" ? "bn" : "en";
-  const href = `${pathname.replace(/^\/office\/storefront-preview\/(en|bn)/, `/office/storefront-preview/${other}`)}${search.size ? `?${search.toString()}` : ""}`;
+  const rest = pathname.startsWith(`${root}/${lang}`) ? pathname.slice(`${root}/${lang}`.length) : "";
+  const href = `${root}/${other}${rest}${search.size ? `?${search.toString()}` : ""}`;
   const names: Record<Lang, string> = { en: "English", bn: "বাংলা" };
   const item = (l: Lang) =>
     l === lang ? (
@@ -53,6 +54,7 @@ export function BagLink({ lang, place }: { lang: Lang; place: "header" | "tab" |
   const wide = useWide();
   const [lines] = useCart();
   const pathname = usePathname();
+  const { root } = useSurface();
   const units = cartUnits(lines);
   const previous = useRef(units);
   const [bump, setBump] = useState(false);
@@ -66,7 +68,7 @@ export function BagLink({ lang, place }: { lang: Lang; place: "header" | "tab" |
     previous.current = units;
   }, [units]);
   const count = lang === "bn" ? toBnDigits(units) : String(units);
-  const href = `${root(lang)}/cart`;
+  const href = `${root}/${lang}/cart`;
   const current = pathname === href ? "page" : undefined;
   const badge = (
     <>
@@ -111,8 +113,9 @@ export function BagLink({ lang, place }: { lang: Lang; place: "header" | "tab" |
 /** The search form: a GET to the product list, so it works without script. */
 export function SearchForm({ lang, id, inputRef, large = false }: { lang: Lang; id: string; inputRef?: React.RefObject<HTMLInputElement | null>; large?: boolean }) {
   const t = dictionary(lang);
+  const { root } = useSurface();
   return (
-    <form action={`${root(lang)}/products`} method="get" role="search" className="relative flex items-center">
+    <form action={`${root}/${lang}/products`} method="get" role="search" className="relative flex items-center">
       <label htmlFor={id} className="sr-only">
         {t.searchLabel}
       </label>
@@ -138,6 +141,7 @@ export function SearchForm({ lang, id, inputRef, large = false }: { lang: Lang; 
 function SearchTab({ lang, categories }: { lang: Lang; categories: Facets["categories"] }) {
   const t = dictionary(lang);
   const input = useRef<HTMLInputElement>(null);
+  const { root } = useSurface();
   return (
     <Sheet
       title={t.searchLabel}
@@ -161,7 +165,7 @@ function SearchTab({ lang, categories }: { lang: Lang; categories: Facets["categ
             <ul className="flex flex-wrap gap-2">
               {categories.map((c) => (
                 <li key={c.slug}>
-                  <Link href={`${root(lang)}/products?category=${c.slug}`} className="sf-chip">
+                  <Link href={`${root}/${lang}/products?category=${c.slug}`} className="sf-chip">
                     {(lang === "bn" ? c.nameBn : c.nameEn) ?? (lang === "bn" ? c.nameEn : c.nameBn) ?? c.slug}
                   </Link>
                 </li>
@@ -179,7 +183,8 @@ export function TabBar({ lang, categories }: { lang: Lang; categories: Facets["c
   const t = dictionary(lang);
   const pathname = usePathname();
   const wide = useWide();
-  const home = root(lang);
+  const { root } = useSurface();
+  const home = `${root}/${lang}`;
   if (wide || /\/(products\/[^/]+|cart|checkout)$/.test(pathname)) return null;
   const tab = (href: string, active: boolean, icon: React.ReactNode, label: string) => (
     <Link href={href} aria-current={active ? "page" : undefined} className="sf-tab">

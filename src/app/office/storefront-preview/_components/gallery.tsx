@@ -6,7 +6,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CdnImages } from "@/modules/media/cdn";
 import { dictionary, type Lang, localised, toBnDigits } from "@/modules/storefront/i18n";
 import type { PhotoRef } from "@/modules/storefront/service";
+import { useSurface } from "./frame";
 import { NoPhoto } from "./no-photo";
+import { photoPath, type Surface } from "./surface";
 
 /** A photo with its Cloudinary delivery when it has a copy there (only while its product is published). */
 export type GalleryPhoto = PhotoRef & { cdn?: CdnImages | null };
@@ -18,18 +20,19 @@ export type GalleryPhoto = PhotoRef & { cdn?: CdnImages | null };
 
 const WIDTHS = [320, 640, 1280];
 
-function src(photo: GalleryPhoto, width: number) {
+function src(surface: Surface, photo: GalleryPhoto, width: number) {
   if (photo.cdn) return width <= 320 ? photo.cdn.srcSet.split(", ")[0].split(" ")[0] : photo.cdn.src;
-  return width < photo.width ? `/office/media/${photo.id}?w=${width}` : `/office/media/${photo.id}`;
+  return photoPath(surface, photo.id, width < photo.width ? width : undefined);
 }
 
-function srcSet(photo: GalleryPhoto) {
+function srcSet(surface: Surface, photo: GalleryPhoto) {
   if (photo.cdn) return photo.cdn.srcSet;
-  return [...WIDTHS.filter((w) => w < photo.width).map((w) => `/office/media/${photo.id}?w=${w} ${w}w`), `/office/media/${photo.id} ${photo.width}w`].join(", ");
+  return [...WIDTHS.filter((w) => w < photo.width).map((w) => `${photoPath(surface, photo.id, w)} ${w}w`), `${photoPath(surface, photo.id)} ${photo.width}w`].join(", ");
 }
 
 export function Gallery({ lang, photos, name }: { lang: Lang; photos: GalleryPhoto[]; name: string }) {
   const t = dictionary(lang);
+  const { surface } = useSurface();
   const [viewport, embla] = useEmblaCarousel({ align: "start", skipSnaps: false, duration: 24 });
   const [current, setCurrent] = useState(0);
   const [broken, setBroken] = useState<Set<string>>(new Set());
@@ -95,8 +98,8 @@ export function Gallery({ lang, photos, name }: { lang: Lang; photos: GalleryPho
                   // Private photos (Owner session): Next.js image optimisation would fetch them without it.
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={src(p, 1280)}
-                    srcSet={srcSet(p)}
+                    src={src(surface, p, 1280)}
+                    srcSet={srcSet(surface, p)}
                     sizes="(min-width: 1024px) 50vw, 100vw"
                     width={p.width}
                     height={p.height}
@@ -154,7 +157,7 @@ export function Gallery({ lang, photos, name }: { lang: Lang; photos: GalleryPho
             >
               {broken.has(p.id) ? null : (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={src(p, 320)} alt="" width={p.width} height={p.height} loading="lazy" onError={() => fail(p.id)} className="h-full w-full object-cover" />
+                <img src={src(surface, p, 320)} alt="" width={p.width} height={p.height} loading="lazy" onError={() => fail(p.id)} className="h-full w-full object-cover" />
               )}
             </button>
           ))}

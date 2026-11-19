@@ -6,14 +6,14 @@ import { type CdnImages, cdnConfig, cdnImages } from "@/modules/media/cdn";
 import { dictionary, formatTaka, type Lang, localised, toBnDigits } from "@/modules/storefront/i18n";
 import type { Facets, PhotoRef, ProductCard } from "@/modules/storefront/service";
 import { NoPhoto } from "./no-photo";
+import { base, photoPath, type Surface } from "./surface";
 
-export { NoPhoto };
+export { base, NoPhoto };
+export type { Surface };
 
 // Server-rendered building blocks of the First Light storefront (docs/design/storefront-design-system.md): the arch photo,
 // the product card, grid and rail, section headings, the trust lines and the ordering steps, the preview strip and the
-// footer. The preview is Owner-only.
-
-export const base = (lang: Lang) => `/office/storefront-preview/${lang}`;
+// footer. Each takes the surface it renders on (surface.ts): the Owner-only preview or the real shop.
 
 const LIST_KEYS = ["q", "category", "size", "colour", "stock", "page"];
 /**
@@ -57,7 +57,7 @@ export const productName = (lang: Lang, p: { nameEn: string | null; nameBn: stri
  * the chosen language, else the other one, else the product name: never empty, never invented. Inside a link that already
  * names the product in text (a card, a tile), the photo is `decorative`, so the link is read once, by its visible name.
  */
-export function Photo({ photo, lang, name, sizes, className = "", priority = false, decorative = false }: { photo: PhotoRef; lang: Lang; name: string; sizes: string; className?: string; priority?: boolean; decorative?: boolean }) {
+export function Photo({ photo, lang, name, sizes, surface = "preview", className = "", priority = false, decorative = false }: { photo: PhotoRef; lang: Lang; name: string; sizes: string; surface?: Surface; className?: string; priority?: boolean; decorative?: boolean }) {
   const widths = WIDTHS.filter((w) => w < photo.width);
   const alt = decorative ? "" : (localised(lang, photo.altEn, photo.altBn) ?? localised(lang === "en" ? "bn" : "en", photo.altEn, photo.altBn) ?? name);
   const cdn = cdnFor(photo);
@@ -65,8 +65,8 @@ export function Photo({ photo, lang, name, sizes, className = "", priority = fal
     // Photos are private (Owner session); Next.js image optimisation would fetch them without it, and a CDN copy is already optimised.
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={cdn ? cdn.src : `/office/media/${photo.id}?w=${widths.includes(640) ? 640 : (widths.at(-1) ?? "")}`}
-      srcSet={cdn ? cdn.srcSet : [...widths.map((w) => `/office/media/${photo.id}?w=${w} ${w}w`), `/office/media/${photo.id} ${photo.width}w`].join(", ")}
+      src={cdn ? cdn.src : photoPath(surface, photo.id, widths.includes(640) ? 640 : widths.at(-1))}
+      srcSet={cdn ? cdn.srcSet : [...widths.map((w) => `${photoPath(surface, photo.id, w)} ${w}w`), `${photoPath(surface, photo.id)} ${photo.width}w`].join(", ")}
       sizes={sizes}
       width={photo.width}
       height={photo.height}
@@ -95,11 +95,11 @@ export function Localised({ lang, en, bn, missing }: { lang: Lang; en: string | 
 }
 
 /** A product card: the photograph in its arch leads, then the name and the price. Stock is said only when something is sold out. */
-export function ProductTile({ product, lang, from, priority = false, sizes, className = "" }: { product: ProductCard; lang: Lang; from?: string; priority?: boolean; sizes?: string; className?: string }) {
+export function ProductTile({ product, lang, surface, from, priority = false, sizes, className = "" }: { product: ProductCard; lang: Lang; surface: Surface; from?: string; priority?: boolean; sizes?: string; className?: string }) {
   const t = dictionary(lang);
   const name = productName(lang, product);
   const price = product.minPricePaisa === product.maxPricePaisa ? formatTaka(product.minPricePaisa, lang) : t.from(formatTaka(product.minPricePaisa, lang));
-  const href = `${base(lang)}/products/${product.slug}${from ? `?from=${encodeURIComponent(from)}` : ""}`;
+  const href = `${base(lang, surface)}/products/${product.slug}${from ? `?from=${encodeURIComponent(from)}` : ""}`;
   const out = product.stock === "out";
   return (
     <li className={`min-w-0 ${className}`}>
@@ -109,6 +109,7 @@ export function ProductTile({ product, lang, from, priority = false, sizes, clas
             <Photo
               photo={product.photo}
               lang={lang}
+              surface={surface}
               name={name}
               sizes={sizes ?? "(min-width: 1024px) 22vw, (min-width: 640px) 31vw, 46vw"}
               priority={priority}
@@ -142,22 +143,22 @@ export function ProductTile({ product, lang, from, priority = false, sizes, clas
   );
 }
 
-export function ProductGrid({ products, lang, label, from, priorityCount = 0 }: { products: ProductCard[]; lang: Lang; label: string; from?: string; priorityCount?: number }) {
+export function ProductGrid({ products, lang, surface, label, from, priorityCount = 0 }: { products: ProductCard[]; lang: Lang; surface: Surface; label: string; from?: string; priorityCount?: number }) {
   return (
     <ul aria-label={label} className="grid grid-cols-2 gap-x-3 gap-y-7 sm:grid-cols-3 sm:gap-x-5 lg:grid-cols-4 lg:gap-x-6 lg:gap-y-10">
       {products.map((p, i) => (
-        <ProductTile key={p.id} product={p} lang={lang} from={from} priority={i < priorityCount} />
+        <ProductTile key={p.id} product={p} lang={lang} surface={surface} from={from} priority={i < priorityCount} />
       ))}
     </ul>
   );
 }
 
 /** A row of products that scrolls sideways on a phone and becomes a grid on a desktop. */
-export function ProductRail({ products, lang, label }: { products: ProductCard[]; lang: Lang; label: string }) {
+export function ProductRail({ products, lang, surface, label }: { products: ProductCard[]; lang: Lang; surface: Surface; label: string }) {
   return (
     <ul aria-label={label} className="sf-rail lg:mx-0 lg:grid lg:grid-cols-4 lg:gap-x-6 lg:gap-y-10 lg:overflow-visible lg:px-0">
       {products.map((p) => (
-        <ProductTile key={p.id} product={p} lang={lang} sizes="(min-width: 1024px) 22vw, 44vw" className="w-[42vw] max-w-[13.5rem] sm:w-[30vw] lg:w-auto lg:max-w-none" />
+        <ProductTile key={p.id} product={p} lang={lang} surface={surface} sizes="(min-width: 1024px) 22vw, 44vw" className="w-[42vw] max-w-[13.5rem] sm:w-[30vw] lg:w-auto lg:max-w-none" />
       ))}
     </ul>
   );
@@ -194,6 +195,27 @@ export function PreviewStrip({ lang }: { lang: Lang }) {
         </p>
         <Link href="/office" className="inline-flex min-h-8 shrink-0 items-center font-semibold underline decoration-sf-sun-glow underline-offset-4">
           {t.backToOffice}
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/** Founder acceptance: one quiet line above the real shop while it is open only for the founder (ADR-0011). */
+export function AcceptanceStrip({ lang }: { lang: Lang }) {
+  const t = dictionary(lang);
+  return (
+    <div className="sf-on-dark bg-sf-ink text-[0.8125rem] text-sf-paper">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 lg:px-8">
+        <p className="flex min-w-0 items-center gap-2 py-1.5">
+          <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-sf-sun-glow" />
+          <strong className="truncate font-semibold" data-testid="acceptance-banner">
+            {t.acceptanceBanner}
+          </strong>
+          <span className="hidden truncate text-sf-paper/80 lg:inline">{t.acceptanceNote}</span>
+        </p>
+        <Link href="/office/acceptance" className="inline-flex min-h-8 shrink-0 items-center font-semibold underline decoration-sf-sun-glow underline-offset-4">
+          {t.acceptanceEnd}
         </Link>
       </div>
     </div>
@@ -245,7 +267,7 @@ export function HowToOrder({ lang }: { lang: Lang }) {
   );
 }
 
-export function Footer({ lang, identity, facets }: { lang: Lang; identity: InstallationIdentity; facets: Facets }) {
+export function Footer({ lang, identity, facets, surface, policies = [] }: { lang: Lang; identity: InstallationIdentity; facets: Facets; surface: Surface; policies?: { kind: string; href: string }[] }) {
   const t = dictionary(lang);
   const other = lang === "en" ? "bn" : "en";
   const lineHere = localised(lang, identity.storeLine.en, identity.storeLine.bn);
@@ -268,19 +290,19 @@ export function Footer({ lang, identity, facets }: { lang: Lang; identity: Insta
           <h2 className="sf-plain mb-2 text-[0.9375rem] text-sf-sun-glow">{t.mainNav}</h2>
           <ul>
             <li>
-              <Link href={`${base(lang)}/products`} className={link}>
+              <Link href={`${base(lang, surface)}/products`} className={link}>
                 {t.shopAll}
               </Link>
             </li>
             {facets.categories.map((c) => (
               <li key={c.slug}>
-                <Link href={`${base(lang)}/products?category=${c.slug}`} className={link}>
+                <Link href={`${base(lang, surface)}/products?category=${c.slug}`} className={link}>
                   <Localised lang={lang} en={c.nameEn} bn={c.nameBn} />
                 </Link>
               </li>
             ))}
             <li>
-              <Link href={`${base(lang)}/order`} className={link}>
+              <Link href={`${base(lang, surface)}/order`} className={link}>
                 {t.tabOrder}
               </Link>
             </li>
@@ -303,8 +325,22 @@ export function Footer({ lang, identity, facets }: { lang: Lang; identity: Insta
         </div>
       </div>
       <div className="mx-auto max-w-7xl space-y-1 border-t border-sf-paper/15 px-4 py-5 text-[0.8125rem] text-sf-paper/75 lg:px-8">
-        <p>{t.policiesPending}</p>
-        <p>{t.prototypeNote}</p>
+        {policies.length ? (
+          <nav aria-label={t.policies}>
+            <ul className="flex flex-wrap gap-x-5" data-testid="footer-policies">
+              {policies.map((p) => (
+                <li key={p.kind}>
+                  <Link href={p.href} className={link}>
+                    {t.policyNames[p.kind] ?? p.kind}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        ) : (
+          <p>{t.policiesPending}</p>
+        )}
+        {surface === "preview" ? <p>{t.prototypeNote}</p> : null}
       </div>
     </footer>
   );

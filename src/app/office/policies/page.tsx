@@ -2,22 +2,24 @@ import { randomUUID } from "node:crypto";
 import { getDb } from "@/db/client";
 import { POLICY_CHECKLIST } from "@/modules/policies/checklist";
 import { listPolicyDrafts, POLICY_TITLES, type PolicyStatus, policyHistory } from "@/modules/policies/drafts";
-import { ActionForm } from "../_components/action-form";
+import { publicationStates } from "@/modules/policies/publication";
+import { ActionForm, Checkbox } from "../_components/action-form";
 import { formatTime, noticeFor, OfficeShell } from "../_components/shell";
 import { requireOffice } from "../_lib/session";
-import { markPolicyReviewedAction } from "./actions";
+import { markPolicyReviewedAction, publishPolicyAction, withdrawPolicyAction } from "./actions";
 import { CopyText, PolicyEditor } from "./policy-editor";
 
-export const metadata = { title: "Policy drafts · Owner Office" };
+export const metadata = { title: "Policies · Owner Office" };
 
-// The private policy workspace (S-17). Owner only; never shown to customers. The questions beside each editor
-// come from decisions already made (src/modules/policies/checklist.ts); open questions are left open. Drafts are
-// shown as plain text only (React escapes everything), so pasted markup is never run.
+// The policy workspace (S-17). Drafts are private; a reviewed version reaches customers only when the founder publishes it
+// here with the explicit approval box (src/modules/policies/publication.ts). The questions beside each editor come from
+// decisions already made (src/modules/policies/checklist.ts); open questions are left open. Text is shown as plain text
+// only (React escapes everything), so pasted markup is never run.
 
 const STATUS: Record<PolicyStatus, string> = {
   empty: "Empty",
   drafted: "Drafted, not reviewed",
-  reviewed: "Reviewed by you · not approved for publication · not published",
+  reviewed: "Reviewed by you",
 };
 
 export default async function PoliciesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -26,13 +28,15 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
   const db = getDb();
   const drafts = await listPolicyDrafts(db, principal);
   const histories = await Promise.all(drafts.map((d) => policyHistory(db, principal, d.kind)));
+  const published = await publicationStates(db, principal);
   return (
-    <OfficeShell title="Policy drafts" current="policies" notice={noticeFor(done)}>
+    <OfficeShell title="Policies" current="policies" notice={noticeFor(done)}>
       <div role="note" className="rounded border border-gray-400 bg-white p-4 text-sm">
-        <p className="font-semibold">Private drafts. Nothing here is shown to customers or published.</p>
+        <p className="font-semibold">Drafts are private. Customers see a policy only after you publish it here.</p>
         <p className="mt-1">
-          Write the real wording yourself, in English and Bangla. &quot;Reviewed&quot; only records that you checked this version; it is not legal approval. Public checkout stays disabled until the delivery, return
-          and privacy policies are approved and published (S-17, G-7), which this version cannot do. For external review, copy the text or export the &quot;Customer policy drafts&quot; dataset.
+          Write the real wording yourself, in English and Bangla. &quot;Reviewed&quot; records that you checked this version; it is not legal approval. Publishing is your approval of that exact wording for
+          customers: it is copied, dated and shown in the shop footer and checkout. Public checkout stays disabled until the delivery, return and privacy policies are published (S-17, G-7) and the launch gate
+          is opened. For external review, copy the text or export the &quot;Customer policy drafts&quot; dataset.
         </p>
       </div>
       {drafts.map((draft, i) => (
@@ -47,6 +51,11 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
               {draft.reviewedAt ? <span className="text-gray-700"> · reviewed {formatTime(draft.reviewedAt)}</span> : null}
             </p>
           </div>
+          <p className="text-sm" data-testid={`policy-published-${draft.kind}`}>
+            {published[draft.kind]
+              ? `Published to customers: version ${published[draft.kind]!.draftVersion}, ${formatTime(published[draft.kind]!.publishedAt)}${published[draft.kind]!.draftVersion !== draft.version ? ". The draft has changed since; customers still see the published version." : "."}`
+              : "Not published: customers do not see this policy."}
+          </p>
 
           <details className="rounded border border-gray-200 p-3 text-sm">
             <summary className="cursor-pointer font-medium">Questions to answer ({POLICY_CHECKLIST[draft.kind].length})</summary>
@@ -72,6 +81,14 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
                 <ActionForm action={markPolicyReviewedAction} idempotencyKey={randomUUID()} hidden={{ kind: draft.kind, version: String(draft.version) }} submitLabel="Mark this version as reviewed" variant="secondary" />
               ) : null}
               {draft.status === "drafted" && (!draft.bodyEn || !draft.bodyBn) ? <p className="text-sm text-gray-700">Both languages are needed before it can be marked reviewed.</p> : null}
+              {draft.status === "reviewed" && published[draft.kind]?.draftVersion !== draft.version ? (
+                <ActionForm action={publishPolicyAction} idempotencyKey={randomUUID()} hidden={{ kind: draft.kind, version: String(draft.version) }} submitLabel={`Publish version ${draft.version} to customers`}>
+                  <Checkbox name="approve" label={`I am the founder and I approve this exact wording of the ${POLICY_TITLES[draft.kind].toLowerCase()}, in English and Bangla, for customers.`} />
+                </ActionForm>
+              ) : null}
+              {published[draft.kind] ? (
+                <ActionForm action={withdrawPolicyAction} idempotencyKey={randomUUID()} hidden={{ kind: draft.kind }} submitLabel="Withdraw from customers" variant="secondary" confirm="Withdraw this policy? Customers will no longer see it." />
+              ) : null}
             </div>
           ) : null}
 

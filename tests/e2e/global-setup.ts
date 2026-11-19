@@ -7,7 +7,7 @@ import path from "node:path";
 import { hashPassword } from "better-auth/crypto";
 import type { Client } from "pg";
 import { loadEnv } from "vite";
-import { resetAndMigrate } from "../support/global-setup";
+import { markTestDatabaseAsStaging, resetAndMigrate } from "../support/global-setup";
 import { assertSafeTestDatabaseUrl, lockTestDatabase } from "../support/test-database";
 import { E2E_OWNER } from "./support";
 
@@ -113,6 +113,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 
   try {
     await resetAndMigrate(url);
+    // The browser tests rehearse founder acceptance (the real shop and checkout), which runs only on a staging-marked database.
+    await markTestDatabaseAsStaging(lock);
     const password = randomBytes(24).toString("base64url");
     await seedOwner(lock, password);
 
@@ -129,6 +131,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     for (const name of Object.keys(env)) {
       if (/^(DATABASE_URL|TEST_DATABASE_URL|BETTER_AUTH_|API_RATE_LIMIT_|MEDIA_|NODE_ENV$)/.test(name)) delete env[name];
     }
+    // No real Google client, proxy trust or CDN in tests, whatever .env.local holds (set but empty wins over .env files).
+    for (const name of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "TRUSTED_PROXY", "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET", "CLOUDINARY_FOLDER"]) env[name] = "";
     Object.assign(env, {
       DATABASE_URL: url,
       BETTER_AUTH_SECRET: randomBytes(32).toString("base64"),

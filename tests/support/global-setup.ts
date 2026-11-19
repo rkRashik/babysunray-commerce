@@ -70,3 +70,17 @@ export async function dropManagedObjects(url: string | undefined, after: (client
     await client.end();
   }
 }
+
+/**
+ * Marks babysunray_test as the staging database (the empty schema babysunray_target with the staging comment), so founder
+ * acceptance (src/modules/launch/acceptance.ts) and the proposed publication rule can be exercised. Test database only: the
+ * staging commands refuse local hosts, and the reset drops the schema. `unmark` removes it again.
+ */
+export async function markTestDatabaseAsStaging(client: Pick<Client, "query">, marked = true): Promise<void> {
+  if (marked) {
+    await client.query("create schema if not exists babysunray_target");
+    await client.query("comment on schema babysunray_target is 'babysunray:staging'");
+  } else {
+    await client.query("drop schema if exists babysunray_target restrict");
+  }
+}

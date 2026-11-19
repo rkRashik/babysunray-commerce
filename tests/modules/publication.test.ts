@@ -1,8 +1,8 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { APPROVED_PUBLICATION_RULE, publicationBlockers } from "../../src/modules/catalogue/publication";
-import { evaluateReadiness, type ReadinessInput } from "../../src/modules/catalogue/readiness";
+import { APPROVED_PUBLICATION_RULE, PROPOSED_PUBLICATION_RULE, publicationBlockers } from "../../src/modules/catalogue/publication";
+import { evaluateReadiness, READINESS_ITEMS, type ReadinessInput } from "../../src/modules/catalogue/readiness";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const files = (dir: string): string[] =>
@@ -44,13 +44,20 @@ describe("publication rules", () => {
     expect(publicationBlockers({ status: "draft", items: evaluateReadiness({ ...complete, variants: [] }), reviewCurrent: true }, { id: "empty", items: [] })).toEqual(["item:variant"]);
   });
 
-  it("no page, route, Server Action or transport imports the publication services", () => {
+  it("the proposed rule (acceptance only) is every product readiness item; it is not the approved rule", () => {
+    expect([...PROPOSED_PUBLICATION_RULE.items].sort()).toEqual(READINESS_ITEMS.map((i) => i.id).sort());
+    expect(PROPOSED_PUBLICATION_RULE.id).toBe("i6-proposed-acceptance");
+    expect(APPROVED_PUBLICATION_RULE).not.toBe(PROPOSED_PUBLICATION_RULE);
+  });
+
+  it("only the Owner's product page and Office actions reach the publication services, and nothing on the API or the shop", () => {
     const reachable = [...files("src/app"), ...files("src/api")].filter((f) => /\.(ts|tsx)$/.test(f));
     expect(reachable.length).toBeGreaterThan(50);
     const offenders = reachable.filter((f) => /from "[^"]*catalogue\/publication"/.test(readFileSync(path.join(ROOT, f), "utf8")));
-    expect(offenders).toEqual([]);
-    // Only the launch overview reads it (for the approved rule, to flag an unexpected publication).
+    expect(offenders.sort()).toEqual(["src/app/office/actions.ts", "src/app/office/products/[productId]/page.tsx"]);
+    const actions = readFileSync(path.join(ROOT, "src/app/office/actions.ts"), "utf8");
+    expect(actions).toMatch(/requireOffice\("catalog:publish"\)[\s\S]*publishProductOnce/);
     const importers = files("src").filter((f) => f !== "src/modules/catalogue/publication.ts" && /from "[^"]*catalogue\/publication"/.test(readFileSync(path.join(ROOT, f), "utf8")));
-    expect(importers).toEqual(["src/modules/launch/readiness.ts"]);
+    expect(importers.sort()).toEqual(["src/app/office/actions.ts", "src/app/office/products/[productId]/page.tsx", "src/modules/launch/readiness.ts"]);
   });
 });

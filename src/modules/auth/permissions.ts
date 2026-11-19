@@ -26,8 +26,12 @@ export const PERMISSIONS = [
   // Private customer-policy drafts (S-17): reading may show unpublished wording; writing never publishes.
   "policies:read",
   "policies:write",
+  // Publishing a reviewed policy to customers, or withdrawing it: the founder's approval of that exact wording (ADR-0011).
+  "policies:publish",
   // The launch-readiness overview (what still blocks a public shop).
   "launch:read",
+  // Starting or ending a founder acceptance pass for the real shop (staging database only; ADR-0011).
+  "acceptance:run",
   "users:manage",
 ] as const;
 

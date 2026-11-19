@@ -73,28 +73,58 @@ export async function bootstrapFirstOwner(
     if (Number(existing.rows[0].n) > 0) {
       throw new Error("An account already exists. The first-Owner bootstrap only runs on an empty installation.");
     }
-    const user = await client.query<{ id: string }>(
-      `insert into public.auth_users (name, email, email_verified, created_at, updated_at)
-       values ($1, $2, false, now(), now()) returning id`,
-      [input.name, input.email],
-    );
-    const userId = user.rows[0].id;
-    await client.query(
-      `insert into public.auth_accounts (account_id, provider_id, user_id, password, created_at, updated_at)
-       values ($1, 'credential', $2, $3, now(), now())`,
-      [userId, userId, passwordHash],
-    );
-    await client.query("insert into public.user_access (user_id, role) values ($1, 'owner')", [userId]);
-    // Recorded in the same transaction (migration 0017): an Owner never appears without its audit row. The access
-    // grant itself is recorded by the user_access trigger.
-    await client.query(
-      "insert into public.auth_events (event, actor_type, subject_user_id, transport, detail) values ('owner_created', 'operator', $1, 'cli', '{}'::jsonb)",
-      [userId],
-    );
+    const userId = await insertOwner(client, input, passwordHash);
     await client.query("commit");
     return { userId };
   } catch (error) {
     await client.query("rollback");
     throw error;
   }
+}
+
+/**
+ * The founder's Owner on the hosted STAGING database (founder acceptance, ADR-0011), for scripts/bootstrap-owner-staging.mts.
+ * The caller has confirmed the staging marker. Staging may hold the staging tests' DISABLED accounts, so this refuses only
+ * when an Owner with active access exists or the email is taken; it never changes or removes an existing row.
+ */
+export async function bootstrapStagingOwner(client: Client, rawInput: OwnerInput): Promise<{ userId: string }> {
+  const input = validateOwnerInput(rawInput);
+  const passwordHash = await hashPassword(input.password);
+  await client.query("begin");
+  try {
+    await client.query("lock table public.auth_users, public.user_access in exclusive mode");
+    const active = await client.query<{ n: number }>("select count(*)::int as n from public.user_access where disabled_at is null");
+    if (active.rows[0].n > 0) throw new Error("An Owner with active access already exists on this database. Sign in with it; nothing was changed.");
+    const taken = await client.query<{ n: number }>("select count(*)::int as n from public.auth_users where email = $1", [input.email]);
+    if (taken.rows[0].n > 0) throw new Error("An account with this email already exists. Use another email; nothing was changed.");
+    const userId = await insertOwner(client, input, passwordHash);
+    await client.query("commit");
+    return { userId };
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  }
+}
+
+/** The user, its credential account, owner access and the audit row, inside the caller's transaction. */
+async function insertOwner(client: Client, input: OwnerInput, passwordHash: string): Promise<string> {
+  const user = await client.query<{ id: string }>(
+    `insert into public.auth_users (name, email, email_verified, created_at, updated_at)
+     values ($1, $2, false, now(), now()) returning id`,
+    [input.name, input.email],
+  );
+  const userId = user.rows[0].id;
+  await client.query(
+    `insert into public.auth_accounts (account_id, provider_id, user_id, password, created_at, updated_at)
+     values ($1, 'credential', $2, $3, now(), now())`,
+    [userId, userId, passwordHash],
+  );
+  await client.query("insert into public.user_access (user_id, role) values ($1, 'owner')", [userId]);
+  // Recorded in the same transaction (migration 0017): an Owner never appears without its audit row. The access
+  // grant itself is recorded by the user_access trigger.
+  await client.query(
+    "insert into public.auth_events (event, actor_type, subject_user_id, transport, detail) values ('owner_created', 'operator', $1, 'cli', '{}'::jsonb)",
+    [userId],
+  );
+  return userId;
 }

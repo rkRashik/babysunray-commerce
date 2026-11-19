@@ -51,7 +51,8 @@ begin
     alter default privileges in schema public grant usage, select on sequences to babysunray_app;
     foreach append_only in array array[
       'stock_movements', 'order_events', 'payment_entries', 'export_requests', 'catalogue_imports',
-      'product_reviews', 'policy_draft_events', 'product_publication_events', 'auth_events', 'courier_statement_checks'
+      'product_reviews', 'policy_draft_events', 'product_publication_events', 'auth_events', 'courier_statement_checks',
+      'policy_publications'
     ] loop
       if to_regclass(format('public.%I', append_only)) is not null then
         execute format('revoke update, delete on public.%I from babysunray_app', append_only);

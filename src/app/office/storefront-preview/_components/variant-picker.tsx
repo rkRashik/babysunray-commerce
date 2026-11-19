@@ -7,6 +7,7 @@ import { addToCart, parseQuantity } from "@/modules/storefront/cart";
 import { dictionary, formatTaka, type Lang } from "@/modules/storefront/i18n";
 import type { PreviewVariant } from "@/modules/storefront/service";
 import { useCart } from "./cart-store";
+import { useSurface } from "./frame";
 import { BagLink } from "./header-client";
 import { Sheet } from "./sheet";
 
@@ -31,6 +32,7 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
   const t = dictionary(lang);
   const id = useId();
   const [lines, setLines] = useCart();
+  const { root } = useSurface();
   const colours = [...new Set(variants.map((v) => v.colour).filter((c): c is string => c !== null))];
   const [size, setSize] = useState<string | null>(sizes.length === 1 ? sizes[0] : null);
   const [colour, setColour] = useState<string | null>(colours.length === 1 ? colours[0] : null);
@@ -180,7 +182,7 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
           {message?.text ?? ""}
         </p>
         {message && !message.error ? (
-          <Link href={`/office/storefront-preview/${lang}/cart`} className="inline-flex min-h-11 shrink-0 items-center font-semibold underline underline-offset-4">
+          <Link href={`${root}/${lang}/cart`} className="inline-flex min-h-11 shrink-0 items-center font-semibold underline underline-offset-4">
             {t.viewBag}
           </Link>
         ) : null}

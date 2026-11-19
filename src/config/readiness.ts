@@ -4,6 +4,8 @@ import { mediaStoreConfig } from "../modules/media/storage";
 import { DEFAULT_STORE_NAME, readInstallationIdentity } from "./installation";
 import { readRateLimits } from "../modules/rate-limit/service";
 import { maintenanceSecretProblem } from "../modules/maintenance/secret";
+import { readGoogleSettings } from "../modules/customers/auth";
+import { trustedClientHeaders } from "../modules/rate-limit/client";
 import { databaseProblems, directDatabaseProblem, mediaProblems } from "./hosted";
 
 // Configuration readiness for `npm run config:check`: which variables are set and valid. It reports variable names and reasons only, never a value, and changes
@@ -71,6 +73,10 @@ export function configChecks(env: Env, projectRoot = process.cwd()): ConfigCheck
       if (problem) throw new Error(problem);
     }, "Authorises POST /api/internal/maintenance; without it that endpoint is off."),
     ...authChecks(env),
+    ...(["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"] as const).map((name) =>
+      check(name, "optional", env, () => readGoogleSettings(env), "Optional customer sign-in with Google (both or neither); without them it is not offered."),
+    ),
+    check("TRUSTED_PROXY", "optional", env, () => trustedClientHeaders(env), "netlify on Netlify (per-client limits); leave it empty on any other host."),
     check("TEST_DATABASE_URL", "optional", env, (v) => parseSafeDatabaseUrl(v, TEST_TARGET), "Tests and the restore drill (local babysunray_test only)."),
     check("RESTORE_DATABASE_URL", "optional", env, (v) => parseSafeDatabaseUrl(v, RESTORE_TARGET), "Only for backup:restore (an empty local babysunray_restore)."),
     env.MEDIA_STORAGE_DIR

@@ -3,7 +3,7 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import * as z from "zod";
 import type { Db } from "@/db/database";
-import { guestCheckoutSubmissions, orderItems, orders } from "@/db/schema";
+import { customerOrders, guestCheckoutSubmissions, orderItems, orders } from "@/db/schema";
 import { normalizeSku } from "../catalogue/rules";
 import { skusNotOrderableByCustomers } from "../catalogue/visibility";
 import { DomainError } from "../domain-error";
@@ -22,9 +22,9 @@ import {
 import { expireOverdueVerifications, releaseOverdue, submitOrder } from "./service";
 import { createTrackingLink } from "./tracking";
 
-// The future guest checkout (S-3, S-4), as an application service with no transport. It is NOT reachable: no route,
-// Server Action or page calls it (a test checks the imports), and public checkout stays disabled until the founder
-// approves and publishes the policies it depends on (S-17, G-7; src/modules/launch/gate.ts).
+// The guest checkout (S-3, S-4), as an application service. Its only caller is the transport src/api/guest-checkout.ts,
+// routed at /api/shop/checkout behind the shop access check (src/modules/launch/acceptance.ts): founder acceptance on the
+// staging database now, the public only once the founder opens the launch gate (S-17, G-7).
 //
 // It reuses the order domain unchanged (submitOrder: Pending Verification, atomic reservation, no backorders,
 // 24-hour verification window, server-side totals from the configured delivery zone) and differs from the
@@ -158,7 +158,10 @@ async function assertAsShown(tx: Db, orderId: string, shown: GuestCheckout) {
   if (changed) throw new DomainError("QUOTE_CHANGED", "A price or the delivery charge changed after the cart was shown. Review the cart and submit again.");
 }
 
-async function attempt(db: Db, key: string, input: GuestCheckout): Promise<GuestOrderResult> {
+/** Who placed the order, from the server's own session check (never from the request body). */
+export type CheckoutPlacer = { customerUserId: string | null };
+
+async function attempt(db: Db, key: string, input: GuestCheckout, placer: CheckoutPlacer): Promise<GuestOrderResult> {
   const keyHash = createHash("sha256").update(key).digest("hex");
   const requestMac = createHmac("sha256", key).update(canonicalJson({ operation: OPERATION, request: input })).digest("hex");
   return db.transaction(async (tx) => {
@@ -183,6 +186,8 @@ async function attempt(db: Db, key: string, input: GuestCheckout): Promise<Guest
     );
     await assertAsShown(tx, order.id, input);
     const link = await createTrackingLink(tx, order.id, GUEST_CHECKOUT);
+    // A signed-in customer's order is listed in their account; a guest order has no link. Same transaction as the order.
+    if (placer.customerUserId) await tx.insert(customerOrders).values({ orderId: order.id, customerUserId: placer.customerUserId });
     const stored = await tx.update(guestCheckoutSubmissions).set({ orderId: order.id }).where(eq(guestCheckoutSubmissions.keyHash, keyHash)).returning({ keyHash: guestCheckoutSubmissions.keyHash });
     if (stored.length !== 1) throw new Error("Guest checkout submission was not updated.");
     return { replayed: false, order: await summary(tx, order.id), trackingToken: link.token };
@@ -195,17 +200,17 @@ async function attempt(db: Db, key: string, input: GuestCheckout): Promise<Guest
  * submission record in one transaction. Any failure leaves none of them. Same key and request again: the same
  * order, `replayed: true`, no token. Same key, different request: IDEMPOTENCY_KEY_REUSED, nothing created.
  */
-export async function placeGuestOrder(db: Db, rawKey: unknown, raw: unknown): Promise<GuestOrderResult> {
+export async function placeGuestOrder(db: Db, rawKey: unknown, raw: unknown, placer: CheckoutPlacer = { customerUserId: null }): Promise<GuestOrderResult> {
   if (typeof rawKey !== "string" || !KEY.test(rawKey)) throw new GuestCheckoutInvalid([{ field: "idempotencyKey", code: "key_invalid" }]);
   const checked = validateGuestCheckout(raw);
   if (!checked.ok) throw new GuestCheckoutInvalid(checked.errors);
   await releaseOverdue(db);
   try {
-    return await attempt(db, rawKey, checked.value);
+    return await attempt(db, rawKey, checked.value, placer);
   } catch (error) {
     // An order may have passed its deadline between the sweep and the reservation: sweep again, retry once.
     if (!(error instanceof DomainError && error.code === "INSUFFICIENT_STOCK")) throw error;
     if ((await expireOverdueVerifications(db)) === 0) throw error;
-    return attempt(db, rawKey, checked.value);
+    return attempt(db, rawKey, checked.value, placer);
   }
 }

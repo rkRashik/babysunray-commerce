@@ -4,7 +4,7 @@
 
 import type { Client } from "pg";
 
-/** Tables whose rows may only be added: their triggers refuse UPDATE and DELETE (migrations 0001 to 0018). */
+/** Tables whose rows may only be added: their triggers refuse UPDATE and DELETE (migrations 0001 to 0020). */
 export const APPEND_ONLY_TABLES = [
   "stock_movements",
   "order_events",
@@ -16,6 +16,7 @@ export const APPEND_ONLY_TABLES = [
   "product_publication_events",
   "auth_events",
   "courier_statement_checks",
+  "policy_publications",
 ] as const;
 
 /** Supabase's Data API roles: none of them may reach an application table, sequence or function. */

@@ -3,13 +3,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
 import { formatCentimetres, MEASUREMENT_POINTS } from "@/modules/catalogue/content";
-import { evaluateReadiness } from "@/modules/catalogue/readiness";
+import { publicationHistory, publicationRuleFor, publicationState } from "@/modules/catalogue/publication";
+import { evaluateReadiness, READINESS_ITEMS } from "@/modules/catalogue/readiness";
 import { reviewHistory, reviewStates } from "@/modules/catalogue/review";
 import { getProductWithVariants } from "@/modules/catalogue/service";
 import { DomainError } from "@/modules/domain-error";
 import { getStockLevel } from "@/modules/inventory/service";
 import { formatPaisa } from "@/modules/money";
-import { archiveProductAction, createVariantAction, deactivateVariantAction, reviewProductAction } from "../../actions";
+import { archiveProductAction, createVariantAction, deactivateVariantAction, publishProductAction, reviewProductAction, withdrawProductAction } from "../../actions";
 import { ActionForm, Field } from "../../_components/action-form";
 import { Bilingual, ReadinessList } from "../../_components/content";
 import { MEASUREMENT_LABELS } from "../../_lib/labels";
@@ -21,6 +22,15 @@ export const metadata = { title: "Product · Owner Office" };
 type Props = { params: Promise<{ productId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 const BUTTON_LINK = "of-btn of-btn-line min-h-10 px-3.5 text-sm";
+
+/** Why a product cannot be published, in the Owner's words (codes from publicationBlockers). */
+function blockerText(code: string): string {
+  if (code === "no_approved_rule") return "No publication rule applies on this database: the founder has not approved one (I-6), and this is not the staging acceptance database.";
+  if (code === "not_draft") return "Only a draft can be published.";
+  if (code === "review_not_current") return "Mark the current content as reviewed first (above).";
+  const item = READINESS_ITEMS.find((i) => `item:${i.id}` === code);
+  return item ? `Missing: ${item.label}.` : code;
+}
 
 export default async function ProductPage({ params, searchParams }: Props) {
   await requireOffice("catalog:read", "stock:read");
@@ -34,6 +44,9 @@ export default async function ProductPage({ params, searchParams }: Props) {
   const review = (await reviewStates(db, [product.id])).get(product.id);
   const history = await reviewHistory(db, product.id);
   const { done } = await searchParams;
+  const rule = await publicationRuleFor(db);
+  const publication = await publicationState(db, product.id, rule);
+  const published = await publicationHistory(db, product.id);
   const draft = product.status === "draft";
   const { title, lang } = productTitle(product);
 
@@ -86,7 +99,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
               : `Outdated: reviewed on ${formatTime(review.reviewedAt)}, and the content (text, claims, sizes, photos, SKUs or prices) has changed since.`}
         </p>
         <p className="text-xs text-gray-600">
-          A review records that you checked this content as it is now. It does not publish the product or make it visible to anyone; no publication rule is approved.
+          A review records that you checked this content as it is now. It does not publish the product or make it visible to anyone.
         </p>
         {draft && !review?.current && review ? (
           <ActionForm action={reviewProductAction} idempotencyKey={randomUUID()} hidden={{ productId: product.id, contentSha256: review.contentSha256 }} submitLabel="Mark the current content as reviewed" variant="secondary" />
@@ -98,6 +111,67 @@ export default async function ProductPage({ params, searchParams }: Props) {
               {history.map((h) => (
                 <li key={h.id}>
                   {formatTime(h.createdAt)} by the Owner{(h.openItems as string[]).length ? ` · open then: ${(h.openItems as string[]).join(", ")}` : " · nothing open"}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </Section>
+
+      <Section title="Publication">
+        <p className="text-sm" data-testid="publication-state">
+          {product.status === "published"
+            ? "Published: customers who can open the shop see this product. It cannot be edited until you withdraw it."
+            : product.status === "archived"
+              ? "Archived: never shown to customers."
+              : "Draft: not shown to customers."}
+        </p>
+        <p className="text-xs text-gray-600" data-testid="publication-rule">
+          {rule === null
+            ? "No publication rule is approved (requirement I-6), so nothing can be published on this database."
+            : rule.id === "i6-proposed-acceptance"
+              ? "Founder acceptance (staging database): the PROPOSED rule applies (every readiness item above and a current review). It is not approved for the public shop; each publication records it."
+              : `Approved rule: ${rule.id}.`}
+        </p>
+        {draft && publication.blockers.length ? (
+          <ul className="list-disc space-y-1 pl-5 text-sm" data-testid="publication-blockers">
+            {publication.blockers.map((b) => (
+              <li key={b}>{blockerText(b)}</li>
+            ))}
+          </ul>
+        ) : null}
+        {draft && publication.blockers.length === 0 ? (
+          <ActionForm
+            action={publishProductAction}
+            idempotencyKey={randomUUID()}
+            hidden={{ productId: product.id, contentSha256: publication.contentSha256 }}
+            submitLabel="Publish to the shop"
+            confirm="Publish this product exactly as it is now? Customers who can open the shop will see it at once."
+          />
+        ) : null}
+        {product.status === "published" ? (
+          <div className="flex flex-wrap items-start gap-2">
+            <Link href={`/en/products/${product.slug}`} className={BUTTON_LINK}>
+              Open in the shop
+            </Link>
+            <ActionForm
+              action={withdrawProductAction}
+              idempotencyKey={randomUUID()}
+              hidden={{ productId: product.id, version: String(product.version) }}
+              submitLabel="Withdraw from the shop"
+              variant="secondary"
+              confirm="Withdraw this product? It leaves the shop at once and becomes an editable draft. Orders and stock are not changed."
+            />
+          </div>
+        ) : null}
+        {published.length ? (
+          <details className="text-sm">
+            <summary className="cursor-pointer font-medium">Publication history ({published.length})</summary>
+            <ul className="mt-2 space-y-1">
+              {published.map((e) => (
+                <li key={e.id}>
+                  {formatTime(e.createdAt)}: {e.event}
+                  {e.ruleId ? ` under ${e.ruleId === "i6-proposed-acceptance" ? "the proposed rule (acceptance)" : e.ruleId}` : ""}
                 </li>
               ))}
             </ul>

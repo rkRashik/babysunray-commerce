@@ -297,13 +297,21 @@ export type CheckoutResult = {
  */
 export async function simulateCheckout(db: Db, principal: Principal, input: CheckoutInput): Promise<CheckoutResult> {
   assertPermission(principal, "storefront:preview");
+  return checkCheckout(db, input, PREVIEW_SCOPE);
+}
+
+/**
+ * The checkout details checked in `scope` exactly as an order would check them, and the authoritative total. Read-only:
+ * the shop's last step then places the order through the guest checkout, which checks everything again in its transaction.
+ */
+export async function checkCheckout(db: Db, input: CheckoutInput, scope: CatalogueScope): Promise<CheckoutResult> {
   const details = checkCustomerDetails(input);
   const errors: CheckoutResult["errors"] = { ...details.errors };
   const zoneChosen = DELIVERY_ZONES.includes(input.zone as DeliveryZone);
   if (!zoneChosen) errors.zone = "zone_required";
   let quote: Quote | null = null;
   try {
-    quote = await quoteCart(db, principal, { lines: input.lines, zone: input.zone });
+    quote = await quoteLines(db, { lines: input.lines, zone: input.zone }, scope);
     if (quote.lines.length === 0) errors.cart = "cart_empty";
     else if (quote.lines.some((l) => l.status !== "ok")) errors.cart = quote.lines.some((l) => l.status === "insufficient") ? "cart_stock" : "cart_invalid";
     if (zoneChosen && quote.deliveryChargePaisa === null) errors.zone = "zone_unavailable";

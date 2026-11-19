@@ -6,6 +6,7 @@ import { getDb } from "@/db/client";
 import { dictionary, isLang } from "@/modules/storefront/i18n";
 import { previewFacets } from "@/modules/storefront/service";
 import { requireOffice } from "../../_lib/session";
+import { quoteCartAction, simulateCheckoutAction } from "../actions";
 import { SfFrame } from "../_components/frame";
 import { Header } from "../_components/header";
 import { TabBar } from "../_components/header-client";
@@ -29,16 +30,16 @@ export default async function PreviewLayout({ children, params }: { children: Re
   // The installation's colours (validated for contrast) replace ink, sun and paper for this subtree.
   const theme = { "--color-sf-ink": identity.theme.ink, "--color-sf-sun": identity.theme.accent, "--color-sf-paper": identity.theme.paper } as React.CSSProperties;
   return (
-    <SfFrame lang={lang} className={`sf ${flFontVariables} flex min-h-dvh flex-col`} style={theme}>
+    <SfFrame lang={lang} className={`sf ${flFontVariables} flex min-h-dvh flex-col`} style={theme} surface="preview" actions={{ quote: quoteCartAction, check: simulateCheckoutAction }}>
       <a href="#sf-main" className="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-50 focus:rounded-full focus:bg-sf-card focus:px-5 focus:py-3 focus:shadow-lg">
         {t.skip}
       </a>
       <PreviewStrip lang={lang} />
-      <Header lang={lang} facets={facets} storeName={identity.storeName} />
+      <Header lang={lang} facets={facets} storeName={identity.storeName} surface="preview" />
       <main id="sf-main" tabIndex={-1} className="mx-auto w-full max-w-7xl flex-1 px-4 pt-5 pb-4 focus:outline-none lg:px-8 lg:pt-10">
         {children}
       </main>
-      <Footer lang={lang} identity={identity} facets={facets} />
+      <Footer lang={lang} identity={identity} facets={facets} surface="preview" />
       <TabBar lang={lang} categories={facets.categories} />
     </SfFrame>
   );

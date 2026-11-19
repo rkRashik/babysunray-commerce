@@ -42,7 +42,7 @@ test("signed out, no launch, policy or review page is shown, and no draft text l
 test("policy drafts: unsaved state, plain-text markup, a stale tab, review only with both languages, and the gate stays closed", async ({ page, context }) => {
   await signIn(page);
   await page.goto("/office/policies");
-  await expect(page.getByRole("heading", { level: 1, name: "Policy drafts" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Policies" })).toBeVisible();
   const editor = page.getByTestId("policy-editor-delivery");
   const state = page.getByTestId("policy-state-delivery");
   const before = (await state.textContent()) ?? "";
@@ -72,13 +72,13 @@ test("policy drafts: unsaved state, plain-text markup, a stale tab, review only 
   await page.getByTestId("policy-editor-delivery").getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByTestId("policy-status-delivery")).toContainText("Drafted, not reviewed");
   await page.locator("#delivery").getByRole("button", { name: "Mark this version as reviewed" }).click();
-  await expect(page.getByTestId("policy-status-delivery")).toContainText("Reviewed by you · not approved for publication · not published");
+  await expect(page.getByTestId("policy-status-delivery")).toContainText("Reviewed by you");
   const events = await sql("select event, version from policy_draft_events where kind = 'delivery' order by id");
   expect(events.map((e) => e.event)).toEqual(["saved", "saved", "marked_reviewed"]);
 
   await page.goto("/office/launch-readiness");
   await expect(page.getByRole("note")).toContainText("The public shop is closed.");
-  await expect(page.getByTestId("gate-blockers")).toContainText("No customer policy is founder-approved and published");
+  await expect(page.getByTestId("gate-blockers")).toContainText("Not published: the");
   await expect(page.getByTestId("check-policy_delivery")).toContainText("Requires founder approval");
   await expect(page.getByTestId("check-checkout_disabled")).toContainText("Ready");
   await expect(page.getByTestId("check-integrity")).toContainText("Ready");

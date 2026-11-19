@@ -5,6 +5,7 @@ import { createAuthMiddleware, isAPIError } from "better-auth/api";
 import { bearer } from "better-auth/plugins";
 import type { Db } from "@/db/database";
 import { authAccounts, authRateLimits, authSessions, authUsers, authVerifications } from "@/db/schema";
+import { trustedClientHeaders } from "../rate-limit/client";
 import { findActiveRole } from "./access";
 import { type AuthTransport, logAuditFailure, recordFailedSignIn, recordPasswordChanged, recordSessionEnded, recordSignIn, sessionEndReason, subjectDigest } from "./audit";
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "./password-policy";
@@ -152,10 +153,9 @@ export function createAuth(db: Db, settings: AuthSettings) {
       database: { generateId: "uuid" },
       disableCSRFCheck: false,
       disableOriginCheck: false,
-      // No client-supplied header is trusted for the client IP: there is no known proxy until hosting is
-      // decided. Locally every request counts as 127.0.0.1; in production all clients share one bucket per
-      // path (fails closed against header spoofing, at the cost of a shared limit). Revisit with hosting.
-      ipAddress: { ipAddressHeaders: [] },
+      // The client address comes only from a proxy named in TRUSTED_PROXY (Netlify's own header; rate-limit/client.ts).
+      // Without it no header is trusted: every request counts as one client per path (fails closed against spoofing).
+      ipAddress: { ipAddressHeaders: trustedClientHeaders(process.env) },
     },
     telemetry: { enabled: false },
     // Security audit (migration 0017, audit.ts). Runs after the endpoint, also when it failed (the error is in

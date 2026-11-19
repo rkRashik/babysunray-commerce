@@ -6,22 +6,21 @@ import { type UserActor, validateActor } from "../actor";
 import { actorFor, assertPermission, type Principal } from "../auth/principal";
 import { DomainError } from "../domain-error";
 import { type Once, runOnce } from "../idempotency/service";
+import { isStagingDatabase } from "../launch/acceptance";
 import { publishPhotosToCdn, withdrawPhotosFromCdn } from "../media/cdn-sync";
 import { evaluateReadiness, type PreparationItem, type ReadinessItem } from "./readiness";
 import { contentDigest } from "./review";
 import { validateId, validateVersion } from "./rules";
 import { getProductWithVariants, type Product } from "./service";
 
-// Product publication (Gate H.32): the state model and the mechanics, without a reachable way to publish.
+// Product publication (Gate H.32; Owner actions on the product page since ADR-0011).
 //
 //   draft ──publish──▶ published ──withdraw──▶ draft            (any state except published ──archive──▶ archived)
 //
 // "Internal review" (a current review, review.ts) and "publish-ready" (no blockers below) are derived, not stored.
-// Publishing needs a founder-approved publication rule (requirement I-6). None is approved, so
-// APPROVED_PUBLICATION_RULE is null, the only operation that publishes (operations.ts) always refuses, and no route,
-// page or Server Action calls the services here (a unit test reads the imports). A configuration value cannot change
-// this: approving a rule is a reviewed code change in a later gate. Tests publish fictional products with a rule of
-// their own to prove the mechanics.
+// Publishing needs a founder-approved publication rule (requirement I-6). None is approved, so APPROVED_PUBLICATION_RULE
+// is null and publishProductOnce refuses on every database except the one marked staging, where the PROPOSED rule applies
+// for founder acceptance (ADR-0011). A configuration value cannot change this: approving a rule is a reviewed code change.
 //
 // A published product cannot be edited (every content change requires a draft), so what customers see is exactly
 // what was reviewed, apart from SKUs the Owner deactivates (they stop being offered) and stock. Withdrawing returns
@@ -30,8 +29,26 @@ import { getProductWithVariants, type Product } from "./service";
 /** A founder-approved publication rule: the readiness items (readiness.ts) a product must meet. */
 export type PublicationRule = Readonly<{ id: string; items: readonly PreparationItem[] }>;
 
-/** Requirement I-6 is not approved, so no product can be published. Replacing null is a founder decision. */
+/** Requirement I-6 is not approved, so no product can be published for the public. Replacing null is a founder decision. */
 export const APPROVED_PUBLICATION_RULE: PublicationRule | null = null;
+
+/**
+ * The rule PROPOSED for I-6 (docs/product/storefront-launch-decisions.md, "Product publication"): every product item of the
+ * readiness checklist, plus a current internal review. Not approved. It applies only on a database that carries the staging
+ * marker (founder acceptance, ADR-0011), so the founder can rehearse publishing under it; on any other database (development,
+ * a future production) nothing can be published until APPROVED_PUBLICATION_RULE is set. Its id is recorded with every
+ * publication it allows, so a rehearsal publication is never mistaken for an approved one.
+ */
+export const PROPOSED_PUBLICATION_RULE: PublicationRule = Object.freeze({
+  id: "i6-proposed-acceptance",
+  items: Object.freeze(["name", "description", "variant", "measurements", "fabric", "care", "sizes", "category", "photo", "alt"] as const),
+});
+
+/** The rule that applies on this database now: the approved one; else, on the staging-marked database only, the proposed one. */
+export async function publicationRuleFor(db: Db, approved: PublicationRule | null = APPROVED_PUBLICATION_RULE): Promise<PublicationRule | null> {
+  if (approved) return approved;
+  return (await isStagingDatabase(db)) ? PROPOSED_PUBLICATION_RULE : null;
+}
 
 /** Why a product cannot be published now. Stable codes: `no_approved_rule`, `not_draft`, `review_not_current`, `item:<id>`. */
 export function publicationBlockers(input: { status: Product["status"]; items: ReadinessItem[]; reviewCurrent: boolean }, rule: PublicationRule | null): string[] {
@@ -73,8 +90,8 @@ async function latestReviewDigest(tx: Db, productId: string): Promise<string | n
 
 export type PublicationState = { status: Product["status"]; contentSha256: string; reviewCurrent: boolean; blockers: string[] };
 
-/** What publishing a product would need now under the approved rule (none: `no_approved_rule` is always listed). */
-export async function publicationState(db: Db, productId: string, rule: PublicationRule | null = APPROVED_PUBLICATION_RULE): Promise<PublicationState> {
+/** What publishing a product would need now under `rule` (`no_approved_rule` when there is none). */
+export async function publicationState(db: Db, productId: string, rule: PublicationRule | null): Promise<PublicationState> {
   const id = validateId(productId, "productId");
   return db.transaction(async (tx) => {
     const [row] = await tx.select({ status: products.status, digest: contentDigest() }).from(products).where(eq(products.id, id));
@@ -140,12 +157,12 @@ const loadProduct = async (tx: Db, ref: { productId: string }) => {
 };
 
 /**
- * The one way to publish for any client, once per idempotency key (ADR-0005). It always refuses with
- * PUBLICATION_NOT_APPROVED while no rule is approved; nothing routes to it yet.
+ * The one way to publish for any client, once per idempotency key (ADR-0005), under publicationRuleFor: refused with
+ * PUBLICATION_NOT_APPROVED on any database without an approved rule, except the staging-marked one (founder acceptance).
  */
 export async function publishProductOnce(db: Db, principal: Principal, idempotencyKey: string, input: { productId: string; contentSha256: string }): Promise<Once<Product>> {
   const user = assertPermission(principal, "catalog:publish");
-  const rule = APPROVED_PUBLICATION_RULE;
+  const rule = await publicationRuleFor(db);
   if (rule === null) throw new DomainError("PUBLICATION_NOT_APPROVED", "No publication rule is approved (requirement I-6), so no product can be published.");
   const request = { productId: input.productId, contentSha256: input.contentSha256 };
   const once = await runOnce(
@@ -160,7 +177,7 @@ export async function publishProductOnce(db: Db, principal: Principal, idempoten
   return once;
 }
 
-/** Withdraws a published product, once per idempotency key. Nothing routes to it yet (nothing can be published). */
+/** Withdraws a published product, once per idempotency key. Always allowed: taking a product down needs no rule. */
 export async function withdrawProductOnce(db: Db, principal: Principal, idempotencyKey: string, input: { productId: string; expectedVersion: number }): Promise<Once<Product>> {
   const user = assertPermission(principal, "catalog:publish");
   const request = { productId: input.productId, expectedVersion: input.expectedVersion };

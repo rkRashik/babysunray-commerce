@@ -63,18 +63,18 @@ describe("unexpectedObjects: event triggers", () => {
 });
 
 describe("destructive reset statements", () => {
-  it("are RESTRICT-only, without CASCADE or TRUNCATE, and drop no schema except drizzle", () => {
-    expect(DROP_MANAGED_STATEMENTS).toHaveLength(4);
+  it("are RESTRICT-only, without CASCADE or TRUNCATE, and drop no schema except drizzle and the (empty) staging marker", () => {
+    expect(DROP_MANAGED_STATEMENTS).toHaveLength(5);
     for (const statement of DROP_MANAGED_STATEMENTS) {
       expect(statement).toMatch(/ restrict;$/);
       expect(statement).not.toMatch(/cascade|truncate/i);
     }
     const schemaDrops = DROP_MANAGED_STATEMENTS.filter((s) => /drop schema/i.test(s));
-    expect(schemaDrops).toEqual(['drop schema if exists "drizzle" restrict;']);
+    expect(schemaDrops).toEqual(['drop schema if exists "drizzle" restrict;', 'drop schema if exists "babysunray_target" restrict;']);
   });
 
   it("name every object with its schema", () => {
-    const [tables, fn, history] = DROP_MANAGED_STATEMENTS;
+    const [tables, fn, history, , marker] = DROP_MANAGED_STATEMENTS;
     const tableList = tables.replace(/^drop table if exists /, "").replace(/ restrict;$/, "").split(", ");
     expect(tableList.sort()).toEqual([
       '"public"."api_rate_limits"',
@@ -87,6 +87,12 @@ describe("destructive reset statements", () => {
       '"public"."cancellation_requests"',
       '"public"."catalogue_imports"',
       '"public"."courier_statement_checks"',
+      '"public"."customer_accounts"',
+      '"public"."customer_orders"',
+      '"public"."customer_rate_limits"',
+      '"public"."customer_sessions"',
+      '"public"."customer_users"',
+      '"public"."customer_verifications"',
       '"public"."delivery_zones"',
       '"public"."export_requests"',
       '"public"."guest_checkout_submissions"',
@@ -99,6 +105,7 @@ describe("destructive reset statements", () => {
       '"public"."payment_entries"',
       '"public"."policy_draft_events"',
       '"public"."policy_drafts"',
+      '"public"."policy_publications"',
       '"public"."product_categories"',
       '"public"."product_measurements"',
       '"public"."product_media"',
@@ -120,5 +127,6 @@ describe("destructive reset statements", () => {
       'drop function if exists "public"."stock_movements_reject_change"(), "public"."user_access_revoke_sessions"(), "public"."append_only_reject_change"(), "public"."guest_checkout_submissions_guard"(), "public"."user_access_audit"() restrict;',
     );
     expect(history).toBe('drop table if exists "drizzle"."__drizzle_migrations" restrict;');
+    expect(marker).toBe('drop schema if exists "babysunray_target" restrict;');
   });
 });

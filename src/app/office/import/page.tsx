@@ -19,9 +19,13 @@ export default async function ImportPage() {
           a fabric statement.
         </p>
         <div className="flex flex-wrap gap-3 text-sm">
+          {/* A file download from a route handler, not a page (the rule mistakes it for the shop's /[lang] pages). */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href="/office/import/template?format=xlsx" className="underline">
             Download the XLSX template
           </a>
+          {/* A file download from a route handler, not a page (the rule mistakes it for the shop's /[lang] pages). */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href="/office/import/template?format=csv" className="underline">
             Download the CSV template
           </a>

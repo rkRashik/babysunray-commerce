@@ -14,7 +14,13 @@ function watch(page: Page): { problems: Problem[]; seen: Set<string> } {
   const seen = new Set<string>();
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text().slice(0, 200)}`));
   page.on("pageerror", (e) => problems.push(`page error: ${e.message.slice(0, 200)}`));
-  page.on("requestfailed", (r) => !r.url().endsWith("/favicon.ico") && problems.push(`request failed: ${r.url().slice(0, 160)}`));
+  page.on("requestfailed", (r) => {
+    if (r.url().endsWith("/favicon.ico")) return;
+    // The bag's read-only price check (a Server Action) starts after hydration and is cancelled by this test's own next
+    // navigation; that abort is the test leaving, not a failure of the page. Any other failure counts.
+    if (r.headers()["next-action"] && r.failure()?.errorText === "net::ERR_ABORTED") return;
+    problems.push(`request failed: ${r.method()} ${r.url().slice(0, 160)} (${r.failure()?.errorText ?? "?"})`);
+  });
   page.on("response", (r) => {
     const url = new URL(r.url());
     seen.add(`${url.pathname} ${r.status()}`);
@@ -33,6 +39,8 @@ test("every storefront, tracking and Owner Office route loads cleanly on a deskt
   try {
     productId = (await db.query<{ id: string }>("select product_id as id from variants where sku = $1", [sku])).rows[0].id;
     variantId = (await db.query<{ id: string }>("select id from variants where sku = $1", [sku])).rows[0].id;
+    // The real shop shows published products only (fictional test data; the publish action itself is covered by acceptance.spec).
+    await db.query("update products set status = 'published' where id = $1", [shop.productId]);
   } finally {
     await db.end();
   }
@@ -50,6 +58,10 @@ test("every storefront, tracking and Owner Office route loads cleanly on a deskt
   await page.getByRole("button", { name: "Create order" }).click();
   await expect(page.getByRole("status").first()).toContainText("Order created");
   const orderPath = new URL(page.url()).pathname;
+  // Founder acceptance in this browser, so the real shop answers (the test database is marked staging).
+  await page.goto("/office/acceptance");
+  await page.getByRole("button", { name: "Start acceptance in this browser" }).click();
+  await expect(page.getByTestId("pass-state")).toContainText("Holds an acceptance pass");
 
   const shopBase = "/office/storefront-preview";
   const routes = [
@@ -57,9 +69,10 @@ test("every storefront, tracking and Owner Office route loads cleanly on a deskt
     `/office/products/${productId}/edit`, `/office/products/${productId}/measurements`, `/office/products/${productId}/photos`, `/office/variants/${variantId}/edit`,
     `/office/skus/${sku}`, "/office/import", "/office/catalogue-preparation", "/office/product-reviews", "/office/categories", "/office/settings/delivery",
     "/office/reports", "/office/stock-counts", "/office/exports", "/office/media-health", "/office/policies", "/office/launch-readiness",
-    "/office/print/picking", "/office/print/cod", shopBase,
+    "/office/print/picking", "/office/print/cod", "/office/acceptance", shopBase,
     ...["en", "bn"].flatMap((l) => [`${shopBase}/${l}`, `${shopBase}/${l}/products`, `${shopBase}/${l}/products/${shop.slug}`, `${shopBase}/${l}/cart`, `${shopBase}/${l}/checkout`, `${shopBase}/${l}/order`]),
     "/",
+    ...["en", "bn"].flatMap((l) => [`/${l}`, `/${l}/products`, `/${l}/products/${shop.slug}`, `/${l}/cart`, `/${l}/checkout`, `/${l}/order`]),
   ];
 
   const logoStatuses: string[] = [];

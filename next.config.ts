@@ -41,6 +41,16 @@ const OFFICE_HEADERS = [
   { key: "Referrer-Policy", value: "same-origin" },
 ];
 
+// The shop (/en, /bn; ADR-0011): never framed, and not indexed while it is open only for founder acceptance (revisit
+// X-Robots-Tag in the change that opens the public launch gate). Pages read cookies, so Next.js marks them no-store.
+const SHOP_HEADERS = [
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Robots-Tag", value: "noindex, nofollow" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "same-origin" },
+];
+
 const nextConfig: NextConfig = {
   // CLAUDE.md is the single source of agent instructions; do not let `next dev` write AGENTS.md.
   agentRules: false,
@@ -51,6 +61,7 @@ const nextConfig: NextConfig = {
       { source: "/api/track", headers: TRACKING_HEADERS },
       { source: "/office", headers: OFFICE_HEADERS },
       { source: "/office/:path*", headers: OFFICE_HEADERS },
+      ...["/en", "/en/:path*", "/bn", "/bn/:path*", "/api/shop/:path*", "/api/customer-auth/:path*"].map((source) => ({ source, headers: SHOP_HEADERS })),
     ];
   },
   // The development tools button is left out there so pages behave (and tab) as they would in production.
