@@ -108,3 +108,16 @@ test("before the page's script runs, the sign-in form cannot be submitted, so a 
   await expect(page.locator("form")).toHaveAttribute("method", "post");
   await context.close();
 });
+
+test("first-time setup is closed once an Owner exists, and recovery refuses a wrong code", async ({ page }) => {
+  await page.goto("/admin/setup");
+  await expect(page.getByTestId("setup-closed")).toContainText("already set up");
+  await page.goto("/admin/login");
+  await page.getByRole("link", { name: "Forgot password?" }).click();
+  await page.getByLabel("Owner email").fill("e2e-owner@example.test");
+  await page.getByLabel("Recovery code").fill("AAAAA-BBBBB-CCCCC-DDDDD");
+  await page.getByLabel("New password", { exact: true }).fill("a fictional new long password");
+  await page.getByLabel("New password again").fill("a fictional new long password");
+  await page.getByRole("button", { name: "Set new password" }).click();
+  await expect(page.getByText("The email or recovery code is not right")).toBeVisible();
+});

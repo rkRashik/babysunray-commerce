@@ -322,6 +322,20 @@ export function Footer({ lang, identity, facets, surface, policies = [] }: { lan
               ))}
             </p>
           ) : null}
+          {identity.contact.whatsapp ? (
+            <p lang="en">
+              <a className={link} href={`https://wa.me/${identity.contact.whatsapp.replace(/[^0-9]/g, "").replace(/^0/, "880")}`} rel="noopener noreferrer">
+                WhatsApp: {identity.contact.whatsapp}
+              </a>
+            </p>
+          ) : null}
+          {identity.contact.messenger ? (
+            <p lang="en">
+              <a className={link} href={identity.contact.messenger} rel="noopener noreferrer">
+                Messenger
+              </a>
+            </p>
+          ) : null}
         </div>
       </div>
       <div className="mx-auto max-w-7xl space-y-1 border-t border-sf-paper/15 px-4 py-5 text-[0.8125rem] text-sf-paper/75 lg:px-8">

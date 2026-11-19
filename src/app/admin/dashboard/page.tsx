@@ -1,6 +1,7 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { getDb } from "@/db/client";
+import { storeSetupProgress } from "@/modules/settings/progress";
 import { DomainError } from "@/modules/domain-error";
 import { formatOrderNumber, ZONE_LABELS } from "@/modules/orders/rules";
 import { getDashboard, MAX_LOW_STOCK_THRESHOLD, parseLowStockThreshold, type StockRow } from "@/modules/reports/dashboard";
@@ -51,7 +52,7 @@ function StockTable({ rows, caption }: { rows: StockRow[]; caption: string }) {
 // The Owner's daily work list. Every number is read from the database at `generatedAt`; nothing is a target or
 // an estimate. Lists show the oldest ten of each queue; "Show all" opens the full, paginated order list.
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  await requireAdmin("reports:read", "orders:read", "stock:read");
+  const principal = await requireAdmin("reports:read", "orders:read", "stock:read");
   const query = await searchParams;
   const rawLow = typeof query.low === "string" ? query.low : undefined;
   let lowStockThreshold: number | null = null;
@@ -64,6 +65,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   }
   const d = await getDashboard(getDb(), { lowStockThreshold });
   const now = d.generatedAt;
+  // A new store sees what is left to set up; it disappears once every essential step is done.
+  const setup = await storeSetupProgress(getDb(), principal).catch(() => null);
+  const setupLeft = setup ? setup.filter((s) => s.required && !s.done) : [];
 
   return (
     <AdminShell
@@ -80,6 +84,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         Figures as of {formatTime(d.generatedAt)}. Reload the page for current figures. A pending order is not a sale, and a delivered order is not
         money received until its collection and settlement are recorded.
       </p>
+
+      {setupLeft.length ? (
+        <Link href="/admin/onboarding" className="of-card block p-4 hover:bg-gray-50" data-testid="setup-card">
+          <span className="block font-semibold">Finish setting up your store · দোকান সেটআপ শেষ করুন</span>
+          <span className="block text-sm text-gray-700">
+            {setupLeft.length} essential step{setupLeft.length === 1 ? "" : "s"} left. Next: {setupLeft[0].title}.
+          </span>
+        </Link>
+      ) : null}
 
       {d.unconfiguredZones.length ? (
         <p role="alert" className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-950">

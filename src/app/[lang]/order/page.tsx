@@ -7,7 +7,7 @@ import { SunMark } from "@/app/_design/sun-mark";
 import { CustomerSignOutButton, GoogleSignInButton } from "@/app/admin/storefront-preview/_components/customer-auth";
 import { getDb } from "@/db/client";
 import { customerOrderList } from "@/modules/customers/orders";
-import { currentCustomer, customerSignInAvailable } from "@/modules/customers/server";
+import { currentCustomer, customerSignInMethods } from "@/modules/customers/server";
 import { dictionary, formatTaka, isLang, toBnDigits } from "@/modules/storefront/i18n";
 
 // "My order": how guest orders are followed (each with its own private link, founder rule K), and, for a customer who chose
@@ -72,10 +72,15 @@ export default async function ShopOrder({ params, searchParams }: { params: Prom
             )}
             <p className="sf-hint">{t.myOrdersGuest}</p>
           </>
-        ) : customerSignInAvailable() ? (
+        ) : customerSignInMethods().google || customerSignInMethods().email ? (
           <>
             <p>{t.signInWhy}</p>
-            <GoogleSignInButton lang={lang} returnTo={`/${lang}/order`} />
+            {customerSignInMethods().email ? (
+              <Link href={`/${lang}/account`} className="sf-btn w-full" data-testid="account-link">
+                {lang === "bn" ? "সাইন ইন বা অ্যাকাউন্ট খুলুন" : "Sign in or create an account"}
+              </Link>
+            ) : null}
+            {customerSignInMethods().google ? <GoogleSignInButton lang={lang} returnTo={`/${lang}/order`} /> : null}
             <p className="sf-hint">{t.signInOptional}</p>
           </>
         ) : (

@@ -31,6 +31,14 @@ export const taka = (form: FormData, name: string, label: string) => parseTakaTo
 // Validation messages start with the service's field name ("pricePaisa must be ..."); the form shows the
 // label the Owner sees instead.
 const LABELS: Record<string, string> = {
+  storeName: "Store name",
+  lineEn: "Description (English)",
+  lineBn: "Description (Bangla)",
+  contactPhone: "Phone",
+  contactEmail: "Email",
+  contactWhatsapp: "WhatsApp",
+  contactMessenger: "Messenger link",
+  approval: "Approval",
   slug: "Slug",
   nameEn: "Name (English)",
   nameBn: "Name (Bangla)",

@@ -13,6 +13,8 @@ export type LaunchFacts = {
   deliveryZonesConfigured: boolean;
   /** Products with a current internal review, or published (a publication needs one). */
   reviewedProducts: number;
+  /** The Owner approved a publication rule (I-6) in Admin settings. */
+  publicationRuleApproved?: boolean;
 };
 
 export type GateBlocker = { id: string; requirement: string; reason: string; next: string };
@@ -48,11 +50,11 @@ export function publicCheckoutGate(facts: LaunchFacts): PublicCheckoutGate {
   if (!facts.deliveryZonesConfigured) {
     blockers.push({ id: "delivery_charges", requirement: "O-8, rule I", reason: "Dhaka City and Outside Dhaka do not both have an active delivery charge.", next: "Set the real charges in Delivery charges." });
   }
-  blockers.push({
+  if (!facts.publicationRuleApproved) blockers.push({
     id: "publication_rule",
     requirement: "I-6, open decision 4",
     reason: "No rule for publishing products is approved for the public shop. The proposed rule applies only to founder acceptance on the staging database.",
-    next: "Founder approves the proposed rule (or a changed one); the approved rule is then set in code (APPROVED_PUBLICATION_RULE).",
+    next: "Approve the publication requirements in Admin (Settings, Publication requirements).",
   });
   if (facts.reviewedProducts === 0) {
     blockers.push({ id: "no_reviewed_products", requirement: "engineering default", reason: "No product has a current internal review.", next: "Review products in Product reviews." });

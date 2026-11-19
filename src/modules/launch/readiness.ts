@@ -9,6 +9,7 @@ import { contentDigest } from "../catalogue/review";
 import { DELIVERY_ZONES } from "../orders/rules";
 import { POLICY_KINDS, POLICY_TITLES, type PolicyKind } from "../policies/drafts";
 import { publishedPolicies } from "../policies/publication";
+import { approvedPublicationRuleFromSettings } from "../settings/store";
 import { isStagingDatabase } from "./acceptance";
 import { type LaunchFacts, type PolicyState, publicCheckoutGate, type PublicCheckoutGate } from "./gate";
 
@@ -93,6 +94,7 @@ export async function launchReadiness(db: Db, principal: Principal): Promise<Lau
     await publishedPolicies(db),
     await isStagingDatabase(db),
   ];
+  const ownerRule = await approvedPublicationRuleFromSettings(db);
   const policyStatus = (kind: PolicyKind): PolicyState => {
     if (published.some((p) => p.kind === kind)) return "published";
     const row = policyRows.find((p) => p.kind === kind);
@@ -103,6 +105,7 @@ export async function launchReadiness(db: Db, principal: Principal): Promise<Lau
     policies: { delivery: policyStatus("delivery"), returns: policyStatus("returns"), privacy: policyStatus("privacy"), checkout_notices: policyStatus("checkout_notices") },
     deliveryZonesConfigured: activeZones.length === DELIVERY_ZONES.length,
     reviewedProducts: c.reviewed + integrity.published,
+    publicationRuleApproved: ownerRule !== null,
   };
 
   const drafts = c.drafts;
@@ -118,7 +121,7 @@ export async function launchReadiness(db: Db, principal: Principal): Promise<Lau
 
   // Without an approved rule the application publishes only on the staging database (founder acceptance); a published
   // product anywhere else means a direct database change, which must be investigated.
-  const unexpectedlyPublished = APPROVED_PUBLICATION_RULE === null && !staging && integrity.published > 0;
+  const unexpectedlyPublished = APPROVED_PUBLICATION_RULE === null && ownerRule === null && !staging && integrity.published > 0;
   const catalogue: ReadinessCheck[] = [
     productRow("names", "Product name in English and Bangla", c.name, "S-1"),
     productRow("descriptions", "Description in English and Bangla", c.description, "S-1"),
@@ -142,8 +145,10 @@ export async function launchReadiness(db: Db, principal: Principal): Promise<Lau
     {
       id: "publication",
       label: "Publication eligibility",
-      status: unexpectedlyPublished ? "incomplete" : "founder_approval",
-      evidence: unexpectedlyPublished
+      status: unexpectedlyPublished ? "incomplete" : ownerRule ? "ready" : "founder_approval",
+      evidence: ownerRule
+        ? `You approved the publication requirements (${ownerRule.items.length} checklist items and a current review).`
+        : unexpectedlyPublished
         ? `${plural(integrity.published, "product")} marked published although no publication rule is approved: this was not done through the application.`
         : staging
           ? `No publication rule is approved for the public (I-6). On this staging database the proposed rule applies for founder acceptance: ${plural(integrity.published, "product")} published for the rehearsal.`

@@ -1,7 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { SunMark } from "@/app/_design/sun-mark";
-import { installationIdentity } from "@/config/installation";
+import { currentStoreIdentity } from "@/app/_design/identity";
 import { getDb } from "@/db/client";
 import { dictionary, type Lang, localised } from "@/modules/storefront/i18n";
 import { type CatalogueScope, catalogueFacets, listProductCards } from "@/modules/storefront/service";
@@ -30,7 +30,7 @@ export async function HomeView({ lang, surface, scope }: { lang: Lang; surface: 
   // Each category is shown by the first photographed product in it (the catalogue's own order); no photo, no picture.
   const covers = await Promise.all(categories.map(async (c) => (await listProductCards(db, { category: c.slug }, scope)).items.find((p) => p.photo) ?? null));
   const t = dictionary(lang);
-  const identity = installationIdentity();
+  const identity = await currentStoreIdentity();
   const other = lang === "en" ? "bn" : "en";
   const lineHere = localised(lang, identity.storeLine.en, identity.storeLine.bn);
   const line = lineHere ?? localised(other, identity.storeLine.en, identity.storeLine.bn);

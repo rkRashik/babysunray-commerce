@@ -27,7 +27,8 @@ export type DomainErrorCode =
   | "PRODUCT_NOT_PUBLISHABLE"
   | "PUBLICATION_NOT_APPROVED"
   | "UNAUTHENTICATED"
-  | "FORBIDDEN";
+  | "FORBIDDEN"
+  | "RATE_LIMITED";
 
 /**
  * An expected business failure with a stable code. Its message is safe to show and contains no

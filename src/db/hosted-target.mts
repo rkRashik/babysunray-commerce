@@ -14,6 +14,8 @@ import type { Client } from "pg";
 
 export const TARGET_SCHEMA = "babysunray_target";
 export const STAGING_MARKER = "babysunray:staging";
+/** The production database's marker, set by the founder by hand in the production project (installation-production.md). */
+export const PRODUCTION_MARKER = "babysunray:production";
 /** The application's own login role on a hosted database (db/hosted/privileges.sql). */
 export const APP_ROLE = "babysunray_app";
 export const TRANSACTION_POOLER_PORT = 6543;
@@ -40,7 +42,8 @@ type Env = Record<string, string | undefined>;
  * locks need a direct or session connection). TLS is required: STAGING_DATABASE_SSL is `require` or `verify-full`
  * (with STAGING_DATABASE_SSL_ROOT_CERT, an absolute path to the CA certificate). Errors never contain the URL.
  */
-export function parseStagingUrl(env: Env, envName: string, options: { pooled: boolean }): HostedConnection {
+export function parseStagingUrl(env: Env, envName: string, options: { pooled: boolean; prefix?: "STAGING" | "PRODUCTION" }): HostedConnection {
+  const prefix = options.prefix ?? "STAGING";
   const raw = env[envName];
   if (!raw) throw new Error(`${envName} is not set.`);
   let url: URL;
@@ -51,25 +54,25 @@ export function parseStagingUrl(env: Env, envName: string, options: { pooled: bo
   }
   if (url.protocol !== "postgresql:" && url.protocol !== "postgres:") throw new Error(`${envName} must start with postgresql://.`);
   if (url.search || url.hash) throw new Error(`${envName} must not have query parameters; TLS is set by STAGING_DATABASE_SSL.`);
-  if (LOCAL_HOSTS.has(url.hostname.toLowerCase())) throw new Error(`${envName} points at this machine; staging is a hosted database. Local databases have their own commands.`);
+  if (LOCAL_HOSTS.has(url.hostname.toLowerCase())) throw new Error(`${envName} points at this machine; this command is for a hosted database. Local databases have their own commands.`);
   const port = url.port ? Number(url.port) : 5432;
   if (options.pooled && port !== TRANSACTION_POOLER_PORT) throw new Error(`${envName} must use the transaction pooler (port ${TRANSACTION_POOLER_PORT}), as the hosted application will.`);
   if (!options.pooled && port === TRANSACTION_POOLER_PORT) throw new Error(`${envName} must be a direct or session connection (port 5432), never the transaction pooler.`);
   const database = decodeURIComponent(url.pathname.replace(/^\//, ""));
   const user = decodeURIComponent(url.username);
   if (!database || !user) throw new Error(`${envName} needs a database and a user.`);
-  const mode = env.STAGING_DATABASE_SSL;
-  if (mode !== "require" && mode !== "verify-full") throw new Error("STAGING_DATABASE_SSL must be require or verify-full.");
+  const mode = env[`${prefix}_DATABASE_SSL`];
+  if (mode !== "require" && mode !== "verify-full") throw new Error(`${prefix}_DATABASE_SSL must be require or verify-full.`);
   let ca: string | undefined;
   if (mode === "verify-full") {
-    const file = env.STAGING_DATABASE_SSL_ROOT_CERT;
-    if (!file) throw new Error("STAGING_DATABASE_SSL_ROOT_CERT must name the CA certificate file for verify-full.");
+    const file = env[`${prefix}_DATABASE_SSL_ROOT_CERT`];
+    if (!file) throw new Error(`${prefix}_DATABASE_SSL_ROOT_CERT must name the CA certificate file for verify-full.`);
     try {
       ca = readFileSync(file, "utf8");
     } catch {
-      throw new Error("STAGING_DATABASE_SSL_ROOT_CERT could not be read.");
+      throw new Error(`${prefix}_DATABASE_SSL_ROOT_CERT could not be read.`);
     }
-    if (!ca.includes("-----BEGIN CERTIFICATE-----")) throw new Error("STAGING_DATABASE_SSL_ROOT_CERT is not a PEM certificate.");
+    if (!ca.includes("-----BEGIN CERTIFICATE-----")) throw new Error(`${prefix}_DATABASE_SSL_ROOT_CERT is not a PEM certificate.`);
   }
   return {
     host: url.hostname,
@@ -79,7 +82,7 @@ export function parseStagingUrl(env: Env, envName: string, options: { pooled: bo
     ...(url.password ? { password: decodeURIComponent(url.password) } : {}),
     ssl: mode === "require" ? { rejectUnauthorized: false } : { rejectUnauthorized: true, ca },
     sslMode: mode,
-    ...(mode === "verify-full" ? { sslRootCert: env.STAGING_DATABASE_SSL_ROOT_CERT } : {}),
+    ...(mode === "verify-full" ? { sslRootCert: env[`${prefix}_DATABASE_SSL_ROOT_CERT`] } : {}),
   };
 }
 
@@ -111,13 +114,16 @@ export async function readIdentity(client: Pick<Client, "query">): Promise<Stagi
   return { database: r.db, user: r.usr, marker: r.marker, serverVersion: Number(r.v), superuser: r.su === "on" };
 }
 
-/** Throws unless the database is marked staging; names what is wrong, never a value from the URL. */
-export async function assertStagingTarget(client: Pick<Client, "query">): Promise<StagingIdentity> {
+/** Throws unless the database carries `marker`; names what is wrong, never a value from the URL. */
+export async function assertMarkedTarget(client: Pick<Client, "query">, marker: string): Promise<StagingIdentity> {
   const identity = await readIdentity(client);
-  if (identity.marker === null) throw new Error(`This database is not marked as staging (schema ${TARGET_SCHEMA} with comment '${STAGING_MARKER}' is missing). Refusing.`);
-  if (identity.marker !== STAGING_MARKER) throw new Error(`This database is marked '${identity.marker}', not '${STAGING_MARKER}'. Refusing.`);
+  if (identity.marker === null) throw new Error(`This database is not marked (schema ${TARGET_SCHEMA} with comment '${marker}' is missing). Refusing.`);
+  if (identity.marker !== marker) throw new Error(`This database is marked '${identity.marker}', not '${marker}'. Refusing.`);
   return identity;
 }
+
+/** Throws unless the database is marked staging. */
+export const assertStagingTarget = (client: Pick<Client, "query">) => assertMarkedTarget(client, STAGING_MARKER);
 
 export type MigrationState = {
   /** Migrations in this checkout. */

@@ -132,7 +132,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       if (/^(DATABASE_URL|TEST_DATABASE_URL|BETTER_AUTH_|API_RATE_LIMIT_|MEDIA_|NODE_ENV$)/.test(name)) delete env[name];
     }
     // No real Google client, proxy trust or CDN in tests, whatever .env.local holds (set but empty wins over .env files).
-    for (const name of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "TRUSTED_PROXY", "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET", "CLOUDINARY_FOLDER"]) env[name] = "";
+    for (const name of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "RESEND_API_KEY", "EMAIL_FROM", "ADMIN_SETUP_TOKEN", "TRUSTED_PROXY", "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET", "CLOUDINARY_FOLDER"]) env[name] = "";
     Object.assign(env, {
       DATABASE_URL: url,
       BETTER_AUTH_SECRET: randomBytes(32).toString("base64"),

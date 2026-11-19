@@ -133,6 +133,7 @@ describe("the shop is reachable only through the access check", () => {
       "src/app/api/shop/checkout/route.ts",
       "src/app/api/track/cancel/route.ts",
       "src/app/api/track/route.ts",
+      "src/app/brand/logo/route.ts",
     ]);
     const pages = app.filter((f) => /\/page\.tsx$/.test(f) && !f.startsWith("src/app/admin/") && !f.startsWith("src/app/[lang]/"));
     expect(pages.sort()).toEqual(["src/app/page.tsx", "src/app/track/page.tsx"]);

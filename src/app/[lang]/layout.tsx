@@ -7,7 +7,7 @@ import { SfFrame } from "@/app/admin/storefront-preview/_components/frame";
 import { Header } from "@/app/admin/storefront-preview/_components/header";
 import { TabBar } from "@/app/admin/storefront-preview/_components/header-client";
 import { AcceptanceStrip, Footer } from "@/app/admin/storefront-preview/_components/parts";
-import { installationIdentity } from "@/config/installation";
+import { currentStoreIdentity } from "@/app/_design/identity";
 import { getDb } from "@/db/client";
 import { currentCustomer, customerSignInAvailable } from "@/modules/customers/server";
 import { publishedPolicies } from "@/modules/policies/publication";
@@ -31,7 +31,7 @@ export default async function ShopLayout({ children, params }: { children: React
   const [facets, published, customer] = await Promise.all([catalogueFacets(db, PUBLIC_SCOPE), publishedPolicies(db), currentCustomer(await headers()).catch(() => null)]);
   const policies = published.map((p) => ({ kind: p.kind, href: `/${lang}/policies/${p.kind}` }));
   const t = dictionary(lang);
-  const identity = installationIdentity();
+  const identity = await currentStoreIdentity();
   const theme = { "--color-sf-ink": identity.theme.ink, "--color-sf-sun": identity.theme.accent, "--color-sf-paper": identity.theme.paper } as React.CSSProperties;
   return (
     <SfFrame
@@ -48,7 +48,7 @@ export default async function ShopLayout({ children, params }: { children: React
         {t.skip}
       </a>
       {access === "acceptance" ? <AcceptanceStrip lang={lang} /> : null}
-      <Header lang={lang} facets={facets} storeName={identity.storeName} surface="shop" />
+      <Header lang={lang} facets={facets} storeName={identity.storeName} logo={identity.logo} surface="shop" />
       <main id="sf-main" tabIndex={-1} className="mx-auto w-full max-w-7xl flex-1 px-4 pt-5 pb-4 focus:outline-none lg:px-8 lg:pt-10">
         {children}
       </main>

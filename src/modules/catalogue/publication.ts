@@ -8,6 +8,7 @@ import { DomainError } from "../domain-error";
 import { type Once, runOnce } from "../idempotency/service";
 import { isStagingDatabase } from "../launch/acceptance";
 import { publishPhotosToCdn, withdrawPhotosFromCdn } from "../media/cdn-sync";
+import { approvedPublicationRuleFromSettings } from "../settings/store";
 import { evaluateReadiness, type PreparationItem, type ReadinessItem } from "./readiness";
 import { contentDigest } from "./review";
 import { validateId, validateVersion } from "./rules";
@@ -44,9 +45,14 @@ export const PROPOSED_PUBLICATION_RULE: PublicationRule = Object.freeze({
   items: Object.freeze(["name", "description", "variant", "measurements", "fabric", "care", "sizes", "category", "photo", "alt"] as const),
 });
 
-/** The rule that applies on this database now: the approved one; else, on the staging-marked database only, the proposed one. */
+/**
+ * The rule that applies on this database now: one fixed in code (none), else the one the Owner approved in Admin settings
+ * (ADR-0012), else, on the staging-marked database only, the proposed one for founder acceptance.
+ */
 export async function publicationRuleFor(db: Db, approved: PublicationRule | null = APPROVED_PUBLICATION_RULE): Promise<PublicationRule | null> {
   if (approved) return approved;
+  const owners = await approvedPublicationRuleFromSettings(db);
+  if (owners) return owners;
   return (await isStagingDatabase(db)) ? PROPOSED_PUBLICATION_RULE : null;
 }
 

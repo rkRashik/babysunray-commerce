@@ -1,5 +1,7 @@
 // `npm run db:migrate:staging -- --backup <file> --report <file>` (or `--first-time` instead of `--backup` on an empty
-// database): applies the committed migrations to a HOSTED STAGING database, then its privilege script, then audits the
+// database), and `npm run db:migrate:production -- --first-time --report <file>` for a NEW, EMPTY production database
+// (ADR-0012; the same command with --target production: .env.production.local, PRODUCTION_* settings, the marker
+// 'babysunray:production'): applies the committed migrations to a HOSTED database, then its privilege script, then audits the
 // privilege boundary. For the founder to run in an interactive terminal; it is never run by the application, a test or
 // a scheduler, and Next.js never migrates on start. Gate H.45; docs/operations/staging-setup.md.
 //
@@ -16,10 +18,10 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
 import { auditPrivilegeReport } from "../src/db/hosted-security.mts";
-import { APP_ROLE, applicationTableCount, assertNotLocalDatabase, assertRecentBackup, assertStagingTarget, migrationState, parseStagingUrl } from "../src/db/hosted-target.mts";
+import { APP_ROLE, applicationTableCount, assertMarkedTarget, assertNotLocalDatabase, assertRecentBackup, migrationState, PRODUCTION_MARKER, parseStagingUrl, STAGING_MARKER } from "../src/db/hosted-target.mts";
 import { MIGRATION_LOCK } from "../src/db/migrate-verified.mts";
 import { outsideRepository, reportWriter } from "../src/db/hosted-report.mts";
-import { readStagingEnv } from "./staging-env.mts";
+import { readHostedEnv } from "./staging-env.mts";
 import { askVisible, assertInteractiveTerminal } from "./prompt.mts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -43,23 +45,30 @@ const arg = (name: string) => {
   return i > 0 ? process.argv[i + 1] : undefined;
 };
 
+const PRODUCTION = arg("--target") === "production";
+const TARGET = PRODUCTION
+  ? { kind: "production" as const, prefix: "PRODUCTION" as const, marker: PRODUCTION_MARKER, command: "db:migrate:production" }
+  : { kind: "staging" as const, prefix: "STAGING" as const, marker: STAGING_MARKER, command: "db:migrate:staging" };
+
 async function main(): Promise<void> {
-  const env = readStagingEnv();
+  const env = readHostedEnv(TARGET.kind);
   const reportFile = outsideRepository(arg("--report"), "report file", ROOT);
   if (existsSync(reportFile)) throw new Error("The report file already exists. Choose a new name; nothing was changed.");
   const firstTime = process.argv.includes("--first-time");
+  // No production backup command exists yet, so production supports only a first installation into an empty database.
+  if (PRODUCTION && !firstTime) throw new Error("For production, only --first-time on a new, empty database is supported. Nothing was changed.");
   const backupFile = firstTime ? undefined : outsideRepository(arg("--backup"), "backup file (from npm run backup:create:staging)", ROOT);
-  const conn = parseStagingUrl(env, "STAGING_MIGRATION_DATABASE_URL", { pooled: false });
+  const conn = parseStagingUrl(env, `${TARGET.prefix}_MIGRATION_DATABASE_URL`, { pooled: false, prefix: TARGET.prefix });
   assertNotLocalDatabase(conn, env);
 
-  const report: Record<string, unknown> = { command: "db:migrate:staging", startedAt: new Date().toISOString(), target: { host: conn.host, port: conn.port, database: conn.database, user: conn.user }, result: "not started" };
+  const report: Record<string, unknown> = { command: TARGET.command, startedAt: new Date().toISOString(), target: { host: conn.host, port: conn.port, database: conn.database, user: conn.user }, result: "not started" };
   const write = reportWriter(reportFile);
   const save = () => write(report);
   const client = new pg.Client({ host: conn.host, port: conn.port, database: conn.database, user: conn.user, password: conn.password, ssl: conn.ssl, connectionTimeoutMillis: 10_000 });
   try {
     await client.connect();
-    const identity = await assertStagingTarget(client);
-    if (identity.user === APP_ROLE) throw new Error(`Connected as ${APP_ROLE}: migrations need the migration role (STAGING_MIGRATION_DATABASE_URL), never the application's.`);
+    const identity = await assertMarkedTarget(client, TARGET.marker);
+    if (identity.user === APP_ROLE) throw new Error(`Connected as ${APP_ROLE}: migrations need the migration role (${TARGET.prefix}_MIGRATION_DATABASE_URL), never the application's.`);
     const before = await migrationState(client, MIGRATIONS);
     report.before = before;
     if (before.ahead || before.mismatches.length) throw new Error("The database's migration history does not match this checkout (it is newer, or diverged). Nothing was changed.");
@@ -68,7 +77,7 @@ async function main(): Promise<void> {
     if (!firstTime) report.backup = { ...assertRecentBackup(backupFile!, { host: conn.host, database: identity.database }), sha256: createHash("sha256").update(readFileSync(backupFile!)).digest("hex") };
 
     assertInteractiveTerminal();
-    console.log(`Staging database: ${identity.database} on ${conn.host} as ${identity.user} (marked staging).`);
+    console.log(`${PRODUCTION ? "PRODUCTION" : "Staging"} database: ${identity.database} on ${conn.host} as ${identity.user} (marked ${TARGET.kind}).`);
     console.log(`Applied: ${before.applied} of ${before.expected} migrations; ${before.expected - before.applied} will be applied in one transaction.`);
     const typed = (await askVisible(`Type the host name to continue (${conn.host}): `)).trim();
     if (typed !== conn.host) throw new Error("The host name did not match. Nothing was changed.");
@@ -115,6 +124,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error(error instanceof Error && !/Failed query|password/i.test(error.message) ? error.message : "Staging migration failed.");
+  console.error(error instanceof Error && !/Failed query|password/i.test(error.message) ? error.message : "Migration failed.");
   process.exitCode = 1;
 });

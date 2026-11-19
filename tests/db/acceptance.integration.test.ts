@@ -181,7 +181,9 @@ describe("customers and the Owner", () => {
     await expect(
       pool.query("insert into customer_accounts (account_id, provider_id, user_id, access_token, updated_at) values ('g-1', 'google', $1, 'token', now())", [twin.rows[0].id]),
     ).rejects.toThrow(/customer_accounts_no_secrets/);
-    await expect(pool.query("insert into customer_accounts (account_id, provider_id, user_id, password, updated_at) values ('c-1', 'credential', $1, 'x', now())", [twin.rows[0].id])).rejects.toThrow();
+    // An email account may hold a password hash (migration 0021), never an OAuth token; other providers neither.
+    await expect(pool.query("insert into customer_accounts (account_id, provider_id, user_id, password, access_token, updated_at) values ('c-1', 'credential', $1, 'x', 't', now())", [twin.rows[0].id])).rejects.toThrow();
+    await expect(pool.query("insert into customer_accounts (account_id, provider_id, user_id, updated_at) values ('f-1', 'facebook', $1, now())", [twin.rows[0].id])).rejects.toThrow();
   });
 });
 

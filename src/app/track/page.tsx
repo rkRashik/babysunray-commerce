@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { BrandLogo } from "@/app/_design/brand";
 import { flFontVariables } from "@/app/_design/fonts";
-import { installationIdentity } from "@/config/installation";
+import { currentStoreIdentity } from "@/app/_design/identity";
 import { TrackView } from "./track-view";
 
 // Guest order tracking (founder rule K). The page itself holds no data: the order is fetched by the browser
@@ -14,8 +14,8 @@ export const metadata: Metadata = { title: "Your order", robots: { index: false,
 
 export const viewport: Viewport = { viewportFit: "cover", themeColor: "#f9f6f1" };
 
-export default function TrackPage() {
-  const identity = installationIdentity();
+export default async function TrackPage() {
+  const identity = await currentStoreIdentity();
   const theme = { "--color-sf-ink": identity.theme.ink, "--color-sf-sun": identity.theme.accent, "--color-sf-paper": identity.theme.paper } as React.CSSProperties;
-  return <TrackView logo={<BrandLogo name={identity.storeName} height={34} textClassName="text-[1.5rem]" />} className={`sf ${flFontVariables} min-h-dvh`} style={theme} />;
+  return <TrackView logo={<BrandLogo name={identity.storeName} logo={identity.logo} height={34} textClassName="text-[1.5rem]" />} className={`sf ${flFontVariables} min-h-dvh`} style={theme} />;
 }

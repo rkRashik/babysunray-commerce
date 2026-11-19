@@ -1,7 +1,7 @@
 import type { Viewport } from "next";
 import { notFound } from "next/navigation";
 import { flFontVariables } from "@/app/_design/fonts";
-import { installationIdentity } from "@/config/installation";
+import { currentStoreIdentity } from "@/app/_design/identity";
 import { getDb } from "@/db/client";
 import { dictionary, isLang } from "@/modules/storefront/i18n";
 import { previewFacets } from "@/modules/storefront/service";
@@ -26,7 +26,7 @@ export default async function PreviewLayout({ children, params }: { children: Re
   const principal = await requireAdmin("storefront:preview");
   const facets = await previewFacets(getDb(), principal);
   const t = dictionary(lang);
-  const identity = installationIdentity();
+  const identity = await currentStoreIdentity();
   // The installation's colours (validated for contrast) replace ink, sun and paper for this subtree.
   const theme = { "--color-sf-ink": identity.theme.ink, "--color-sf-sun": identity.theme.accent, "--color-sf-paper": identity.theme.paper } as React.CSSProperties;
   return (
@@ -35,7 +35,7 @@ export default async function PreviewLayout({ children, params }: { children: Re
         {t.skip}
       </a>
       <PreviewStrip lang={lang} />
-      <Header lang={lang} facets={facets} storeName={identity.storeName} surface="preview" />
+      <Header lang={lang} facets={facets} storeName={identity.storeName} logo={identity.logo} surface="preview" />
       <main id="sf-main" tabIndex={-1} className="mx-auto w-full max-w-7xl flex-1 px-4 pt-5 pb-4 focus:outline-none lg:px-8 lg:pt-10">
         {children}
       </main>

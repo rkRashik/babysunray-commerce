@@ -14,7 +14,7 @@ vi.mock("@/db/client", () => ({
 const { POST: checkout, GET: checkoutGet } = await import("../../src/app/api/shop/checkout/route");
 const { POST: customerPost, GET: customerGet } = await import("../../src/app/api/customer-auth/[...all]/route");
 const { GET: googleCallback } = await import("../../src/app/api/auth/callback/google/route");
-const { CUSTOMER_AUTH_ROUTES } = await import("../../src/modules/customers/auth");
+const { customerRouteAllowed } = await import("../../src/modules/customers/auth");
 
 const ORIGIN = "https://shop.example.test";
 const order = JSON.stringify({ customer: { name: "Fictional", phone: "01711000000", address: "Fictional Road" }, deliveryZone: "dhaka_city", items: [{ sku: "X-1", quantity: 1, unitPricePaisa: 100 }], deliveryChargePaisa: 0, totalPaisa: 100 });
@@ -44,8 +44,13 @@ describe("POST /api/shop/checkout without an acceptance pass", () => {
 });
 
 describe("customer sign-in doors", () => {
-  it("allow exactly three endpoints", () => {
-    expect([...CUSTOMER_AUTH_ROUTES]).toEqual(["POST /sign-in/social", "GET /callback/google", "POST /sign-out"]);
+  it("allow only the listed endpoints, never account linking, deletion or token reads", () => {
+    for (const r of ["POST /sign-in/social", "GET /callback/google", "POST /sign-out", "POST /sign-up/email", "POST /sign-in/email", "GET /verify-email", "POST /request-password-reset", "GET /reset-password/abcdefgh1234", "POST /reset-password", "POST /change-password", "POST /update-user"]) {
+      expect(customerRouteAllowed(r), r).toBe(true);
+    }
+    for (const r of ["POST /link-social", "POST /delete-user", "GET /list-accounts", "POST /get-access-token", "GET /get-session", "POST /change-email", "GET /reset-password/x", "GET /reset-password/abc/def", "POST /unlink-account"]) {
+      expect(customerRouteAllowed(r), r).toBe(false);
+    }
   });
 
   it("answer 404 without an acceptance pass, for allowed and other paths alike, without database work", async () => {

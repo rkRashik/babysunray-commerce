@@ -184,6 +184,11 @@ const EXPECTED_DEFAULTS: Record<string, string> = {
   "public.customer_rate_limits.id": "gen_random_uuid()",
   "public.customer_orders.created_at": "now()",
   "public.policy_publications.created_at": "now()",
+  // Migration 0021: store settings and Owner recovery codes.
+  "public.store_settings.version": "1",
+  "public.store_settings.updated_at": "now()",
+  "public.owner_recovery_codes.id": "gen_random_uuid()",
+  "public.owner_recovery_codes.created_at": "now()",
   "drizzle.__drizzle_migrations.id": "nextval('drizzle.__drizzle_migrations_id_seq'::regclass)",
 };
 

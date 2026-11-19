@@ -7,7 +7,13 @@ A functional internal area at `/admin` (`src/app/admin`), built with the Next.js
 
 | Screen | Does | Permission |
 |---|---|---|
-| `/admin/login` | Email and password sign-in | none |
+| `/admin/login` | Email and password sign-in; "Forgot password?" | none |
+| `/admin/setup` | First-time setup: the first Owner, with the setup grant (ADMIN_SETUP_TOKEN) and recovery codes; closed once an Owner exists | none (grant) |
+| `/admin/recover` | Set a new password with a recovery code | none (code) |
+| `/admin/onboarding` | Store setup checklist | `settings:write` |
+| `/admin/settings/store` | Store name, description, contact channels, logo, email status | `settings:write` |
+| `/admin/settings/publication` | Approve the publication requirements (I-6) | `catalog:publish`, `settings:write` |
+| `/admin/settings/security` | Recovery codes left; make new ones | any Owner |
 | `/admin` | Products (draft, archived), oldest first, 25 per page; search by English or Bangla name, slug or SKU; filters for status, category, stock and what is still missing; readiness indicators; all kept in the URL | `catalog:read` |
 | `/admin/products/new` | Create a draft product (English and Bangla fields) | `catalog:write` |
 | `/admin/products/{id}` | Content with missing languages, the readiness checklist, internal review, publication (publish to the shop under the rule that applies here, or withdraw; history), size chart, photos, variants with price (BDT) and on-hand stock; add or deactivate a variant, archive the product (confirmations first) | `catalog:read`, `stock:read`; changes `catalog:write`, review `catalog:review`, publish `catalog:publish` |

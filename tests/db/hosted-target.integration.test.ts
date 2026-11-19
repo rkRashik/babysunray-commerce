@@ -33,7 +33,7 @@ async function rolledBack<T>(work: () => Promise<T>): Promise<T> {
 
 describe("the staging marker", () => {
   it("an unmarked database (the local test database) is refused", async () => {
-    await expect(assertStagingTarget(client)).rejects.toThrow(/not marked as staging/);
+    await expect(assertStagingTarget(client)).rejects.toThrow(/not marked/);
   });
   it("a database marked production is refused; only the exact staging marker passes", async () => {
     await rolledBack(async () => {

@@ -26,6 +26,7 @@ Each document starts with a status line. Most are **Draft — Founder Review**: 
 | [ADR-0008: Customer identity, recovery and 2FA](adr/0008-customer-identity-recovery-and-mfa.md) | Proposal only: separate customer identity, Owner recovery options, an evaluation of Better Auth's two-factor plugin, staff permissions |
 | [ADR-0009: Hosted database security boundary](adr/0009-hosted-database-security-boundary.md) | Hosted database security boundary (Data API, roles, privileges) and serverless connection design (Draft) |
 | [ADR-0010: Hosting and image delivery](adr/0010-hosting-and-image-delivery.md) | Confirmed hosting target (Netlify, Supabase, Cloudinary), Cloudinary delivery of published photos only, and the Netlify compatibility review |
+| [ADR-0012: Browser installation, store setup and customer accounts](adr/0012-installation-setup-and-customer-accounts.md) | First Owner in the browser with a setup grant, recovery codes, store settings and publication requirements, customer email accounts, Resend email, production installation (Draft) |
 | [ADR-0011: Founder acceptance and customer sign-in](adr/0011-founder-acceptance-and-customer-sign-in.md) | The real shop and checkout for founder acceptance only (staging database), product and policy publication, optional Google sign-in for customers, per-client limits on Netlify (Draft) |
 | [Backend handoff](architecture/backend-handoff.md) | One page for the next client developer: architecture, Owner API, closed public services, settings, blockers, decisions, verification limits |
 | [Backend completeness](architecture/backend-completeness.md) | Feature by feature: implemented, tested, production readiness, what blocks it, remaining work |
@@ -68,6 +69,7 @@ The machine-readable contract is served by the application at `/api/v1/openapi.j
 | [Infrastructure compatibility](operations/infrastructure.md) | Hosted settings (persistent server, serverless, Supabase pooler), photo store, HTTP maintenance, health probes, what is and is not verified, founder setup |
 | [Production migration](operations/production-migration.md) | Plan and read-only preflight for a future production migration (nothing can migrate production today) |
 | [Staging setup](operations/staging-setup.md) | For the founder: a separate Supabase staging project, locked down, migrated and verified with the staging commands |
+| [Installing a new store](operations/installation-production.md) | For the founder: a fresh production database, its settings, and the Owner created in the browser |
 | [Founder acceptance](operations/acceptance.md) | For the founder: one-time staging setup, the one Netlify variable list, and the acceptance checklist with exact URLs |
 | [Offline sheets](operations/offline-templates.md) | Blank order, stock, COD and courier sheets for an outage |
 

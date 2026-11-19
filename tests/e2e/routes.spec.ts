@@ -69,10 +69,10 @@ test("every storefront, tracking and Admin route loads cleanly on a desktop and 
     `/admin/products/${productId}/edit`, `/admin/products/${productId}/measurements`, `/admin/products/${productId}/photos`, `/admin/variants/${variantId}/edit`,
     `/admin/skus/${sku}`, "/admin/import", "/admin/catalogue-preparation", "/admin/product-reviews", "/admin/categories", "/admin/settings/delivery",
     "/admin/reports", "/admin/stock-counts", "/admin/exports", "/admin/media-health", "/admin/policies", "/admin/launch-readiness",
-    "/admin/print/picking", "/admin/print/cod", "/admin/acceptance", shopBase,
+    "/admin/print/picking", "/admin/print/cod", "/admin/acceptance", "/admin/onboarding", "/admin/settings/store", "/admin/settings/publication", "/admin/settings/security", shopBase,
     ...["en", "bn"].flatMap((l) => [`${shopBase}/${l}`, `${shopBase}/${l}/products`, `${shopBase}/${l}/products/${shop.slug}`, `${shopBase}/${l}/cart`, `${shopBase}/${l}/checkout`, `${shopBase}/${l}/order`]),
     "/",
-    ...["en", "bn"].flatMap((l) => [`/${l}`, `/${l}/products`, `/${l}/products/${shop.slug}`, `/${l}/cart`, `/${l}/checkout`, `/${l}/order`]),
+    ...["en", "bn"].flatMap((l) => [`/${l}`, `/${l}/products`, `/${l}/products/${shop.slug}`, `/${l}/cart`, `/${l}/checkout`, `/${l}/order`, `/${l}/account`]),
   ];
 
   const logoStatuses: string[] = [];
@@ -102,7 +102,7 @@ test("every storefront, tracking and Admin route loads cleanly on a desktop and 
 
   // The guest tracking page and the sign-in page, signed out.
   await page.context().clearCookies();
-  for (const route of ["/track", "/admin/login"]) {
+  for (const route of ["/track", "/admin/login", "/admin/setup", "/admin/recover"]) {
     const { problems } = watch(page);
     const response = await page.goto(route);
     expect(response?.status(), route).toBe(200);

@@ -25,7 +25,12 @@ function pngSize(file: string): Size | null {
 }
 
 /** The wordmark at a given height, or the shop's name as text. */
-export function BrandLogo({ name, height, className = "", textClassName = "" }: { name: string; height: number; className?: string; textClassName?: string }) {
+export function BrandLogo({ name, height, logo, className = "", textClassName = "" }: { name: string; height: number; logo?: { src: string; width: number; height: number } | null; className?: string; textClassName?: string }) {
+  // The logo the Owner uploaded in Admin settings comes first.
+  if (logo) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={logo.src} alt={name} width={Math.round((logo.width / logo.height) * height)} height={height} className={`block h-auto max-w-full ${className}`} decoding="async" fetchPriority="high" />;
+  }
   const size = pngSize("logo.png");
   if (!size) return <span className={`fl-wordmark ${textClassName}`}>{name}</span>;
   return (

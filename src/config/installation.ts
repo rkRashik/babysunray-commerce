@@ -8,8 +8,10 @@ export type InstallationIdentity = {
   storeName: string;
   /** A short public description in each language, or null (nothing shown). */
   storeLine: { en: string | null; bn: string | null };
-  /** Shown only when configured. */
-  contact: { phone: string | null; email: string | null };
+  /** Shown only when configured. WhatsApp and Messenger come from the Admin store settings only. */
+  contact: { phone: string | null; email: string | null; whatsapp?: string | null; messenger?: string | null };
+  /** An uploaded logo (Admin store settings), served by /brand/logo; null: the committed public/brand files or the name. */
+  logo?: { src: string; width: number; height: number } | null;
   /** Storefront colours (First Light): text (ink), the action colour (accent) and the page (paper), each checked for readable contrast. */
   theme: { ink: string; accent: string; paper: string };
 };

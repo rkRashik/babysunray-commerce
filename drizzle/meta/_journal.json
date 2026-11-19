@@ -148,6 +148,13 @@
       "when": 1795061773619,
       "tag": "0020_acceptance_commerce",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795081179869,
+      "tag": "0021_store_setup_and_accounts",
+      "breakpoints": true
     }
   ]
 }

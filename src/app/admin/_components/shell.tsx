@@ -8,6 +8,7 @@ import {
   FileText,
   FolderTree,
   ImageIcon,
+  KeyRound,
   LayoutDashboard,
   ListChecks,
   type LucideIcon,
@@ -22,12 +23,12 @@ import {
 import Link from "next/link";
 import { BrandMark } from "@/app/_design/brand";
 import { flFontVariables } from "@/app/_design/fonts";
-import { installationIdentity } from "@/config/installation";
+import { currentStoreIdentity } from "@/app/_design/identity";
 import { SignOutButton } from "./auth-forms";
 import { AdminMenu } from "./admin-menu";
 
 type Crumb = { href: string; label: string; lang?: string };
-type Current = "dashboard" | "products" | "new" | "import" | "preparation" | "reviews" | "categories" | "orders" | "delivery" | "reports" | "counts" | "exports" | "media" | "preview" | "policies" | "launch" | "acceptance";
+type Current = "dashboard" | "products" | "new" | "import" | "preparation" | "reviews" | "categories" | "orders" | "delivery" | "reports" | "counts" | "exports" | "media" | "preview" | "policies" | "launch" | "acceptance" | "onboarding" | "store" | "publication" | "security";
 
 // Admin's navigation, grouped by the work it serves. Every Admin screen is reachable from here.
 const NAV: { group: string; items: { key: Current; href: string; label: string; icon: LucideIcon }[] }[] = [
@@ -59,9 +60,18 @@ const NAV: { group: string; items: { key: Current; href: string; label: string; 
     ],
   },
   {
+    group: "Settings",
+    items: [
+      { key: "onboarding", href: "/admin/onboarding", label: "Store setup", icon: ListChecks },
+      { key: "store", href: "/admin/settings/store", label: "Store settings", icon: Store },
+      { key: "delivery", href: "/admin/settings/delivery", label: "Delivery charges", icon: Truck },
+      { key: "publication", href: "/admin/settings/publication", label: "Publication requirements", icon: ClipboardCheck },
+      { key: "security", href: "/admin/settings/security", label: "Account security", icon: KeyRound },
+    ],
+  },
+  {
     group: "Shop",
     items: [
-      { key: "delivery", href: "/admin/settings/delivery", label: "Delivery charges", icon: Truck },
       { key: "preview", href: "/admin/storefront-preview", label: "Storefront preview", icon: Eye },
       { key: "policies", href: "/admin/policies", label: "Policies", icon: FileText },
       { key: "acceptance", href: "/admin/acceptance", label: "Founder acceptance", icon: Store },
@@ -79,7 +89,7 @@ const QUICK: Current[] = ["dashboard", "orders", "products"];
 // Admin layout (First Light, the professional side of the system): a cocoa sidebar on a desktop; on a phone a
 // slim top bar, and a bottom bar (Dashboard, Orders, Products, Menu) under the thumb. The Menu lists every page, grouped,
 // in large rows with their icons.
-export function AdminShell({
+export async function AdminShell({
   title,
   titleLang,
   children,
@@ -99,7 +109,7 @@ export function AdminShell({
   /** Buttons or links beside the title (the page's main actions). */
   actions?: React.ReactNode;
 }) {
-  const { storeName } = installationIdentity();
+  const { storeName } = await currentStoreIdentity();
   return (
     <div className={`${adminSurface} min-h-screen lg:flex`}>
       <a
@@ -282,6 +292,10 @@ const NOTICES: Record<string, string> = {
   policyWithdrawn: "Withdrawn. Customers no longer see this policy.",
   acceptanceStarted: "Acceptance started in this browser for a few hours. Open the shop below.",
   acceptanceEnded: "Acceptance ended in this browser. The shop is closed to it again.",
+  storeSaved: "Store settings saved.",
+  logoSaved: "Logo saved.",
+  logoRemoved: "Logo removed.",
+  ruleApproved: "Publication requirements approved. Products that meet them can now be published.",
   "policy-saved": "Draft saved. It is private and not published.",
   "policy-reviewed": "Marked as reviewed by you. This is not publication or legal approval.",
 };

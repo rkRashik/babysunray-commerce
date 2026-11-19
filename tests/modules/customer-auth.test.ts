@@ -27,7 +27,7 @@ describe("Google sign-in settings", () => {
 });
 
 describe("the customer instance", () => {
-  const auth = createCustomerAuth({} as never, { baseURL: "https://shop.example.test", secret: SECRET, google: { clientId: CLIENT_ID, clientSecret: "fictional-secret-value-123" }, env: {} });
+  const auth = createCustomerAuth({} as never, { baseURL: "https://shop.example.test", secret: SECRET, google: { clientId: CLIENT_ID, clientSecret: "fictional-secret-value-123" }, email: null, env: {} });
   const options = auth.options;
 
   it("is Google only, never links accounts, and has its own path, cookies and secret", () => {
@@ -52,11 +52,15 @@ describe("the customer instance", () => {
   it("refuses an unverified address and drops every OAuth token before it is written", async () => {
     const hooks = options.databaseHooks!;
     const createUser = hooks.user!.create!.before!;
-    expect(await createUser({ email: "a@example.test", emailVerified: false, name: "A" } as never)).toBe(false);
-    expect(await createUser({ email: "a@example.test", emailVerified: true, name: "A" } as never)).toEqual({ data: { email: "a@example.test", emailVerified: true, name: "A" } });
+    const google = { path: "/callback/:id" } as never;
+    expect(await createUser({ email: "a@example.test", emailVerified: false, name: "A" } as never, google)).toBe(false);
+    expect(await createUser({ email: "a@example.test", emailVerified: true, name: "A" } as never, google)).toEqual({ data: { email: "a@example.test", emailVerified: true, name: "A" } });
+    // An email sign-up starts unverified (it cannot sign in until confirmed).
+    expect(await createUser({ email: "b@example.test", emailVerified: false, name: "B" } as never, { path: "/sign-up/email" } as never)).toEqual({ data: { email: "b@example.test", emailVerified: false, name: "B" } });
     const createAccount = hooks.account!.create!.before!;
     const written = (await createAccount({ providerId: "google", accountId: "1", accessToken: "t", refreshToken: "r", idToken: "i", password: "p" } as never)) as { data: Record<string, unknown> };
     expect(written.data).toMatchObject({ accessToken: null, refreshToken: null, idToken: null, password: null, accountId: "1" });
+    // Without email set up there are no password accounts at all.
     expect(await createAccount({ providerId: "credential", accountId: "1" } as never)).toBe(false);
   });
 });

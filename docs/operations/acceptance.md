@@ -17,7 +17,7 @@ The site `https://babysunray.com` runs on Netlify, behind Netlify's visitor prot
 |---|---|---|
 | 1 | Get the new code | `git pull` |
 | 2 | Back up staging, then apply database update 0020 | `npm run backup:create:staging`, then `npm run db:migrate:staging -- --backup <that file> --report <a new file outside the repository>` ([staging-setup.md](staging-setup.md)). Update 0020 only adds tables; nothing existing changes. |
-| 3 | An Owner account on staging (only if you cannot sign in at `https://babysunray.com/admin/login` yet) | `npm run auth:bootstrap-owner:staging`. It asks for your email, name and password; it refuses if an active Owner already exists. |
+| 3 | An Owner account on staging (only if you cannot sign in yet) | In the browser: set `ADMIN_SETUP_TOKEN` (section 3), redeploy, open `https://babysunray.com/admin/setup`. Emergency alternative: `npm run auth:bootstrap-owner:staging`. |
 | 4 | Google OAuth client "BabySunRay Production" (Google Cloud project BabySunRay-Commerce) | Authorised JavaScript origin `https://babysunray.com`; authorised redirect URI exactly `https://babysunray.com/api/auth/callback/google` (already set). Consent screen scopes: `openid`, `email`, `profile` only. In "Testing" mode add your own Google account as a test user. |
 | 5 | Netlify environment variables | The list in section 3. Then **Deploys → Trigger deploy** so the functions read them. |
 | 6 | Check | Open `https://babysunray.com/admin/acceptance`: "Database: Marked as the staging database", "Database update 0020: Applied", "Continue with Google: Offered to shoppers", "Per-client checkout limit: On". |
@@ -36,6 +36,8 @@ Site configuration → Environment variables. Mark keys and secrets as **secret*
 | `GOOGLE_CLIENT_ID` | The client ID of "BabySunRay Production" | **New** |
 | `GOOGLE_CLIENT_SECRET` | Its client secret (secret) | **New** |
 | `TRUSTED_PROXY` | `netlify` | **New** |
+| `RESEND_API_KEY`, `EMAIL_FROM` | Your Resend API key (secret) and a sender on your verified domain | **New** (ADR-0012): customer email accounts, verification and password reset; without them only guest and Google |
+| `ADMIN_SETUP_TOKEN` | Only if the staging site has no Owner yet: 32+ random characters, typed once at `/admin/setup` | Optional |
 | `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` | Your Cloudinary account's values (secret for the last two); optional `CLOUDINARY_FOLDER` | Optional: without them published photos are served by the site itself |
 | `STORE_NAME`, `STORE_LINE_EN`, `STORE_LINE_BN`, `STORE_CONTACT_PHONE`, `STORE_CONTACT_EMAIL` | The shop's real name, line and contact, when you have approved them | Optional; nothing is shown without them |
 

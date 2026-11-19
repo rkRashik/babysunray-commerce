@@ -14,14 +14,14 @@ import { base, Localised, type Surface } from "./parts";
 // Three categories fit beside search on a wide desktop; below 1280 px only "Shop All" (the rest is one tap away there).
 const MAX_NAV = 3;
 
-export function Header({ lang, facets, storeName, surface }: { lang: Lang; facets: Facets; storeName: string; surface: Surface }) {
+export function Header({ lang, facets, storeName, logo, surface }: { lang: Lang; facets: Facets; storeName: string; logo?: { src: string; width: number; height: number } | null; surface: Surface }) {
   const t = dictionary(lang);
   const link = "inline-flex min-h-11 items-center rounded-full px-3 text-[0.9375rem] font-semibold whitespace-nowrap transition-colors hover:bg-sf-sun-soft";
   return (
     <header className="sticky top-0 z-30 border-b border-sf-line bg-sf-paper/95 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 lg:h-20 lg:gap-4 lg:px-8">
         <Link href={base(lang, surface)} className="me-auto inline-flex min-h-11 shrink-0 items-center rounded-lg lg:me-0" data-testid="store-home">
-          <BrandLogo name={storeName} height={36} className="lg:h-[44px] lg:w-auto" textClassName="text-[1.5rem] lg:text-[1.75rem]" />
+          <BrandLogo name={storeName} logo={logo} height={36} className="lg:h-[44px] lg:w-auto" textClassName="text-[1.5rem] lg:text-[1.75rem]" />
         </Link>
         <nav aria-label={t.mainNav} className="me-auto hidden min-w-0 lg:block">
           <ul className="flex items-center gap-1">

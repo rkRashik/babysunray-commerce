@@ -876,7 +876,7 @@ export const trackingRateLimits = pgTable(
   (t) => [
     check(
       "tracking_rate_limits_bucket_valid",
-      sql`${t.bucket} in ('failure', 'checkout') or ${t.bucket} ~ '^link:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' or ${t.bucket} ~ '^checkout-client:[0-9a-f]{64}$'`,
+      sql`${t.bucket} in ('failure', 'checkout', 'admin-setup', 'admin-recovery') or ${t.bucket} ~ '^link:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' or ${t.bucket} ~ '^checkout-client:[0-9a-f]{64}$'`,
     ),
     check("tracking_rate_limits_count_positive", sql`${t.count} >= 1`),
   ],
@@ -1213,9 +1213,9 @@ export const customerAccounts = pgTable(
   (t) => [
     index("customer_accounts_user_id_idx").on(t.userId),
     uniqueIndex("customer_accounts_provider_account_key").on(t.providerId, t.accountId),
-    // Google only, and no credential of any kind is kept.
-    check("customer_accounts_provider_valid", sql`${t.providerId} = 'google'`),
-    check("customer_accounts_no_secrets", sql`${t.accessToken} is null and ${t.refreshToken} is null and ${t.idToken} is null and ${t.password} is null`),
+    // Google or email and password (migration 0021). No OAuth token is ever kept; a password hash only for the email account.
+    check("customer_accounts_provider_valid", sql`${t.providerId} in ('google', 'credential')`),
+    check("customer_accounts_no_secrets", sql`${t.accessToken} is null and ${t.refreshToken} is null and ${t.idToken} is null and (${t.password} is null or ${t.providerId} = 'credential')`),
   ],
 );
 
@@ -1254,4 +1254,62 @@ export const customerOrders = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("customer_orders_customer_user_id_idx").on(t.customerUserId, t.createdAt)],
+);
+
+// The store's own settings, edited by the Owner in Admin (migration 0021; src/modules/settings/store.ts). One row (id 1).
+// Empty fields fall back to the STORE_* environment defaults (src/config/installation.ts), so a fresh installation shows
+// neutral defaults and no other business's details. The logo is kept here, re-encoded and size-capped (base64), and served
+// by /brand/logo. The publication rule is the Owner's approval of what a product needs before it is published (I-6).
+export const storeSettings = pgTable(
+  "store_settings",
+  {
+    id: integer("id").primaryKey(),
+    storeName: text("store_name"),
+    lineEn: text("line_en"),
+    lineBn: text("line_bn"),
+    contactPhone: text("contact_phone"),
+    contactEmail: text("contact_email"),
+    contactWhatsapp: text("contact_whatsapp"),
+    contactMessenger: text("contact_messenger"),
+    logoBase64: text("logo_base64"),
+    logoContentType: text("logo_content_type"),
+    logoWidth: integer("logo_width"),
+    logoHeight: integer("logo_height"),
+    logoSha256: text("logo_sha256"),
+    publicationRuleItems: jsonb("rule_items"),
+    publicationRuleApprovedAt: timestamp("rule_approved_at", { withTimezone: true }),
+    publicationRuleApprovedByUserId: userRef("rule_approved_by_user_id"),
+    version: version(),
+    updatedAt: updatedAt(),
+    updatedByUserId: userRef("updated_by_user_id"),
+  },
+  (t) => [
+    check("store_settings_single_row", sql`${t.id} = 1`),
+    check("store_settings_version_positive", sql`${t.version} >= 1`),
+    check(
+      "store_settings_texts_valid",
+      sql`coalesce(length(${t.storeName}), 1) between 1 and 60 and coalesce(length(${t.lineEn}), 0) <= 200 and coalesce(length(${t.lineBn}), 0) <= 200 and coalesce(length(${t.contactPhone}), 0) <= 30 and coalesce(length(${t.contactEmail}), 0) <= 120 and coalesce(length(${t.contactWhatsapp}), 0) <= 30 and coalesce(length(${t.contactMessenger}), 0) <= 200`,
+    ),
+    check(
+      "store_settings_logo_consistent",
+      sql`(${t.logoBase64} is null) = (${t.logoSha256} is null) and (${t.logoBase64} is null) = (${t.logoWidth} is null) and (${t.logoBase64} is null) = (${t.logoContentType} is null) and coalesce(length(${t.logoBase64}), 0) <= 700000 and (${t.logoContentType} is null or ${t.logoContentType} in ('image/png', 'image/jpeg', 'image/webp'))`,
+    ),
+    check("store_settings_rule_consistent", sql`(${t.publicationRuleApprovedAt} is null) = (${t.publicationRuleApprovedByUserId} is null) and (${t.publicationRuleApprovedAt} is null or ${t.publicationRuleItems} is not null)`),
+  ],
+);
+
+// One-time Owner recovery codes (migration 0021; src/modules/auth/recovery.ts): shown once at setup (or when regenerated),
+// stored only as SHA-256 digests. Redeeming one sets a new password and ends every session of that Owner.
+export const ownerRecoveryCodes = pgTable(
+  "owner_recovery_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    codeSha256: text("code_sha256").notNull().unique("owner_recovery_codes_code_sha256_key"),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("owner_recovery_codes_user_id_idx").on(t.userId), check("owner_recovery_codes_sha256_format", sql`${t.codeSha256} ~ '^[0-9a-f]{64}$'`)],
 );
