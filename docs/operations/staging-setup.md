@@ -144,6 +144,16 @@ Without the settings it prints **NOT RUN — awaiting founder setup**: that is n
 
 **Photos in the bucket are not in these backups.** Back them up with `npm run media:backup:staging -- --out D:BabySunray-staging` (same encrypted `.bsmedia` format; reads the database as `babysunray_app` and the bucket; changes neither) and compare with `npm run media:verify:staging`. Both were tested against a mocked Storage only. A restore into a bucket has no command yet. `npm run backup:status -- --dir D:BabySunray-staging --max-age-hours 24` shows how fresh the newest pair is.
 
+## 9. Your Owner account on staging (founder acceptance)
+
+The staging tests' accounts are disabled, so the staging site has no Owner you can sign in with until you create one:
+
+```
+npm run auth:bootstrap-owner:staging
+```
+
+It uses `STAGING_MIGRATION_DATABASE_URL`, refuses unless the database carries the staging marker, asks you to type the host name back, then asks for the email, name and password (not shown). It refuses if an Owner with active access already exists or the email is taken, and changes no existing account. Then follow [acceptance.md](acceptance.md).
+
 ## Never share or commit
 
 The administrator and application passwords, the secret key, the connection strings, `.env.staging.local`, backup files and their passphrases. The publishable key is less sensitive but still stays in the settings file.

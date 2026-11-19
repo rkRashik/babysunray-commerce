@@ -82,3 +82,30 @@ These are decisions or facts that need hosting; none can be settled in code.
 5. The founder's approval of the first production migration, recorded in the report.
 
 Until then the correct behaviour is the current one: no command can touch a production database.
+
+## 7. Switching the site to production, and what data moves (plan, ADR-0011)
+
+The founder creates the production database last. The site keeps running on staging until then, and acceptance can never run on production (it is not marked staging).
+
+**Order of work**
+
+1. The founder creates a new, empty Supabase project for production, its private photo bucket, the application role (`db/hosted/privileges.sql`) and the marker `babysunray:production` (by hand).
+2. The production migration command (section 2; not built yet) applies every migration to the empty database. Until it exists, nothing touches production.
+3. The founder creates the production Owner (a production variant of `auth:bootstrap-owner:staging`, not built yet).
+4. The catalogue arrives as described below; stock is received from a physical count; delivery charges and policies are entered and approved again in production.
+5. Netlify's variables are switched to the production values (`DATABASE_URL`, `SUPABASE_*`, a new `BETTER_AUTH_SECRET`; `GOOGLE_*`, `TRUSTED_PROXY`, `CLOUDINARY_*` stay or are replaced), and the site is redeployed, still behind visitor protection.
+6. The public launch is a separate founder decision and a code change to the launch gate.
+
+**What moves, and how**
+
+| Data | Moves? | How |
+|---|---|---|
+| Categories, products (as drafts), variants, prices, size charts | Yes, if the founder wants them | Exports "Product content" and "Size charts" from the source, then the existing create-only catalogue import into production (previewed, all or nothing). Every product arrives as a draft and is reviewed and published again under the approved rule. |
+| Product photos | Yes | Uploaded again in the production Office from the founder's originals (simple and checked by the upload pipeline). A bucket-to-bucket transfer tool is not built. |
+| Stock | No | Received in production from a physical count (stock counts), so the ledger starts from real stock. |
+| Delivery charges, store identity | No | Entered again by the founder in production. |
+| Policy texts | Text only, if wanted | Copied into production drafts by the founder; published again with approval. |
+| Orders, order items and history, reservations, stock movements, payments, returns, tracking links, guest submissions, customer accounts and their orders, sessions, audit and idempotency records, exports | **Never** | Rehearsal records stay in the staging database. Nothing copies them, and no tool exists to do so. |
+| The local development database | Never directly | Its catalogue can go through the same export and import path. |
+
+After the switch, staging tracking links do not resolve on the production site, and staging orders are not visible there.

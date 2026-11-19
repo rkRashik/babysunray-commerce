@@ -14,7 +14,7 @@
 | Private and original photos | Supabase Storage, private bucket (unchanged) |
 | Published product photo delivery | Cloudinary CDN (this ADR) |
 | Owner sign-in | Existing Better Auth, unchanged |
-| Customer sign-in (future) | Google OAuth. **Planned, not built, not enabled.** Customer sign-up stays refused until the founder approves it (ADR-0008, S-14) |
+| Customer sign-in | Optional Google sign-in for customers, chosen by the founder on 19 Nov 2026 and built as a separate instance ([ADR-0011](0011-founder-acceptance-and-customer-sign-in.md)); offered only where the shop is open and `GOOGLE_*` is set |
 
 ## Cloudinary: published photos only (built, inactive without settings)
 
@@ -35,15 +35,15 @@
 | Database | Use `DATABASE_RUNTIME=serverless`, `DATABASE_POOLER=transaction`, `DATABASE_SSL=require` with the Supabase transaction pooler (port 6543) and the `babysunray_app` role. Migrations are never run by Netlify; they stay a founder-run command |
 | Photo upload size | The Owner upload accepts up to 10 MB. Netlify documents about 6 MB for a function request body, so larger photos are likely refused there. Keep photos below about 5 MB, or design direct-to-storage uploads later (a decision, not built) |
 | Maintenance | `MAX_RUN_MS` is 45 s; Netlify Free functions are documented to stop sooner (about 10 s). The jobs are bounded and idempotent, but a run can be cut short. Scheduling is unresolved: no Netlify scheduled function is wired, and an external caller needs `MAINTENANCE_SECRET` |
-| Per-client rate limits | Need a trusted client address; the code reads no forwarded header (a test guards this). Netlify supplies one, but using it is a decision (open decision 1) |
+| Per-client rate limits | With `TRUSTED_PROXY=netlify` the code trusts Netlify's own `x-nf-client-connection-ip` and nothing else (ADR-0011); without it no address header is trusted (tests guard both). Not verified on the live site |
 | `sharp` | Used for photo processing; Netlify supports it, not verified here |
 | Previews | Branch and deploy-preview URLs are other origins; Better Auth (`BETTER_AUTH_URL`) is configured for one origin, so use the production site URL only |
-| Public shop | Closed by the launch gate whatever is deployed: `/` is a status page and `/track` works; the catalogue, checkout and publication are not routed |
+| Public shop | Closed by the launch gate whatever is deployed. The shop (`/en`, `/bn`) and its checkout are routed but answer only a founder acceptance pass on the staging-marked database (ADR-0011); `/` is a status page and `/track` works |
 | Is the URL itself private? | **No.** A private Git repository or Netlify project does not protect the site URL, and site-wide password protection is, to our knowledge, not part of Netlify Free (verify in the dashboard). Anyone with the URL can open `/`, `/track` and the health probes and reach the Owner sign-in page. Customers have nothing to buy and no way to register, pages are `noindex`, and `/office` and `/api/v1` need the Owner's sign-in, but the URL is reachable. Keep it unshared; connect automatic deploys only when ready |
 | Staging data on a site | `npm run netlify:env` (Gate H.58) writes the application's settings from the staging file as an importable `.env` file (never the administrator connection, never Cloudinary). A site configured this way uses the STAGING database and bucket; it has no Owner (the staging tests' accounts are disabled) and no real data. A production site needs its own Supabase project |
 
-**Netlify settings by name:** `DATABASE_URL`, `DATABASE_RUNTIME`, `DATABASE_POOLER`, `DATABASE_SSL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `MEDIA_STORAGE_PROVIDER`, `SUPABASE_URL`, `SUPABASE_STORAGE_BUCKET`, `SUPABASE_SERVICE_ROLE_KEY`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, optionally `CLOUDINARY_FOLDER`, `MAINTENANCE_SECRET`, `MAINTENANCE_ALLOW_GET`. Set the keys and secrets as secret variables; none is prefixed with the browser-public prefix.
+**Netlify settings by name:** the one current list, with values to use, is in [acceptance.md](../operations/acceptance.md) section 3 (adds `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TRUSTED_PROXY`). Set the keys and secrets as secret variables; none is prefixed with the browser-public prefix.
 
 ## Not decided
 
-The production Supabase project and production migration procedure ([production-migration.md](../operations/production-migration.md)); the maintenance scheduler; trusted-proxy rate limits; Google OAuth enablement and the customer account model (ADR-0008); a Cloudinary plan, usage limits and cost.
+The production Supabase project and production migration procedure ([production-migration.md](../operations/production-migration.md)); the maintenance scheduler (a scheduled call cannot pass visitor protection, so it waits for the launch); a Cloudinary plan, usage limits and cost.

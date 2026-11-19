@@ -5,6 +5,8 @@
 **Deciders:** Founder
 **Related:** [Product requirements](../product/requirements.md) (S-3, S-4, S-7, S-8, S-9, S-12, S-17, O-3, G-1, G-2, G-7), [order policy](../product/order-policy-decisions.md), [ADR-0005](0005-operation-idempotency.md), [launch readiness](../operations/launch-readiness.md)
 
+**Update (19 Nov 2026):** the service is now routed at `POST /api/shop/checkout`, but only for founder acceptance on the staging database; the public launch gate is unchanged ([ADR-0011](0011-founder-acceptance-and-customer-sign-in.md)).
+
 **In short:** Batch H.25–H.28 authorised a guest checkout backend that is built and tested but **not reachable**. An anonymous customer's order goes through the same order domain as an Owner-assisted one, with its own idempotency record, a customer audit actor and a tracking link delivered once. No route, page or Server Action calls it; public checkout stays disabled until S-17 and G-7 are met (`src/modules/launch/gate.ts`).
 
 ## Context

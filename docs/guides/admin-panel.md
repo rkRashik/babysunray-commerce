@@ -10,7 +10,7 @@ A functional internal area at `/office` (`src/app/office`), built with the Next.
 | `/office/login` | Email and password sign-in | none |
 | `/office` | Products (draft, archived), oldest first, 25 per page; search by English or Bangla name, slug or SKU; filters for status, category, stock and what is still missing; readiness indicators; all kept in the URL | `catalog:read` |
 | `/office/products/new` | Create a draft product (English and Bangla fields) | `catalog:write` |
-| `/office/products/{id}` | Content with missing languages, the readiness checklist, internal review, size chart, photos, variants with price (BDT) and on-hand stock; add or deactivate a variant, archive the product (both ask for confirmation first) | `catalog:read`, `stock:read`; changes `catalog:write`, review `catalog:review` |
+| `/office/products/{id}` | Content with missing languages, the readiness checklist, internal review, publication (publish to the shop under the rule that applies here, or withdraw; history), size chart, photos, variants with price (BDT) and on-hand stock; add or deactivate a variant, archive the product (confirmations first) | `catalog:read`, `stock:read`; changes `catalog:write`, review `catalog:review`, publish `catalog:publish` |
 | `/office/products/{id}/edit`, `.../measurements`, `.../photos` | Edit names, descriptions, fabric (with confirmation), care, size guidance, category and featured flag; the size chart in cm; upload, describe, reorder, replace and remove photos | `catalog:read`, `catalog:write` |
 | `/office/variants/{id}/edit` | Edit an active variant's size, colour and price in Taka; shows its stock, which the edit never changes | `catalog:read`, `catalog:write`, `stock:read` |
 | `/office/categories` | Create categories (slug, English and Bangla names) and rename them | `catalog:read`, `catalog:write` |
@@ -26,8 +26,9 @@ A functional internal area at `/office` (`src/app/office`), built with the Next.
 | `/office/exports` | XLSX, CSV and JSON exports, complete or filtered, and the export audit list ([exports.md](../operations/exports.md)) | `exports:create` |
 | `/office/print/...` | A4 print views: picking list, COD summary, stock count sheet (no contact details), one order's packing and shipping document | `orders:read`, `reports:read` or `stock:read` |
 | `/office/media-health` | Photo folder against the photo records ([product-photos.md](product-photos.md)) | `catalog:read` |
-| `/office/storefront-preview` | The private storefront preview and its two design concepts ([storefront-preview.md](storefront-preview.md)) | `storefront:preview` |
-| `/office/policies` | Private policy drafts in English and Bangla; never shown to customers ([launch-readiness.md](../operations/launch-readiness.md), section 3) | `policies:read`; changes `policies:write` |
+| `/office/storefront-preview` | The private storefront preview with drafts and a simulated checkout ([storefront-preview.md](storefront-preview.md)) | `storefront:preview` |
+| `/office/policies` | Policy drafts in English and Bangla; publish a reviewed version to customers (with your explicit approval) or withdraw it ([launch-readiness.md](../operations/launch-readiness.md), section 3) | `policies:read`; changes `policies:write`; publish `policies:publish` |
+| `/office/acceptance` | Founder acceptance: whether it can run here (staging database, update 0020), start or end it in this browser, links into the real shop ([acceptance.md](../operations/acceptance.md)) | `acceptance:run` |
 | `/office/launch-readiness` | What blocks a public shop, with live checks ([launch-readiness.md](../operations/launch-readiness.md), section 2) | `launch:read` |
 
 ## How it is protected

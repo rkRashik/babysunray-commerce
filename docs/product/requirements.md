@@ -387,6 +387,18 @@ As of 17 Nov 2026. Basis labels are unchanged; nothing here opens the shop. Over
 | API-11, S-15 | Hardened | Per-process bulkhead for anonymous database work; per-client limits still need a trusted proxy. |
 | EN-6, K-6 | Extended | Dropped idle connections no longer stop the process; migrations hold a lock; maintenance jobs with integrity checks; the restore drill covers the new audit tables. |
 
+### 9.7 Implementation status (founder acceptance, ADR-0011)
+
+As of 19 Nov 2026. Basis labels are unchanged except where the founder's instruction of that date decided (S-14: optional Google sign-in for customers). Nothing here opens the public shop: the launch gate stays closed. Details: [ADR-0011](../adr/0011-founder-acceptance-and-customer-sign-in.md), [acceptance.md](../operations/acceptance.md).
+
+| ID | Status | Notes |
+|---|---|---|
+| S-3, S-4, S-7, S-8, S-12 | Built; reachable only for founder acceptance | The real shop at `/en` and `/bn` (published products only, the First Light components), a real guest COD checkout through the existing guest checkout service (`POST /api/shop/checkout`: idempotent, server prices, the order shown only after the commit), confirmation with the tracking link shown once. Open only to a browser holding a founder acceptance pass, on the staging-marked database. |
+| S-14 | Founder decision 19 Nov 2026: optional "Continue with Google" for customers; built, not verified live | A separate customer sign-in (own tables, cookies, path and secret; Google only; no account linking; no stored OAuth token); guest checkout unchanged. Orders placed while signed in are listed for the customer. Wishlists, reviews and other sign-in methods remain undecided. Not verified against Google itself (needs the client settings on the host). |
+| I-6 | Proposed rule usable in acceptance only | Publish and withdraw on the product page. On the staging-marked database the proposed rule (every readiness item and a current review) applies and is recorded with each publication; elsewhere publishing refuses until the founder approves a rule. |
+| S-17, G-7 | Publication built; founder approval mandatory | A reviewed policy version is published only by the founder with an explicit approval box; the exact text is copied into an append-only record. Published policies appear in the shop's footer, product page and checkout; unpublished ones do not appear at all. No policy text is written by the system. |
+| S-15, API-11 | Extended, not verified live | Per-client checkout limit (10 per hour) and per-client sign-in limits behind Netlify's own client-address header when `TRUSTED_PROXY=netlify`; no other address header is trusted. |
+
 ## 10. Phasing (proposed)
 
 | Phase | Outcome | Basis |
@@ -453,4 +465,5 @@ Also out of scope: a separate backend server, Express, microservices, a monorepo
 | Founder instruction, batch H.39–H.42 (17 Nov 2026) | Authentication audit, public API protection, courier statement matching, maintenance and resilience, verification and review | Approves the named engineering scope only; basis labels unchanged; no publication, checkout, accounts, hosting or deployment approved. |
 | Founder instruction, batch H.31–H.38 (16 Nov 2026) | Backend completion: integrity and security fixes, publication foundation, dormant customer-facing API, courier deductions, operational limits, evaluation of customer identity, recovery and 2FA | Approves the named engineering scope only; basis labels unchanged; no publication, public checkout, customer accounts, hosting or deployment approved. |
 | Founder instruction, batch H.17–H.20 (15 Nov 2026) | Order and tracking fixes, product content and readiness, local development media, an Owner-only storefront preview with cart and checkout simulation, test and readiness work | Approves the named engineering scope only; basis labels unchanged; no publication, public checkout, customer accounts, hosting or final design approved. |
+| Founder instruction, "Complete production-ready commerce implementation" (19 Nov 2026) | Founder acceptance on the staging database, the real shop and checkout behind it, publication with the proposed rule for acceptance only, policy publication with founder approval, optional customer Google sign-in (S-14), per-client limits on Netlify | Approves the named engineering scope; the public launch, the publication rule (I-6), the policy wording and the production database stay founder decisions. |
 | Original BabySunray brand and business documents on the G: drive | Not read for this draft | Should be checked against sections 1 and 8 during review. |

@@ -5,6 +5,8 @@
 **Deciders:** Founder
 **Related:** [ADR-0003](0003-authentication-foundation.md), [ADR-0007](0007-guest-checkout-foundation.md), [Product requirements](../product/requirements.md) (S-3, S-9, S-14, OF-5, OF-7, OF-10, API-10, open decisions 3 and 12), [storefront concepts](../design/storefront-concepts.md) section 4
 
+**Update (19 Nov 2026):** the founder chose optional Google sign-in for customers (S-14); section 1's proposal is built as described in [ADR-0011](0011-founder-acceptance-and-customer-sign-in.md). Sections 2 to 4 are unchanged.
+
 **In short:** Batch H.31–H.38 asked for customer-account, recovery and MFA foundations. Each depends on an open founder decision (S-14 customer accounts, OF-5 recovery, 2FA in decision 3). Building schema or endpoints for them now would be speculative and would widen the authentication surface without an approved scope or privacy text. This ADR records what was evaluated against the installed Better Auth 1.7.25 and what is proposed. Guest checkout stays the only customer path (S-3).
 
 ## 1. Customer identity (S-14: launch scope undecided)

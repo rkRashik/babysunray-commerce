@@ -69,7 +69,7 @@ Supabase offers a direct connection, a session pooler (port 5432) and a transact
 
 - **Per-process limits do not add up to a global limit.** The bulkheads (anonymous reads, checkout, `/api/auth`) and the in-memory photo cache are per process. Each instance sizes its bulkheads from `DATABASE_POOL_MAX`: from 5 connections 40%, 20% and 20% (4, 2, 2 at 10); below 5, `/api/auth` keeps its own bulkhead of 1 (the Owner's sign-in never waits behind a tracking flood) and anonymous reads and checkout share one bulkhead of max(1, P - 2); one connection stays free for the Owner's pages at 3 and 4, none at the default 2, where Owner pages queue behind at most two short anonymous requests (never refused). Across N instances the anonymous total is N times that. They protect the database from a flood; they are **not rate limits**.
 - **The storewide checkout limit and the tracking limits are stored in the database**, so they are shared by every instance.
-- **No per-client limit is claimed.** The application trusts no client address header (Better Auth is configured with `ipAddressHeaders: []`; nothing reads `X-Forwarded-For`). A per-client limit needs an address the host's proxy guarantees, plus counters shared by all instances (the database, as today). Both are decided at the staging check; until then the launch gate's `abuse_protection` blocker stands.
+- **Per-client limits behind Netlify only (ADR-0011).** With `TRUSTED_PROXY=netlify` the application trusts Netlify's own `x-nf-client-connection-ip` (its edge replaces any client value) and nothing else: Better Auth's sign-in limits (Owner and customer) and the checkout's 10 orders per client and hour use it; counters are in the database (shared by all instances) and key on an HMAC of the address, never the address. Without the setting no address header is trusted and only storewide limits apply. Not verified on the live site; the launch gate's `abuse_protection` blocker stands until it is.
 - **Function time:** the maintenance route declares `maxDuration = 60`. Vercel's [duration page](https://vercel.com/docs/functions/configuring-functions/duration) (read 2026-11-17) gives 300 s as the default and, on Hobby, the maximum with Fluid compute; Pro allows more. Page routes use the host's default. Cold starts were not measured.
 - **Ephemeral disk:** nothing the application needs is kept on local disk when `MEDIA_STORAGE_PROVIDER=supabase`. The local photo folder is refused in production unless `MEDIA_LOCAL_STORAGE_IN_PRODUCTION=allow`.
 - **Sessions and cookies:** sessions are rows in the database (no cookie cache), so any instance can verify any session at once. Cookies are `Secure` for an https `BETTER_AUTH_URL` (Better Auth's behaviour, exercised by `npm run test:e2e:prod` behind a local TLS proxy); a hosted URL must be https. Origin and CSRF checks stay on. `sharp` (native) must be installable on the host: untested.
@@ -121,7 +121,7 @@ Anonymous callers get a status word only. The reason (variable names, an error c
 | Item | State |
 |---|---|
 | Trusted proxy, real client address | Not configured; decided with the host. Client-supplied address headers are ignored |
-| Per-client and global rate limits | Not claimed; section 5 |
+| Per-client and global rate limits | Per-client behind `TRUSTED_PROXY=netlify`, tested locally, not on the live site; section 5 |
 | Bot and flood protection in front of the application | None; the host or a CDN must provide it before checkout opens |
 | Host header and origin | Better Auth checks origins against `BETTER_AUTH_URL`; the public transports accept only no `Origin` or the site's own; there is no CORS. Preview-deployment URLs would need a reviewed change |
 | Request sizes | Streamed limits on every anonymous body (tracking 2 KiB, quote 8 KiB, checkout 64 KiB, maintenance 1 KiB) and on Owner API bodies |
@@ -136,4 +136,8 @@ The staging steps are in [staging-setup.md](staging-setup.md): create a separate
 
 ## 10. Pending founder decisions
 
-Hosting and plan (decision 1, C-1 to C-3); the photo store for production (decision 14); the scheduler and who alerts on failure; recovery objectives and the off-device backup place (K-9, decision 15); TLS mode (`require` or `verify-full`); a caching policy for published photos; the publication rule (I-6); published policies (S-17, G-7); the trusted-proxy design for per-client limits.
+Hosting and plan (decision 1, C-1 to C-3); the photo store for production (decision 14); the scheduler and who alerts on failure; recovery objectives and the off-device backup place (K-9, decision 15); TLS mode (`require` or `verify-full`); a caching policy for published photos; the publication rule (I-6); published policies (S-17, G-7); verifying the per-client limits on the live site.
+
+## Scheduled maintenance and visitor protection
+
+While Netlify's visitor protection is on, no external or Netlify-scheduled call can reach `/api/internal/maintenance` (the protection answers first). The 24-hour verification expiry does not depend on it: every checkout, order and stock operation releases overdue holds first. After the launch, schedule the maintenance call (Netlify scheduled function or an external scheduler with `MAINTENANCE_SECRET`) and verify it.

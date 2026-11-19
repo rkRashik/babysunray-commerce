@@ -1,9 +1,9 @@
-# Customer-facing API (dormant)
+# Customer-facing API
 
 **Status:** Draft — Founder Review
 **Purpose:** The contract of the customer-facing endpoints a future storefront (web or app) will call, which of them are live, and what must happen before the others open.
 
-The Owner API (`/api/v1`, Bearer, RFC 9457 problems) is described in [the API guide](README.md). This page covers what an anonymous customer uses. **Only guest tracking is live.** The catalogue, the quote and the checkout are built and tested as services and HTTP handlers, but **no route serves them**: the launch gate (`src/modules/launch/gate.ts`) is closed in this version, no product can be published (no publication rule, requirement I-6, is approved), and public checkout waits for published policies (S-17, G-7). Routing them is a founder-approved code change in a later gate.
+The Owner API (`/api/v1`, Bearer, RFC 9457 problems) is described in [the API guide](README.md). This page covers what an anonymous customer uses. **Guest tracking is live for everyone. The checkout and the photo route are routed but answer only founder acceptance** (a pass on the staging-marked database; [ADR-0011](../adr/0011-founder-acceptance-and-customer-sign-in.md)); for everyone else they answer as closed. The JSON catalogue and quote are built and tested but not routed: the shop's own pages read the same published-only scope directly. Opening anything to the public is a founder-approved change to the launch gate (`src/modules/launch/gate.ts`).
 
 ## Status
 
@@ -14,10 +14,10 @@ The Owner API (`/api/v1`, Bearer, RFC 9457 problems) is described in [the API gu
 | One product | `{ kind: "product", slug }` | `getPublicProduct` | No |
 | Filter options | `{ kind: "facets" }` | `publicFacets` | No |
 | Price a cart | `{ kind: "quote" }` (POST) | `quotePublicCart` | No |
-| Place an order | `guestCheckoutResponse` in `src/api/guest-checkout.ts` | `placeGuestOrder` (`src/modules/orders/guest-checkout.ts`) | No |
-| Product photo | `publicMediaResponse(request, mediaId, { db, store, gate })` in `src/api/public-media.ts` | `findPublicPhoto` (`src/modules/media/public.ts`) | Yes, closed: `GET /api/public/media/{id}[?w=320]` answers `503` with no body until the launch gate opens (Gate H.49) |
+| Place an order | `guestCheckoutResponse` in `src/api/guest-checkout.ts` | `placeGuestOrder` (`src/modules/orders/guest-checkout.ts`) | `POST /api/shop/checkout`, founder acceptance only; `503 checkout_closed` otherwise, before any database work |
+| Product photo | `publicMediaResponse(request, mediaId, { db, store, gate })` in `src/api/public-media.ts` | `findPublicPhoto` (`src/modules/media/public.ts`) | `GET /api/public/media/{id}[?w=320]`, open with the shop (founder acceptance); `503` with no body otherwise |
 
-The handlers take `deps = { db, baseUrl, gate }`. A route file must pass the real gate (`publicCheckoutGate`); the injectable gate exists for the tests, and a route that passed an open gate would be a reviewed code change, not a setting. With the real gate, the handlers answer `503 shop_closed` (catalogue) or `503 checkout_closed` (checkout) before any database work. The tests pass an open gate to prove the behaviour behind it.
+The handlers take `deps = { db, baseUrl, gate }`. A route file decides the gate per request with the shop access check (`src/app/_shop/access.ts`: public gate, else a verified acceptance pass on the staging database); a route that passed an open gate otherwise would be a reviewed code change, not a setting. With the real gate, the handlers answer `503 shop_closed` (catalogue) or `503 checkout_closed` (checkout) before any database work. The tests pass an open gate to prove the behaviour behind it.
 
 ## Common rules
 
@@ -42,7 +42,7 @@ Body (≤ 8 KiB): `{ "lines": [{ "sku": "...", "quantity": 1 }], "zone": "dhaka_
 
 Answer: `{ lines: [{ sku, quantity, status: "ok" | "insufficient" | "unavailable", unitPricePaisa, lineTotalPaisa, productSlug, name, size, colour }], subtotalPaisa, deliveryZone, deliveryChargePaisa, totalPaisa, ready }`. Unavailable lines carry no name or price. `ready` is true only when every line is `ok` and the zone has a charge. A quote holds nothing and promises nothing: stock is held only when an order is placed, and the checkout refuses the order if anything shown changed.
 
-## Checkout (POST, not routed)
+## Checkout (POST /api/shop/checkout, founder acceptance only)
 
 Contract: [launch-readiness.md](../operations/launch-readiness.md), section 5, and [ADR-0007](../adr/0007-guest-checkout-foundation.md). In short:
 
