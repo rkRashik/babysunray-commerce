@@ -7,7 +7,7 @@ import { label } from "../orders/_components/labels";
 
 export const metadata = { title: "Exports · Owner Office" };
 
-const FIELD = "mt-1 block w-full rounded border border-gray-400 bg-white px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900";
+const FIELD = "of-input mt-1.5";
 
 const ERRORS: Record<string, string> = {
   invalid: "That export could not be made: check the dataset, format and filters. Some filters apply only to some datasets (see the list).",
@@ -37,14 +37,14 @@ export default async function ExportsPage({ searchParams }: { searchParams: Prom
         phone numbers and addresses: keep those files private and delete copies you no longer need.
       </p>
       {typeof error === "string" && Object.hasOwn(ERRORS, error) ? (
-        <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
           {ERRORS[error]}
         </p>
       ) : null}
       <Section title="New export">
         <form method="post" action="/office/exports/download" className="space-y-4">
           <div>
-            <label htmlFor="dataset" className="block text-sm font-medium">
+            <label htmlFor="dataset" className="block text-sm font-semibold">
               Dataset <span className="text-gray-600">(required)</span>
             </label>
             <select id="dataset" name="dataset" required className={FIELD} defaultValue="">
@@ -59,7 +59,7 @@ export default async function ExportsPage({ searchParams }: { searchParams: Prom
             </select>
           </div>
           <fieldset>
-            <legend className="block text-sm font-medium">
+            <legend className="block text-sm font-semibold">
               Format <span className="text-gray-600">(required)</span>
             </legend>
             <div className="mt-1 flex flex-wrap gap-4">
@@ -79,13 +79,13 @@ export default async function ExportsPage({ searchParams }: { searchParams: Prom
             <legend className="text-sm font-medium">Filters (optional; leave empty for a complete export)</legend>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label htmlFor="from" className="block text-sm font-medium">
+                <label htmlFor="from" className="block text-sm font-semibold">
                   From (Dhaka date)
                 </label>
                 <input id="from" name="from" type="date" className={FIELD} />
               </div>
               <div>
-                <label htmlFor="to" className="block text-sm font-medium">
+                <label htmlFor="to" className="block text-sm font-semibold">
                   To (included)
                 </label>
                 <input id="to" name="to" type="date" className={FIELD} aria-describedby="to-hint" />
@@ -95,7 +95,7 @@ export default async function ExportsPage({ searchParams }: { searchParams: Prom
               </div>
               {(Object.keys(SELECTS) as (keyof typeof SELECTS)[]).map((name) => (
                 <div key={name}>
-                  <label htmlFor={name} className="block text-sm font-medium">
+                  <label htmlFor={name} className="block text-sm font-semibold">
                     {SELECT_LABELS[name]}
                   </label>
                   <select id={name} name={name} className={FIELD} defaultValue="">
@@ -110,7 +110,7 @@ export default async function ExportsPage({ searchParams }: { searchParams: Prom
               ))}
             </div>
           </fieldset>
-          <button type="submit" className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2">
+          <button type="submit" className="of-btn of-btn-primary">
             Download
           </button>
         </form>

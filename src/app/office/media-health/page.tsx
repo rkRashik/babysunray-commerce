@@ -39,7 +39,7 @@ export default async function MediaHealthPage({ searchParams }: { searchParams: 
   return (
     <OfficeShell title="Photo storage" current="media" notice={notice}>
       {!config.ok ? (
-        <p role="status" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+        <p role="status" className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-950">
           Photos are not set up on this server: {config.problem}
         </p>
       ) : check ? (

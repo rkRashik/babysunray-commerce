@@ -79,5 +79,6 @@ These record the business's own requirements, decisions and plans. They are not 
 | [Order policy decisions](product/order-policy-decisions.md) | The approved order rules, lifecycle states and engineering defaults |
 | [Storefront launch decisions](product/storefront-launch-decisions.md) | Every decision still needed before the public storefront opens: approved, recommended, open |
 | [Launch readiness](operations/launch-readiness.md) | The launch gate, readiness page, policy drafting, product reviews, guest checkout contract |
-| [Storefront concepts](design/storefront-concepts.md) | The two design concepts, customer wording awaiting approval, customer sign-in options |
+| [First Light design system](design/storefront-design-system.md) | The design of the storefront, the tracking page and the Owner Office (chosen by the founder for implementation): direction, libraries, tokens, components, motion, accessibility |
+| [Storefront concepts](design/storefront-concepts.md) | The earlier (rejected) design concepts, customer wording awaiting approval, customer sign-in options |
 | [Public-release privacy audit](private/public-release-privacy-audit.md) | What must be reviewed before any part of this repository is made public |

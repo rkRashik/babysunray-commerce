@@ -21,7 +21,7 @@ export default async function NewOrderPage() {
   return (
     <OfficeShell title="New assisted order" current="orders" breadcrumbs={[{ href: "/office/orders", label: "Orders" }]}>
       {zones.length === 0 ? (
-        <p role="status" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+        <p role="status" className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-950">
           No delivery charge is configured yet, so no order can be taken. <Link href="/office/settings/delivery" className="underline">Set the delivery charges</Link> first.
         </p>
       ) : (
@@ -51,7 +51,7 @@ export default async function NewOrderPage() {
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">Items (SKU and quantity; empty lines are ignored)</legend>
               {Array.from({ length: LINES }, (_, i) => (
-                <div key={i} className="grid grid-cols-[1fr_6rem] gap-2">
+                <div key={i} className="grid grid-cols-[minmax(0,1fr)_7.5rem] items-end gap-2">
                   <Field name={`sku${i}`} label={`SKU, line ${i + 1}`} maxLength={64} />
                   <Field name={`qty${i}`} label={`Quantity, line ${i + 1}`} inputMode="numeric" maxLength={4} />
                 </div>

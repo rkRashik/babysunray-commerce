@@ -61,7 +61,7 @@ export function ActionForm({ action, idempotencyKey, hidden = {}, submitLabel, c
         <Fields>{children}</Fields>
       </Values.Provider>
       {state.error ? (
-        <p id={errorId} role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p id={errorId} role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
           {state.error}
         </p>
       ) : null}
@@ -84,17 +84,8 @@ function Fields({ children }: { children?: React.ReactNode }) {
 
 function Submit({ label, variant }: { label: string; variant: "primary" | "secondary" }) {
   const { pending } = useFormStatus();
-  const style =
-    variant === "primary"
-      ? "bg-gray-900 text-white hover:bg-gray-700"
-      : "border border-gray-400 bg-white text-gray-900 hover:bg-gray-100";
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      aria-disabled={pending}
-      className={`rounded px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2 disabled:opacity-60 ${style}`}
-    >
+    <button type="submit" disabled={pending} aria-disabled={pending} className={`of-btn ${variant === "primary" ? "of-btn-primary" : "of-btn-line"}`}>
       {pending ? "Saving…" : label}
     </button>
   );
@@ -106,8 +97,7 @@ function useValue(name: string, initial: string | undefined): string {
   return typed ? (typed[name] ?? "") : (initial ?? "");
 }
 
-const INPUT =
-  "mt-1 block w-full rounded border border-gray-400 bg-white px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900";
+const INPUT = "of-input mt-1.5";
 
 type FieldProps = {
   name: string;
@@ -139,13 +129,13 @@ export function Field({ name, label, hint, required, multiline, inputMode, maxLe
   };
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium">
+      <label htmlFor={id} className="block text-sm font-semibold">
         {label}
-        {required ? <span className="text-gray-600"> (required)</span> : null}
+        {required ? <span className="font-normal text-gray-600"> (required)</span> : null}
       </label>
       {multiline ? <textarea rows={4} {...common} /> : <input type="text" inputMode={inputMode} autoComplete="off" {...common} />}
       {hint ? (
-        <p id={`${id}-hint`} className="mt-1 text-xs text-gray-600">
+        <p id={`${id}-hint`} className="mt-1.5 text-[0.8125rem] text-gray-600">
           {hint}
         </p>
       ) : null}
@@ -157,8 +147,8 @@ export function Field({ name, label, hint, required, multiline, inputMode, maxLe
 function OneTimeLink({ link }: { link: string }) {
   const id = useId();
   return (
-    <div role="status" className="space-y-1 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-      <label htmlFor={id} className="block font-medium">
+    <div role="status" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+      <label htmlFor={id} className="block font-semibold">
         New tracking link. Send it to the customer now: it is shown only once and cannot be shown again.
       </label>
       <input id={id} readOnly value={link} className={`${INPUT} font-mono text-sm`} onFocus={(e) => e.currentTarget.select()} />
@@ -171,8 +161,8 @@ export function Checkbox({ name, label, defaultChecked }: { name: string; label:
   const typed = useContext(Values);
   const id = useId();
   return (
-    <div className="flex items-center gap-2">
-      <input id={id} type="checkbox" name={name} defaultChecked={typed ? typed[name] === "on" : defaultChecked} className="h-4 w-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900" />
+    <div className="flex min-h-11 items-center gap-2.5">
+      <input id={id} type="checkbox" name={name} defaultChecked={typed ? typed[name] === "on" : defaultChecked} className="h-5 w-5 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900" />
       <label htmlFor={id} className="text-base">
         {label}
       </label>
@@ -186,13 +176,17 @@ export function Choice({ name, legend, options, defaultValue }: { name: string; 
   const id = useId();
   return (
     <fieldset>
-      <legend className="block text-sm font-medium">
+      <legend className="block text-sm font-semibold">
         {legend}
-        <span className="text-gray-600"> (required)</span>
+        <span className="font-normal text-gray-600"> (required)</span>
       </legend>
-      <div className="mt-1 flex flex-wrap gap-4">
+      <div className="mt-1.5 flex flex-wrap gap-2">
         {options.map((option) => (
-          <label key={option.value} htmlFor={`${id}-${option.value}`} className="flex items-center gap-2 text-base">
+          <label
+            key={option.value}
+            htmlFor={`${id}-${option.value}`}
+            className="flex min-h-11 cursor-pointer items-center gap-2 rounded-full border-[1.5px] border-gray-300 bg-white px-3.5 text-[0.9375rem] font-medium transition-colors hover:border-gray-900 has-[:checked]:border-gray-900 has-[:checked]:bg-amber-100"
+          >
             <input
               id={`${id}-${option.value}`}
               type="radio"
@@ -200,7 +194,7 @@ export function Choice({ name, legend, options, defaultValue }: { name: string; 
               value={option.value}
               required
               defaultChecked={value === option.value}
-              className="h-4 w-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900"
+              className="h-4.5 w-4.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900"
             />
             {option.label}
           </label>
@@ -216,7 +210,7 @@ export function SelectField({ name, label, options, defaultValue, hint }: { name
   const id = useId();
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium">
+      <label htmlFor={id} className="block text-sm font-semibold">
         {label}
       </label>
       <select id={id} name={name} defaultValue={value} aria-describedby={hint ? `${id}-hint` : undefined} className={INPUT}>
@@ -227,7 +221,7 @@ export function SelectField({ name, label, options, defaultValue, hint }: { name
         ))}
       </select>
       {hint ? (
-        <p id={`${id}-hint`} className="mt-1 text-xs text-gray-600">
+        <p id={`${id}-hint`} className="mt-1.5 text-[0.8125rem] text-gray-600">
           {hint}
         </p>
       ) : null}
@@ -238,5 +232,5 @@ export function SelectField({ name, label, options, defaultValue, hint }: { name
 /** An input for a table cell, named by its column and row header (aria-label), keeping typed values after an error. */
 export function CellInput({ name, label, defaultValue, inputMode = "decimal" }: { name: string; label: string; defaultValue?: string; inputMode?: "decimal" | "numeric" | "text" }) {
   const value = useValue(name, defaultValue);
-  return <input type="text" name={name} aria-label={label} inputMode={inputMode} autoComplete="off" defaultValue={value} className="block w-20 rounded border border-gray-400 bg-white px-2 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900" />;
+  return <input type="text" name={name} aria-label={label} inputMode={inputMode} autoComplete="off" defaultValue={value} className="of-input w-20 px-2" />;
 }

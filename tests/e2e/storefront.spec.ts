@@ -78,14 +78,14 @@ test("the Owner browses in English and Bangla: banner, private headers, search, 
   expect(headers["x-robots-tag"]).toContain("noindex");
   expect(headers["x-frame-options"]).toBe("DENY");
   expect(headers["cache-control"]).toContain("no-store");
-  await expect(page.getByTestId("preview-banner")).toHaveText("Storefront Preview — Not Live");
+  await expect(page.getByTestId("preview-banner")).toHaveText("Preview only, not live");
   await expect(page.getByRole("list", { name: "Featured" })).toContainText(product.nameEn);
   await expectNoAxeViolations(page);
 
   await page.getByTestId("language-switch").click();
   await expect(page).toHaveURL(new RegExp(`${PREVIEW}/bn$`));
   await expect(page.locator(".sf")).toHaveAttribute("lang", "bn");
-  await expect(page.getByTestId("preview-banner")).toHaveText("স্টোরফ্রন্ট প্রিভিউ — লাইভ নয়");
+  await expect(page.getByTestId("preview-banner")).toHaveText("শুধু প্রিভিউ, লাইভ নয়");
   await expect(page.locator("main")).toContainText(product.nameBn);
   await expect(page.locator("main")).toContainText("৳ ৮৫০ থেকে");
   await expectNoAxeViolations(page);
@@ -93,21 +93,27 @@ test("the Owner browses in English and Bangla: banner, private headers, search, 
   await page.goto(`${PREVIEW}/en/products?q=${encodeURIComponent(product.nameEn)}&size=3-6M`);
   await expect(page.getByTestId("result-count")).toHaveText("1 product");
   await page.goto(`${PREVIEW}/en/products?q=${encodeURIComponent(product.nameEn)}&size=12-18M`);
-  await expect(page.getByTestId("result-count")).toContainText("No products match");
+  await expect(page.getByTestId("no-results")).toContainText("Nothing matches");
   // The language switch keeps the search and filters.
   await page.getByTestId("language-switch").click();
   await expect(page).toHaveURL(/\/bn\/products\?q=.*size=12-18M/);
 
   await page.goto(`${PREVIEW}/en/products/${product.slug}`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(product.nameEn);
+  await chip(page, "0-3M").click();
   await expect(page.getByText("Chest 24.5 cm, Length 38 cm")).toBeVisible();
   await expect(page.getByRole("img", { name: "Fictional romper, front" })).toBeVisible();
   await expect.poll(() => page.getByRole("img", { name: "Fictional romper, front" }).evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
-  await expect(page.getByRole("region", { name: "Size guide (cm)" }).getByRole("row", { name: /3-6M/ })).toContainText("26");
-  await expect(page.getByRole("region", { name: "Delivery", exact: true })).toContainText("Dhaka City: ৳ 60");
+  await page.getByRole("button", { name: "Size guide" }).click();
+  await expect(page.getByRole("region", { name: "Size guide" }).getByRole("row", { name: /3-6M/ })).toContainText("26");
+  await expectNoAxeViolations(page);
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("size-guide-sheet")).toHaveCount(0);
+  await expect(page.getByTestId("buy-info")).toContainText("Dhaka City: ৳ 60");
   await expectNoAxeViolations(page);
   await page.goto(`${PREVIEW}/bn/products/${product.slug}`);
-  await expect(page.getByText("বুক ২৪.৫ সেমি, দৈর্ঘ্য ৩৮ সেমি")).toBeVisible();
+  await chip(page, "0-3M").click();
+  await expect(page.getByText("বুক ২৪.৫ সেমি, লম্বা ৩৮ সেমি")).toBeVisible();
   await expect(page.getByRole("img", { name: "কাল্পনিক রম্পার, সামনে" })).toBeVisible();
   await expectNoAxeViolations(page);
 });
@@ -123,37 +129,37 @@ test("cart: choose size and colour, add, change quantities, totals in paisa, inv
   await page.getByRole("radio", { name: /^0-3M/ }).focus();
   await page.keyboard.press("Space");
   await expect(page.getByRole("radio", { name: /^0-3M/ })).toBeChecked();
-  await page.getByRole("button", { name: "Add to cart" }).click();
-  await expect(page.getByTestId("add-message")).toHaveText("Choose a size and colour first.");
+  await page.getByRole("button", { name: "Add to Bag", exact: true }).click();
+  await expect(page.getByTestId("add-message")).toHaveText("Select a size and colour first.");
   await chip(page, "Ivory").click();
   await expect(page.getByTestId("availability")).toHaveText("In stock: 5 available");
   await page.getByLabel("Quantity").fill("2.5");
-  await page.getByRole("button", { name: "Add to cart" }).click();
+  await page.getByRole("button", { name: "Add to Bag", exact: true }).click();
   await expect(page.getByTestId("add-message")).toHaveText("Enter a whole number from 1 to 5.");
   await page.getByLabel("Quantity").fill("6");
-  await page.getByRole("button", { name: "Add to cart" }).click();
+  await page.getByRole("button", { name: "Add to Bag", exact: true }).click();
   await expect(page.getByTestId("add-message")).toContainText("Only 5 available");
   await page.getByLabel("Quantity").fill("2");
-  await page.getByRole("button", { name: "Add to cart" }).click();
-  await expect(page.getByTestId("add-message")).toHaveText(`2 × ${product.nameEn} added to your cart.`);
+  await page.getByRole("button", { name: "Add to Bag", exact: true }).click();
+  await expect(page.getByTestId("add-message")).toHaveText(`2 × ${product.nameEn} added to your bag.`);
   await expect(page.getByTestId("cart-count")).toHaveText("2");
 
   // The sold-out colour is marked and cannot be added.
   await chip(page, "3-6M").click();
   await chip(page, "Sand").click();
   await expect(page.getByTestId("availability")).toHaveText("Sold out");
-  await page.getByRole("button", { name: "Add to cart" }).click();
+  await page.getByRole("button", { name: "Add to Bag", exact: true }).click();
   await expect(page.getByTestId("add-message")).toHaveText("This option is sold out.");
   await chip(page, "Ivory").click();
   await page.getByLabel("Quantity").fill("1");
-  await page.getByRole("button", { name: "Add to cart" }).click();
+  await page.getByRole("button", { name: "Add to Bag", exact: true }).click();
   await expect(page.getByTestId("cart-count")).toHaveText("3");
   // Adding to the cart holds nothing.
   expect(await counts()).toEqual(before);
 
-  await page.getByRole("link", { name: /^Cart/ }).click();
+  await page.getByRole("link", { name: /^Bag/ }).click();
   await expect(page.getByTestId("subtotal")).toHaveText("৳ 2,620.50");
-  await page.getByLabel(/^Dhaka City/).check();
+  await chip(page, "Dhaka City").click();
   await expect(page.getByTestId("total")).toHaveText("৳ 2,680.50");
   const lineA = page.getByTestId(`cart-line-${skuA}`);
   await lineA.getByRole("button", { name: /^One more/ }).click();
@@ -172,10 +178,10 @@ test("cart: choose size and colour, add, change quantities, totals in paisa, inv
   await page.reload();
   await expect(page.getByTestId(`cart-line-${skuA}`).getByTestId("line-problem")).toHaveText("Only 1 available now. Lower the quantity to continue.");
   await expect(page.getByTestId("checkout-blocked")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Go to checkout" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Checkout", exact: true })).toHaveCount(0);
   await page.getByTestId(`cart-line-${skuA}`).getByRole("button", { name: /^One fewer/ }).click();
   await expect(page.getByTestId("checkout-blocked")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Go to checkout" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Checkout", exact: true })).toBeVisible();
   await page.getByTestId(`cart-line-${skuB}`).getByRole("button", { name: /^Remove/ }).click();
   await expect(page.getByTestId(`cart-line-${skuB}`)).toHaveCount(0);
   await expect(page.getByTestId("cart-count")).toHaveText("1");
@@ -183,19 +189,19 @@ test("cart: choose size and colour, add, change quantities, totals in paisa, inv
   expect(await counts()).toEqual({ ...before, movements: before.movements + 1 });
 });
 
-test("checkout simulation: details, review, summary in both languages, with the COD total, and nothing written anywhere", async ({ page }) => {
+test("checkout simulation: contact, delivery, review and confirmation in both languages, with the COD total, and nothing written anywhere", async ({ page }) => {
   const product = await seedStorefrontProduct();
   await signIn(page);
   await page.goto(`${PREVIEW}/en/products/${product.slug}`);
   await chip(page, "0-3M").click();
   await chip(page, "Ivory").click();
-  await page.getByRole("button", { name: "Add to cart" }).click();
+  await page.getByRole("button", { name: "Add to Bag", exact: true }).click();
   await expect(page.getByTestId("cart-count")).toHaveText("1");
   const before = await counts();
 
   await page.goto(`${PREVIEW}/bn/checkout`);
-  await expect(page.getByTestId("simulation-note")).toContainText("শুধু সিমুলেশন");
-  await page.getByRole("button", { name: "অর্ডার যাচাই করুন" }).click();
+  await expect(page.getByTestId("checkout-steps")).toHaveAttribute("aria-label", "ধাপ ১/৩");
+  await page.getByRole("button", { name: "এগিয়ে যান" }).click();
   const errors = page.getByTestId("checkout-errors");
   await expect(errors).toContainText("আপনার পুরো নাম লিখুন।");
   await expect(errors).toContainText("বাংলাদেশি মোবাইল নম্বর লিখুন");
@@ -204,42 +210,52 @@ test("checkout simulation: details, review, summary in both languages, with the 
   // A number typed in Bangla digits is accepted (and shown in ASCII, as an order would store it).
   await page.getByLabel("পুরো নাম").fill("পরীক্ষামূলক গ্রাহক");
   await page.getByLabel("মোবাইল নম্বর").fill("০১৭১১-০০০০৫২");
-  await page.getByLabel("ডেলিভারির ঠিকানা").fill("বাড়ি ৫২, পরীক্ষা রোড");
-  await page.getByLabel(/^ঢাকা সিটি/).check();
-  await page.getByRole("button", { name: "অর্ডার যাচাই করুন" }).click();
+  await page.getByRole("button", { name: "এগিয়ে যান" }).click();
+  await page.getByLabel("ডেলিভারি ঠিকানা").fill("বাড়ি ৫২, পরীক্ষা রোড");
+  await chip(page, "ঢাকা সিটি").click();
+  await page.getByRole("button", { name: "এগিয়ে যান" }).click();
   await expect(page.getByTestId("checkout-review")).toContainText("01711000052");
-  await expect(page.getByTestId("simulated-total")).toHaveText("৳ ৯১০");
+  await expect(page.getByTestId("simulation-note")).toContainText("সিমুলেশন");
+  await expect(page.getByTestId("total")).toHaveText("৳ ৯১০");
 
   await page.goto(`${PREVIEW}/en/checkout`);
   await page.getByLabel("Full name").fill("Test Customer");
   await page.getByLabel("Mobile number").fill("12345");
-  await page.getByLabel("Delivery address").fill("House 51, Test Road, Test Area");
-  await page.getByRole("button", { name: "Review order" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByTestId("checkout-errors")).toContainText("Enter a Bangladesh mobile number");
-  await expect(page.getByTestId("checkout-errors")).toContainText("Choose a delivery area.");
+  // The first step names only its own problems; the delivery area belongs to the next one.
+  await expect(page.getByTestId("checkout-errors")).not.toContainText("Choose a delivery area.");
   await expect(page.getByLabel("Full name")).toHaveValue("Test Customer");
   await page.getByLabel("Mobile number").fill("+880 1711-000051");
-  await page.getByLabel(/^Outside Dhaka/).check();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Delivery address").fill("House 51, Test Road, Test Area");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByTestId("checkout-errors")).toContainText("Choose a delivery area.");
+  await chip(page, "Outside Dhaka").click();
   await expect(page.getByTestId("total")).toHaveText("৳ 970");
-  await page.getByRole("button", { name: "Review order" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
   const review = page.getByTestId("checkout-review");
-  await expect(review).toContainText("Check your order");
-  await expect(review).toContainText("House 51, Test Road, Test Area (Outside Dhaka)");
+  await expect(review).toContainText("Review your order");
+  await expect(review).toContainText("House 51, Test Road, Test Area");
+  await expect(review).toContainText("Outside Dhaka");
+  await expect(review).toContainText("01711000051");
   await expectNoAxeViolations(page);
   // Edit and come back: the details are kept.
-  await review.getByRole("button", { name: "Edit details" }).click();
+  await review.getByRole("button", { name: "Edit" }).first().click();
   await expect(page.getByLabel("Full name")).toHaveValue("Test Customer");
-  await page.getByRole("button", { name: "Review order" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByLabel("Delivery address")).toHaveValue("House 51, Test Road, Test Area");
+  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Place order (simulation)" }).click();
   const result = page.getByTestId("simulation-result");
-  await expect(result).toContainText("Simulated order: received, waiting for verification");
+  await expect(result).toContainText("Order received (simulation)");
   await expect(result).toContainText("This was a simulation. No order was recorded and no stock was held.");
   await expect(result).toContainText("Pending Verification");
   await expect(page.getByTestId("simulated-total")).toHaveText("৳ 970");
   await expectNoAxeViolations(page);
   // No order, line, event, hold, tracking link, payment, idempotency record or stock movement was created.
   expect(await counts()).toEqual(before);
-  await result.getByRole("link", { name: "Back to the cart" }).click();
+  await page.goto(`${PREVIEW}/en/cart`);
   await expect(page.getByTestId("cart-count")).toHaveText("1");
 });
 
@@ -265,7 +281,7 @@ test("product page: gallery by keyboard, category link, more in the category, ba
   }
 
   await page.goto(`${PREVIEW}/en/products?q=${encodeURIComponent(product.nameEn)}`);
-  await page.getByRole("link", { name: new RegExp(product.nameEn) }).click();
+  await page.getByRole("link", { name: new RegExp(`^${product.nameEn}`) }).click();
   const thumbs = page.getByRole("group", { name: "Photos (2)" });
   await expect(thumbs.getByRole("button")).toHaveCount(2);
   await thumbs.getByRole("button", { name: "Show photo 1 of 2" }).focus();
@@ -279,7 +295,7 @@ test("product page: gallery by keyboard, category link, more in the category, ba
   await expect(page.getByRole("radio", { name: /^Sand/ })).toBeDisabled();
   await expect(page.getByText("Size: 0-3M")).toBeVisible();
   await chip(page, "Ivory").click();
-  await page.getByRole("button", { name: "Add to cart" }).click();
+  await page.getByRole("button", { name: "Add to Bag", exact: true }).click();
   await expect(page.getByTestId("cart-count")).toHaveText("1");
   await expectNoAxeViolations(page);
   await page.getByTestId("back-to-results").click();
@@ -295,7 +311,7 @@ test("product page: gallery by keyboard, category link, more in the category, ba
   await line.getByRole("button", { name: /^One more/ }).click();
   await expect(page.getByTestId("cart-announcement")).toHaveText(`Quantity updated: 2 × ${product.nameEn}.`);
   await page.getByTestId(`cart-line-${product.skus[0]}`).getByRole("button", { name: /^Remove/ }).click();
-  await expect(page.getByRole("main").getByText("Your cart is empty.")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Your bag is empty.")).toBeVisible();
 });
 
 test("keyboard and motion: a skip link first, a visible focus ring on every control, no transitions when reduced motion is asked", async ({ page }) => {
@@ -320,35 +336,27 @@ test("keyboard and motion: a skip link first, a visible focus ring on every cont
   }
 });
 
-test("design concepts: both show the same product, price and cart; switching keeps the page; Concept B passes the same checks and records nothing", async ({ page }) => {
+test("the storefront design: the same product, price and cart in both languages; the checkout simulation passes the same checks and records nothing", async ({ page }) => {
   const product = await seedStorefrontProduct({ featured: true });
   await signIn(page);
   await page.goto(PREVIEW);
   await expect(page.getByRole("heading", { level: 1, name: "Storefront preview" })).toBeVisible();
   await expectNoAxeViolations(page);
-  await page.getByTestId("open-editorial-en").click();
-  await expect(page.locator(".sf")).toHaveAttribute("data-concept", "editorial");
-  await expect(page.getByRole("button", { name: "A · Editorial Boutique" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("open-en").click();
+  await expect(page).toHaveURL(new RegExp(`${PREVIEW}/en$`));
 
   await page.goto(`${PREVIEW}/en/products/${product.slug}?from=${encodeURIComponent("q=romper")}`);
-  const priceA = await page.getByTestId("price").textContent();
   await chip(page, "0-3M").click();
   await chip(page, "Ivory").click();
-  await page.getByRole("button", { name: "Add to cart" }).click();
+  const price = await page.getByTestId("price").textContent();
+  await page.getByRole("button", { name: "Add to Bag", exact: true }).click();
   await expect(page.getByTestId("cart-count")).toHaveText("1");
-
-  // Switch in place: same page, same query, same cart, same price.
-  await page.getByRole("button", { name: "B · Modern Family Shop" }).click();
-  await expect(page.locator(".sf")).toHaveAttribute("data-concept", "family");
-  await expect(page).toHaveURL(new RegExp(`/en/products/${product.slug}[?]from=`));
-  await expect(page.getByTestId("price")).toHaveText(priceA ?? "");
-  await expect(page.getByTestId("cart-count")).toHaveText("1");
+  await expect(page.getByTestId("price")).toHaveText(price ?? "");
   await expectNoAxeViolations(page);
 
   for (const lang of ["en", "bn"] as const) {
     await page.goto(`${PREVIEW}/${lang}`);
-    await expect(page.locator(".sf")).toHaveAttribute("data-concept", "family");
-    await expect(page.getByRole("list", { name: lang === "en" ? "Featured" : "বিশেষ পণ্য" })).toContainText(lang === "en" ? product.nameEn : product.nameBn);
+    await expect(page.getByRole("list", { name: lang === "en" ? "Featured" : "বাছাই করা পণ্য" })).toContainText(lang === "en" ? product.nameEn : product.nameBn);
     await expectNoAxeViolations(page);
     await page.goto(`${PREVIEW}/${lang}/products`);
     await expect(page.getByRole("list", { name: lang === "en" ? "Categories" : "ক্যাটাগরি" })).toBeVisible();
@@ -357,15 +365,15 @@ test("design concepts: both show the same product, price and cart; switching kee
     await expectNoAxeViolations(page);
   }
 
-  // The checkout simulation is the same component in Concept B: nothing is recorded, and a lost answer at the
-  // last step says the order was not placed (S-12).
+  // The checkout simulation: nothing is recorded, and a lost answer at the last step says the order was not placed (S-12).
   const before = await counts();
   await page.goto(`${PREVIEW}/en/checkout`);
   await page.getByLabel("Full name").fill("Test Customer");
   await page.getByLabel("Mobile number").fill("01711000061");
+  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Delivery address").fill("House 61, Test Road");
-  await page.getByLabel(/^Dhaka City/).check();
-  await page.getByRole("button", { name: "Review order" }).click();
+  await chip(page, "Dhaka City").click();
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByTestId("checkout-review")).toBeVisible();
   await expectNoAxeViolations(page);
   await page.route("**/office/storefront-preview/en/checkout", (route) => (route.request().method() === "POST" ? route.abort() : route.continue()));
@@ -373,38 +381,35 @@ test("design concepts: both show the same product, price and cart; switching kee
   await expect(page.getByTestId("checkout-failure")).toHaveText("The order was not placed and nothing was recorded. Check your connection and try again, or contact the shop.");
   await page.unroute("**/office/storefront-preview/en/checkout");
   await page.getByRole("button", { name: "Place order (simulation)" }).click();
-  await expect(page.getByTestId("simulation-result")).toContainText("received, waiting for verification");
+  await expect(page.getByTestId("simulation-result")).toContainText("Order received (simulation)");
   expect(await counts()).toEqual(before);
 });
 
-test("Concept C (proposed hybrid): A's look with B's search and chips, the same data and cart, delivery and payment beside the buying panel, axe in both languages, no console errors", async ({ page }) => {
+test("the home page, list, product, cart and checkout: search and category chips, delivery and payment beside the buying panel, axe in both languages, no console errors", async ({ page }) => {
   const product = await seedStorefrontProduct({ featured: true });
   const errors: string[] = [];
   page.on("console", (m) => m.type() === "error" && errors.push(m.text().slice(0, 300)));
   page.on("pageerror", (e) => errors.push(e.message.slice(0, 300)));
   await signIn(page);
   await page.goto(PREVIEW);
-  await page.getByTestId("open-hybrid-en").click();
-  await expect(page.locator(".sf")).toHaveAttribute("data-concept", "hybrid");
-  await expect(page.getByRole("button", { name: "C · Hybrid (proposed)" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("open-en").click();
   await expect(page.getByRole("list", { name: "Featured" })).toContainText(product.nameEn);
-  await expect(page.locator("main").getByRole("searchbox")).toBeVisible();
-  await expect(page.locator("main").getByRole("list", { name: "Categories" })).toBeVisible();
+  await expect(page.getByRole("banner").getByRole("searchbox")).toBeVisible();
+  await expect(page.locator("main").getByRole("list", { name: "Shop by Category" })).toBeVisible();
   await expectNoAxeViolations(page);
 
   await page.goto(`${PREVIEW}/en/products/${product.slug}`);
   await expect(page.getByTestId("buy-info")).toContainText("Dhaka City: ৳ 60");
-  await expect(page.getByTestId("buy-info")).toContainText("Payment: cash on delivery.");
+  await expect(page.getByTestId("buy-info")).toContainText("Cash on Delivery");
   await chip(page, "0-3M").click();
   await chip(page, "Ivory").click();
-  await page.getByRole("button", { name: "Add to cart" }).click();
+  await page.getByRole("button", { name: "Add to Bag", exact: true }).click();
   await expect(page.getByTestId("cart-count")).toHaveText("1");
   await expectNoAxeViolations(page);
 
   for (const lang of ["en", "bn"] as const) {
     for (const path of ["", "/products", `/products/${product.slug}`, "/cart", "/checkout"]) {
       await page.goto(`${PREVIEW}/${lang}${path}`);
-      await expect(page.locator(".sf")).toHaveAttribute("data-concept", "hybrid");
       await expect(page.locator("main h1")).toBeVisible();
       await expectNoAxeViolations(page);
     }

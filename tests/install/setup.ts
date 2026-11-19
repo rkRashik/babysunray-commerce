@@ -72,6 +72,8 @@ export default async function installSetup(): Promise<() => Promise<void>> {
     const leftovers = readdirSync(clone).filter((name) => /^\.env(?!\.example$)|^node_modules$|^\.next$/.test(name));
     if (!head || cloned !== head || leftovers.length) throw new Error(`The rehearsal copy is not a clean checkout of ${head} (${leftovers.join(", ")}).`);
     console.log(`[rehearsal] commit ${head.slice(0, 7)} in ${clone}`);
+    // Handover step for another business: BabySunray's logo files are deleted from the copy (docs/operations/installation.md).
+    rmSync(path.join(clone, "public", "brand"), { recursive: true, force: true });
 
     step("npm ci (offline, locked versions)", process.execPath, [npm, "ci", "--offline", "--ignore-scripts", "--no-audit", "--no-fund"], clone, scrubbedEnv());
     const drillEnv = { ...scrubbedEnv(), TEST_DATABASE_URL: url };

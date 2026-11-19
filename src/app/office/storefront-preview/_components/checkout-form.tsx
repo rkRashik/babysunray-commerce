@@ -1,36 +1,79 @@
 "use client";
 
+import { ArrowLeft, Banknote, Check, ChevronDown, CircleAlert, Info, Lock, PhoneCall } from "lucide-react";
 import Link from "next/link";
 import { useId, useRef, useState } from "react";
+import { SunMark } from "@/app/_design/sun-mark";
 import { dictionary, formatTaka, type Lang, toBnDigits } from "@/modules/storefront/i18n";
-import type { CheckoutResult } from "@/modules/storefront/service";
+import type { CheckoutResult, Quote } from "@/modules/storefront/service";
 import { simulateCheckoutAction } from "../actions";
-import { lineName, Totals, useQuote } from "./cart-view";
+import { EmptyBag, LineThumb, lineName, TotalsList, useQuote, ZoneChoice } from "./cart-view";
+import { useWide } from "./frame";
 
-// The guest checkout as a three-step simulation: details, review, summary. Each step asks the server to validate the
-// details and re-check every line's price and stock exactly as an order would be checked (simulateCheckoutAction),
-// and nothing more: no order, reservation, tracking link, payment or idempotency record is ever created, and nothing
-// is sent anywhere. The typed details stay in this page's memory only.
+// The guest checkout as a three-step simulation: contact, delivery, review; then a confirmation. Every step asks the server
+// to validate the details and re-check every line's price and stock exactly as an order would be checked
+// (simulateCheckoutAction) and shows the problems that belong to that step; the last step needs the whole check to pass.
+// Nothing more: no order, reservation, tracking link, payment or idempotency record is ever created, and nothing is sent
+// anywhere. The typed details stay in this page's memory only.
 
 type Field = "name" | "phone" | "address";
-type Stage = "details" | "review" | "done";
+type Stage = "contact" | "delivery" | "review" | "done";
+type ErrorKey = keyof CheckoutResult["errors"];
+
+const STEP_FIELDS: Record<Exclude<Stage, "done">, ErrorKey[]> = { contact: ["name", "phone"], delivery: ["address", "zone", "cart"], review: ["name", "phone", "address", "zone", "cart"] };
+const NEXT: Record<Exclude<Stage, "done">, Stage> = { contact: "delivery", delivery: "review", review: "done" };
+
+function Summary({ quote, lang, zone }: { quote: Quote | null; lang: Lang; zone: string }) {
+  const count = (n: number) => (lang === "bn" ? toBnDigits(n) : String(n));
+  return (
+    <div className="space-y-5">
+      <ul className="space-y-4">
+        {(quote?.lines ?? []).map((l) => (
+          <li key={l.sku} className="flex items-center gap-3">
+            <div className="relative">
+              <LineThumb line={l} className="aspect-[4/5] w-14" />
+              <span className="sf-count sf-num absolute -end-1.5 -top-1">{count(l.quantity)}</span>
+            </div>
+            <div className="min-w-0 flex-1 text-[0.9375rem]">
+              <p className="truncate font-semibold">{lineName(lang, l, l.sku)}</p>
+              <p className="text-[0.8125rem] text-sf-ink-2">{[l.size, l.colour].filter(Boolean).join(", ")}</p>
+            </div>
+            <p className="sf-num shrink-0 font-semibold whitespace-nowrap">{l.lineTotalPaisa !== null ? formatTaka(l.lineTotalPaisa, lang) : "—"}</p>
+          </li>
+        ))}
+      </ul>
+      <TotalsList quote={quote} lang={lang} zone={zone} />
+    </div>
+  );
+}
 
 export function CheckoutForm({ lang }: { lang: Lang }) {
   const t = dictionary(lang);
   const id = useId();
+  const wide = useWide();
   const heading = useRef<HTMLHeadingElement>(null);
   const [zone, setZone] = useState("");
   const { lines, quote, state: quoteState, retry } = useQuote(zone);
   const [values, setValues] = useState<Record<Field, string>>({ name: "", phone: "", address: "" });
-  const [stage, setStage] = useState<Stage>("details");
+  const [stage, setStage] = useState<Stage>("contact");
   const [result, setResult] = useState<CheckoutResult | null>(null);
+  const [shown, setShown] = useState<ErrorKey[]>([]);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const count = (n: number) => (lang === "bn" ? toBnDigits(n) : String(n));
-  const errors = stage === "details" && result ? result.errors : {};
-  const errorFor = (field: keyof CheckoutResult["errors"]) => (errors[field] ? t.errors[errors[field]] : null);
+  const errorFor = (field: ErrorKey) => (shown.includes(field) && result?.errors[field] ? t.errors[result.errors[field]] : null);
 
-  async function check(next: Stage) {
+  const go = (next: Stage) => {
+    setStage(next);
+    setShown([]);
+    setFailed(false);
+    requestAnimationFrame(() => {
+      heading.current?.focus();
+      heading.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+  };
+
+  async function check(from: Exclude<Stage, "done">) {
     setPending(true);
     setFailed(false);
     try {
@@ -40,158 +83,71 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
       form.append("lines", JSON.stringify(lines));
       const answer = await simulateCheckoutAction(null, form);
       setResult(answer);
-      setStage(answer.ok ? next : "details");
-      requestAnimationFrame(() => heading.current?.focus());
+      const problems = STEP_FIELDS[from].filter((f) => answer.errors[f]);
+      const passes = from === "review" ? answer.ok : problems.length === 0;
+      if (passes) go(NEXT[from]);
+      else {
+        // At the last step a problem belongs to an earlier step: go back to the first step that has one.
+        const back = from !== "review" ? from : problems.some((f) => f === "name" || f === "phone") ? "contact" : "delivery";
+        setStage(back);
+        setShown(STEP_FIELDS[back].filter((f) => answer.errors[f]));
+        requestAnimationFrame(() => heading.current?.focus());
+      }
     } catch {
       setFailed(true);
     }
     setPending(false);
   }
 
-  if (lines.length === 0 && stage !== "done") {
-    return (
-      <div className="space-y-4" role="status">
-        <p className="text-lg">{t.cartEmpty}</p>
-        <Link href={`/office/storefront-preview/${lang}/products`} className="inline-flex min-h-11 items-center rounded-sm bg-sf-cocoa px-5 font-semibold text-sf-ivory">
-          {t.continueShopping}
-        </Link>
-      </div>
-    );
-  }
+  if (lines.length === 0 && stage !== "done") return <EmptyBag lang={lang} message={t.cartEmpty} />;
 
-  const steps: [Stage, string][] = [["details", t.stepDetails], ["review", t.stepReview], ["done", t.stepDone]];
-  const position = steps.findIndex(([s]) => s === stage);
+  const steps: [Exclude<Stage, "done">, string][] = [["contact", t.stepContact], ["delivery", t.stepDelivery], ["review", t.stepReview]];
+  const position = stage === "done" ? steps.length : steps.findIndex(([s]) => s === stage);
   const progress = (
-    <ol className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm" aria-label={t.stepOf(count(position + 1), count(steps.length))} data-testid="checkout-steps">
+    <ol className="flex items-center gap-2" aria-label={t.stepOf(count(Math.min(position + 1, 3)), count(steps.length))} data-testid="checkout-steps">
       {steps.map(([s, label], i) => (
-        <li key={s} aria-current={s === stage ? "step" : undefined} className={`flex items-center gap-2 ${s === stage ? "font-semibold" : "text-sf-umber"}`}>
-          {/* Done steps filled, the current one outlined in cocoa: the number repeats the order for sighted readers. */}
-          <span
-            aria-hidden="true"
-            className={`sf-pill inline-flex h-7 w-7 items-center justify-center border text-xs tabular-nums ${i < position ? "border-sf-cocoa bg-sf-cocoa text-sf-ivory" : s === stage ? "border-2 border-sf-cocoa bg-white text-sf-cocoa" : "border-sf-line bg-white"}`}
-          >
-            {count(i + 1)}
+        <li key={s} aria-current={s === stage ? "step" : undefined} className={`flex min-w-0 items-center gap-2 text-[0.9375rem] ${i < steps.length - 1 ? "flex-1" : ""} ${i <= position ? "font-bold text-sf-ink" : "font-semibold text-sf-ink-2"}`}>
+          <span className="sf-step-num" data-state={i < position ? "done" : i === position ? "current" : undefined} aria-hidden="true">
+            {i < position ? <Check size={16} strokeWidth={3} /> : count(i + 1)}
           </span>
-          <span>{label}</span>
+          <span className="truncate">{label}</span>
+          {i < steps.length - 1 ? <span aria-hidden="true" className={`h-0.5 min-w-3 flex-1 rounded-full ${i < position ? "bg-sf-success" : "bg-sf-line-strong/50"}`} /> : null}
         </li>
       ))}
     </ol>
   );
   const notice = (
-    <p className="rounded-sm border-2 border-sf-amber bg-white px-4 py-3 font-medium" data-testid="simulation-note">
-      {t.simulateOnly}
+    <p className="sf-note" data-tone="sun" data-testid="simulation-note">
+      <Info aria-hidden="true" size={18} strokeWidth={1.75} />
+      <span>{t.simulateOnly}</span>
     </p>
   );
   // At the last step a failure means the order was not placed (S-12); before it, only the check failed.
   const failure = failed ? (
-    <p role="alert" className="font-medium text-sf-danger" data-testid="checkout-failure">
+    <p role="alert" className="sf-note font-semibold" data-tone="bad" data-testid="checkout-failure">
       {stage === "review" ? t.orderNotPlaced : t.cartCheckFailed}
     </p>
   ) : null;
-  const q = result?.quote;
-  const summary =
-    q && result?.customer ? (
-      <>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-          <dt className="text-sf-umber">{t.name}</dt>
-          <dd>{result.customer.name}</dd>
-          <dt className="text-sf-umber">{t.phone}</dt>
-          <dd className="tabular-nums">{result.customer.phone}</dd>
-          <dt className="text-sf-umber">{t.deliverTo}</dt>
-          <dd className="whitespace-pre-line">
-            {result.customer.address}
-            {q.zone ? ` (${t.deliveryZone[q.zone]})` : ""}
-          </dd>
-        </dl>
-        <ul className="divide-y divide-sf-line border-y border-sf-line">
-          {q.lines.map((l) => (
-            <li key={l.sku} className="flex justify-between gap-4 py-2 tabular-nums">
-              <span>
-                {lineName(lang, l, l.sku)}
-                {[l.size, l.colour].filter(Boolean).length ? ` (${[l.size, l.colour].filter(Boolean).join(", ")})` : ""} × {count(l.quantity)}
-              </span>
-              <span>{l.lineTotalPaisa !== null ? formatTaka(l.lineTotalPaisa, lang) : "—"}</span>
-            </li>
-          ))}
-        </ul>
-        <dl className="grid grid-cols-[1fr_auto] gap-y-1 tabular-nums">
-          <dt>{t.subtotal}</dt>
-          <dd className="text-right">{formatTaka(q.subtotalPaisa, lang)}</dd>
-          <dt>{t.deliveryLine}</dt>
-          <dd className="text-right">{q.deliveryChargePaisa !== null ? formatTaka(q.deliveryChargePaisa, lang) : "—"}</dd>
-          <dt className="font-semibold">{t.total}</dt>
-          <dd className="text-right text-lg font-semibold" data-testid="simulated-total">
-            {q.totalPaisa !== null ? formatTaka(q.totalPaisa, lang) : "—"}
-          </dd>
-        </dl>
-        <p className="font-medium">{t.payment}</p>
-      </>
-    ) : null;
+  const errorList = shown.map((k) => errorFor(k)).filter((e): e is string => e !== null);
+  const errors = errorList.length ? (
+    <div role="alert" className="rounded-2xl border-[1.5px] border-sf-danger bg-sf-danger-soft px-4 py-3 text-sf-danger" data-testid="checkout-errors">
+      <p className="flex items-center gap-2 font-bold">
+        <CircleAlert aria-hidden="true" size={18} strokeWidth={2} />
+        {t.fixErrors}
+      </p>
+      <ul className="mt-1 list-disc ps-5 text-[0.9375rem]">
+        {errorList.map((e) => (
+          <li key={e}>{e}</li>
+        ))}
+      </ul>
+      {errorFor("cart") ? (
+        <Link href={`/office/storefront-preview/${lang}/cart`} className="mt-1 inline-flex min-h-11 items-center font-semibold underline underline-offset-4">
+          {t.backToCart}
+        </Link>
+      ) : null}
+    </div>
+  ) : null;
 
-  if (stage === "done" && summary) {
-    return (
-      <section aria-labelledby={`${id}-done`} className="max-w-2xl space-y-5" data-testid="simulation-result">
-        {progress}
-        <h2 id={`${id}-done`} ref={heading} tabIndex={-1} className="text-2xl font-semibold focus:outline-none">
-          {t.pendingTitle}
-        </h2>
-        <p role="status" className="rounded-sm bg-sf-amber px-4 py-3 font-semibold">
-          {t.simulatedNote}
-        </p>
-        <p>{t.pendingBody}</p>
-        <p className="sf-card border border-dashed border-sf-umber bg-white px-4 py-3 text-sm" data-testid="reference-preview">
-          {t.referencePreview}
-        </p>
-        <section aria-labelledby={`${id}-next`} className="space-y-2" data-testid="next-steps">
-          <h3 id={`${id}-next`} className="text-lg font-semibold">
-            {t.nextTitle}
-          </h3>
-          <ol className="list-decimal space-y-1 pl-5">
-            {t.nextSteps.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </section>
-        <div className="space-y-4 rounded-sm bg-white p-5">{summary}</div>
-        <div className="flex flex-wrap gap-4">
-          <button type="button" onClick={() => setStage("details")} className="min-h-11 rounded-sm border border-sf-cocoa px-5 font-medium">
-            {t.editDetails}
-          </button>
-          <Link href={`/office/storefront-preview/${lang}/cart`} className="inline-flex min-h-11 items-center font-medium underline underline-offset-4">
-            {t.backToCart}
-          </Link>
-        </div>
-      </section>
-    );
-  }
-
-  if (stage === "review" && summary) {
-    return (
-      <section aria-labelledby={`${id}-review`} className="max-w-2xl space-y-5" data-testid="checkout-review">
-        {progress}
-        {notice}
-        <h2 id={`${id}-review`} ref={heading} tabIndex={-1} className="text-2xl font-semibold focus:outline-none">
-          {t.reviewTitle}
-        </h2>
-        <div className="space-y-4 rounded-sm bg-white p-5">{summary}</div>
-        <p className="text-sm">{t.receivedNotConfirmed}</p>
-        {failure}
-        <div className="flex flex-wrap items-center gap-4">
-          <button type="button" onClick={() => check("done")} disabled={pending} className="min-h-12 rounded-sm bg-sf-cocoa px-6 text-lg font-semibold text-sf-ivory disabled:opacity-70">
-            {pending ? t.checking : t.placeOrderSimulated}
-          </button>
-          <button type="button" onClick={() => setStage("details")} className="min-h-11 rounded-sm border border-sf-cocoa px-5 font-medium">
-            {t.editDetails}
-          </button>
-          <Link href={`/office/storefront-preview/${lang}/cart`} className="inline-flex min-h-11 items-center font-medium underline underline-offset-4">
-            {t.backToCart}
-          </Link>
-        </div>
-      </section>
-    );
-  }
-
-  const input = "mt-1 block min-h-11 w-full rounded-sm border bg-white px-3 text-base aria-[invalid=true]:border-2 aria-[invalid=true]:border-sf-danger";
   const field = (name: Field, label: string, options: { hint?: string; multiline?: boolean; autoComplete: string; inputMode?: "tel" | "text" }) => {
     const error = errorFor(name);
     const describedBy = [options.hint ? `${id}-${name}-hint` : null, error ? `${id}-${name}-error` : null].filter(Boolean).join(" ") || undefined;
@@ -204,97 +160,231 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
       onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setValues((v) => ({ ...v, [name]: e.target.value })),
       "aria-invalid": error ? true : undefined,
       "aria-describedby": describedBy,
-      className: `${input} ${error ? "" : "border-sf-line"}`,
+      className: "sf-field",
     };
     return (
       <div>
-        <label htmlFor={`${id}-${name}`} className="font-medium">
+        <label htmlFor={`${id}-${name}`} className="sf-label">
           {label}
         </label>
-        {options.multiline ? <textarea rows={3} maxLength={500} {...common} /> : <input type="text" inputMode={options.inputMode} maxLength={name === "name" ? 100 : 20} {...common} />}
+        {options.multiline ? <textarea rows={3} maxLength={500} {...common} /> : <input type={options.inputMode === "tel" ? "tel" : "text"} inputMode={options.inputMode} maxLength={name === "name" ? 100 : 20} {...common} />}
         {options.hint ? (
-          <p id={`${id}-${name}-hint`} className="mt-1 text-sm text-sf-umber">
+          <p id={`${id}-${name}-hint`} className="sf-hint mt-1.5">
             {options.hint}
           </p>
         ) : null}
         {error ? (
-          <p id={`${id}-${name}-error`} className="mt-1 font-medium text-sf-danger">
+          <p id={`${id}-${name}-error`} className="sf-error mt-1.5">
+            <CircleAlert aria-hidden="true" size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
             {error}
           </p>
         ) : null}
       </div>
     );
   };
-  const summaryErrors = (Object.keys(errors) as (keyof CheckoutResult["errors"])[]).map((k) => errorFor(k)).filter(Boolean);
+
+  const total = quote?.totalPaisa ?? quote?.subtotalPaisa ?? null;
+  // On a phone the order summary folds at the top; on a desktop it stays beside the steps.
+  const summaryFold = (
+    <details className="group sf-card px-4" open={stage === "review"}>
+      <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 font-semibold [&::-webkit-details-marker]:hidden">
+        <span className="inline-flex items-center gap-1.5">
+          {t.showSummary}
+          <ChevronDown aria-hidden="true" size={18} strokeWidth={2} className="transition-transform duration-300 group-open:rotate-180" />
+        </span>
+        <span className="sf-num">{total !== null ? formatTaka(total, lang) : ""}</span>
+      </summary>
+      <div className="pb-5">
+        <Summary quote={quote} lang={lang} zone={zone} />
+      </div>
+    </details>
+  );
+  const aside = (
+    <aside aria-label={t.orderSummary} className="sf-card space-y-5 self-start p-7 lg:sticky lg:top-28">
+      <h2 className="text-[1.5rem]">{t.orderSummary}</h2>
+      <p role="status" aria-live="polite" className="text-[0.875rem] text-sf-ink-2 empty:hidden">
+        {quoteState === "loading" ? t.checkingCart : quoteState === "error" ? t.cartCheckFailed : ""}
+      </p>
+      {quoteState === "error" ? (
+        <button type="button" onClick={retry} className="sf-btn sf-btn-ghost sf-btn-sm">
+          {t.retry}
+        </button>
+      ) : null}
+      <Summary quote={quote} lang={lang} zone={zone} />
+    </aside>
+  );
+
+  if (stage === "done" && result?.customer && result.quote) {
+    const q = result.quote;
+    return (
+      <section aria-labelledby={`${id}-done`} className="mx-auto max-w-2xl space-y-8" data-testid="simulation-result">
+        <div className="sf-enter flex flex-col items-center gap-4 pt-2 text-center">
+          <SunMark className="sf-rays h-14 w-24 text-sf-sun" />
+          <h2 id={`${id}-done`} ref={heading} tabIndex={-1} className="sf-display text-[2.125rem] focus:outline-none lg:text-[2.75rem]">
+            {t.pendingTitle}
+          </h2>
+          <p role="status" className="sf-badge px-4 py-1.5 text-[0.875rem]" data-tone="sun">
+            {t.simulatedNote}
+          </p>
+          <p className="max-w-prose text-sf-ink-2">{t.pendingBody}</p>
+        </div>
+        <p className="rounded-2xl border-2 border-dashed border-sf-line-strong px-4 py-3 text-center text-[0.875rem] text-sf-ink-2" data-testid="reference-preview">
+          {t.referencePreview}
+        </p>
+        <section aria-labelledby={`${id}-next`} className="sf-card space-y-4 p-5" data-testid="next-steps">
+          <h3 id={`${id}-next`} className="sf-plain text-lg">
+            {t.nextTitle}
+          </h3>
+          <ol className="space-y-3.5">
+            {t.nextSteps.slice(0, 3).map((step, i) => (
+              <li key={step} className="flex gap-3">
+                <span aria-hidden="true" className="sf-step-num" data-state="current">
+                  {i === 0 ? <PhoneCall size={15} strokeWidth={2} /> : count(i + 1)}
+                </span>
+                <span className="pt-0.5">{step}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+        <div className="space-y-3 rounded-[1.25rem] border border-sf-sun-glow bg-sf-sun-soft p-5">
+          <p className="flex items-center gap-2 font-bold">
+            <Lock aria-hidden="true" size={18} strokeWidth={2} />
+            {t.nextSteps[3]}
+          </p>
+          <p className="rounded-xl border-2 border-dashed border-sf-line-strong bg-sf-card px-3 py-3 text-[0.9375rem] text-sf-ink-2">{t.linkPreview}</p>
+        </div>
+        <div className="sf-card space-y-5 p-5 lg:p-7">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[0.9375rem]">
+            <dt className="text-sf-ink-2">{t.name}</dt>
+            <dd>{result.customer.name}</dd>
+            <dt className="text-sf-ink-2">{t.phone}</dt>
+            <dd className="sf-num">{result.customer.phone}</dd>
+            <dt className="text-sf-ink-2">{t.deliverTo}</dt>
+            <dd className="whitespace-pre-line">
+              {result.customer.address}
+              {q.zone ? ` (${t.deliveryZone[q.zone]})` : ""}
+            </dd>
+          </dl>
+          <Summary quote={q} lang={lang} zone={q.zone ?? ""} />
+          <p className="sf-num flex items-center justify-between gap-3 border-t border-sf-line pt-3 font-bold">
+            <span className="inline-flex items-center gap-2">
+              <Banknote aria-hidden="true" size={18} strokeWidth={1.75} />
+              {t.cod}
+            </span>
+            <span className="sf-price text-[1.5rem]" data-testid="simulated-total">
+              {q.totalPaisa !== null ? formatTaka(q.totalPaisa, lang) : "—"}
+            </span>
+          </p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Link href={`/office/storefront-preview/${lang}/products`} className="sf-btn sf-btn-lg flex-1">
+            {t.continueShopping}
+          </Link>
+          <button type="button" onClick={() => go("contact")} className="sf-btn sf-btn-ghost sf-btn-lg flex-1">
+            {t.edit}
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  const stepTitle = stage === "contact" ? t.contact : stage === "delivery" ? t.deliverTo : t.reviewTitle;
+  const button = (label: string) => (
+    <button type="submit" disabled={pending} className="sf-btn sf-btn-lg w-full lg:w-auto lg:min-w-72">
+      {pending ? t.checking : label}
+    </button>
+  );
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        void check("review");
-      }}
-      className="grid gap-10 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
-      noValidate
-    >
-      <div className="space-y-5">
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:gap-12">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (stage !== "done") void check(stage);
+        }}
+        className="min-w-0 space-y-6"
+        noValidate
+        data-testid={stage === "review" ? "checkout-review" : undefined}
+      >
+        {wide ? null : summaryFold}
         {progress}
-        {notice}
-        {summaryErrors.length ? (
-          <div role="alert" className="rounded-sm border-2 border-sf-danger bg-white px-4 py-3" data-testid="checkout-errors">
-            <h2 ref={heading} tabIndex={-1} className="font-semibold focus:outline-none">
-              {t.fixErrors}
-            </h2>
-            <ul className="mt-1 list-disc pl-5">
-              {summaryErrors.map((e) => (
-                <li key={e}>{e}</li>
-              ))}
-            </ul>
+        <h2 ref={heading} tabIndex={-1} className="scroll-mt-28 text-[1.75rem] focus:outline-none lg:text-[2.125rem]">
+          {stepTitle}
+        </h2>
+        {errors}
+
+        {stage === "contact" ? (
+          <div className="space-y-5">
+            <p className="sf-badge" data-tone="ok">
+              <Check aria-hidden="true" size={15} strokeWidth={2.5} />
+              {t.guestNote}
+            </p>
+            {field("name", t.name, { autoComplete: "name" })}
+            {field("phone", t.phone, { hint: t.phoneHint, autoComplete: "tel", inputMode: "tel" })}
+            {failure}
+            {button(t.continue)}
           </div>
         ) : null}
-        <fieldset className="space-y-4">
-          <legend className="text-xl font-semibold">{t.contact}</legend>
-          <p className="text-sf-umber">{t.guestNote}</p>
-          {field("name", t.name, { autoComplete: "name" })}
-          {field("phone", t.phone, { hint: t.phoneHint, autoComplete: "tel", inputMode: "tel" })}
-          {field("address", t.address, { hint: t.addressHint, multiline: true, autoComplete: "street-address" })}
-        </fieldset>
-      </div>
-      <aside aria-label={t.orderSummary} className="space-y-5 rounded-sm bg-white p-5 lg:self-start">
-        <h2 className="text-xl font-semibold">{t.orderSummary}</h2>
-        <p role="status" aria-live="polite" className="text-sm text-sf-umber">
-          {quoteState === "loading" ? t.checkingCart : quoteState === "error" ? t.cartCheckFailed : ""}
-        </p>
-        {quoteState === "error" ? (
-          <button type="button" onClick={retry} className="min-h-11 rounded-sm border border-sf-cocoa px-4 font-medium">
-            {t.retry}
-          </button>
+
+        {stage === "delivery" ? (
+          <div className="space-y-6">
+            {field("address", t.address, { hint: t.addressHint, multiline: true, autoComplete: "street-address" })}
+            <div>
+              <ZoneChoice quote={quote} lang={lang} zone={zone} onZone={setZone} invalid={Boolean(errorFor("zone"))} />
+              {errorFor("zone") ? <p className="mt-1.5 text-[0.875rem] font-semibold text-sf-danger">{errorFor("zone")}</p> : null}
+            </div>
+            {failure}
+            <div className="flex flex-col-reverse items-stretch gap-3 lg:flex-row lg:items-center">
+              <button type="button" onClick={() => go("contact")} className="sf-btn sf-btn-ghost sf-btn-lg">
+                <ArrowLeft aria-hidden="true" size={18} strokeWidth={2} className="rtl:rotate-180" />
+                {t.back}
+              </button>
+              {button(t.continue)}
+            </div>
+          </div>
         ) : null}
-        <ul className="divide-y divide-sf-line border-y border-sf-line">
-          {(quote?.lines ?? []).map((l) => (
-            <li key={l.sku} className="flex justify-between gap-4 py-2 tabular-nums">
-              <span>
-                {lineName(lang, l, l.sku)} × {count(l.quantity)}
-              </span>
-              <span>{l.lineTotalPaisa !== null ? formatTaka(l.lineTotalPaisa, lang) : "—"}</span>
-            </li>
-          ))}
-        </ul>
-        <Totals quote={quote} lang={lang} zone={zone} onZone={setZone} />
-        {errorFor("zone") ? <p className="font-medium text-sf-danger">{errorFor("zone")}</p> : null}
-        {errorFor("cart") ? (
-          <p className="font-medium text-sf-danger">
-            {errorFor("cart")}{" "}
-            <Link href={`/office/storefront-preview/${lang}/cart`} className="underline underline-offset-4">
-              {t.backToCart}
-            </Link>
-          </p>
+
+        {stage === "review" ? (
+          <div className="space-y-6">
+            <div className="sf-card divide-y divide-sf-line">
+              <div className="flex items-start justify-between gap-4 p-4">
+                <div className="min-w-0 text-[0.9375rem]">
+                  <p className="text-[0.8125rem] font-semibold text-sf-ink-2">{t.stepContact}</p>
+                  <p>{result?.customer?.name ?? values.name}</p>
+                  <p className="sf-num">{result?.customer?.phone ?? values.phone}</p>
+                </div>
+                <button type="button" onClick={() => go("contact")} className="sf-link inline-flex min-h-11 shrink-0 items-center">
+                  {t.edit}
+                </button>
+              </div>
+              <div className="flex items-start justify-between gap-4 p-4">
+                <div className="min-w-0 text-[0.9375rem]">
+                  <p className="text-[0.8125rem] font-semibold text-sf-ink-2">{t.deliverTo}</p>
+                  <p className="whitespace-pre-line">{result?.customer?.address ?? values.address}</p>
+                  <p>{t.deliveryZone[zone] ?? ""}</p>
+                </div>
+                <button type="button" onClick={() => go("delivery")} className="sf-link inline-flex min-h-11 shrink-0 items-center">
+                  {t.edit}
+                </button>
+              </div>
+              <div className="flex items-center gap-3 p-4 text-[0.9375rem]">
+                <Banknote aria-hidden="true" size={20} strokeWidth={1.75} className="shrink-0" />
+                <p>
+                  <span className="font-semibold">{t.cod}.</span> {t.codNote}
+                </p>
+              </div>
+            </div>
+            <p className="sf-note">
+              <PhoneCall aria-hidden="true" size={18} strokeWidth={1.75} />
+              <span>{t.receivedNotConfirmed}</span>
+            </p>
+            {notice}
+            {failure}
+            {button(t.placeOrderSimulated)}
+          </div>
         ) : null}
-        <p className="text-sm">{t.receivedNotConfirmed}</p>
-        {failure}
-        <button type="submit" disabled={pending} className="min-h-12 w-full rounded-sm bg-sf-cocoa px-5 text-lg font-semibold text-sf-ivory disabled:opacity-70">
-          {pending ? t.checking : t.reviewOrder}
-        </button>
-      </aside>
-    </form>
+      </form>
+      {wide ? aside : null}
+    </div>
   );
 }

@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { clearSignInLimits, ensureZones, expectLabelledFields, seedSku, signIn, submitAndWait, testDatabase } from "./support";
 
@@ -172,7 +173,10 @@ test("guest tracking: masked view, direct cancellation while pending, a request 
   const guestPage = await guest.newPage();
   const requests: string[] = [];
   guestPage.on("request", (r) => requests.push(r.url()));
-  guestPage.on("dialog", (d) => void d.accept());
+  // No browser dialog is used on the tracking page: the question is asked in the page itself.
+  guestPage.on("dialog", () => {
+    throw new Error("The tracking page opened a browser dialog.");
+  });
   const response = await guestPage.goto(link);
   expect(response?.headers()["referrer-policy"]).toBe("no-referrer");
   expect(response?.headers()["x-robots-tag"]).toBe("noindex, nofollow");
@@ -181,7 +185,28 @@ test("guest tracking: masked view, direct cancellation while pending, a request 
   await expect(guestPage.getByText("T*** (017******05)")).toBeVisible();
   await expect(guestPage.locator("body")).not.toContainText("Test Customer");
   await expect(guestPage.locator("body")).not.toContainText("House 5");
+  // Accessible and usable on a 360-pixel phone, in both languages; the language switch never touches the link.
+  await guestPage.setViewportSize({ width: 360, height: 740 });
+  for (const lang of ["English", "বাংলা"]) {
+    if (lang !== "English") await guestPage.getByRole("button", { name: lang }).click();
+    expect(await guestPage.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    const axe = await new AxeBuilder({ page: guestPage }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
+    expect(axe.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+    for (const el of await guestPage.locator("header button, header a, main button, main a").all()) {
+      const box = await el.boundingBox();
+      if (box) expect(Math.min(box.width, box.height), await el.innerText()).toBeGreaterThanOrEqual(43.5);
+    }
+  }
+  await expect(guestPage.locator('[lang="bn"]').first()).toBeVisible();
+  await guestPage.getByRole("button", { name: "English" }).click();
+  // The cancel question is asked in the page; "No" changes nothing, "Yes" cancels.
   await guestPage.getByRole("button", { name: "Cancel order" }).click();
+  await expect(guestPage.getByTestId("cancel-question")).toBeFocused();
+  await guestPage.getByRole("button", { name: "No, keep the order" }).click();
+  await expect(guestPage.getByTestId("cancel-question")).toHaveCount(0);
+  await expect(guestPage.getByTestId("guest-order-status")).toHaveText("Received, waiting for the shop to confirm with you");
+  await guestPage.getByRole("button", { name: "Cancel order" }).click();
+  await guestPage.getByRole("button", { name: "Yes, cancel the order" }).click();
   await expect(guestPage.getByRole("status")).toHaveText("Your order is cancelled.");
   await expect(guestPage.getByTestId("guest-order-status")).toHaveText("Cancelled");
   const token = link.split("#t=")[1];
@@ -202,6 +227,7 @@ test("guest tracking: masked view, direct cancellation while pending, a request 
   await guestPage.goto(link2);
   await expect(guestPage.getByRole("button", { name: "Cancel order" })).toHaveCount(0);
   await guestPage.getByRole("button", { name: "Ask the shop to cancel" }).click();
+  await guestPage.getByRole("button", { name: "Yes, send the request" }).click();
   await expect(guestPage.getByRole("status")).toContainText("Your request was sent");
   expect(await stock(page, sku)).toMatchObject({ reservation: "Reserved for orders: 2 · Available for new orders: 2" });
   await page.goto(confirmedUrl);

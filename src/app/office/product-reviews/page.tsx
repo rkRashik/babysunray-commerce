@@ -62,12 +62,12 @@ export default async function ProductReviewsPage({ searchParams }: { searchParam
       </p>
       <form method="get" action="/office/product-reviews" role="search" className="flex flex-wrap items-end gap-2">
         <div>
-          <label htmlFor="review-q" className="block text-sm font-medium">
+          <label htmlFor="review-q" className="block text-sm font-semibold">
             Search by name, slug or SKU
           </label>
-          <input id="review-q" type="search" name="q" maxLength={100} defaultValue={term ?? ""} className="mt-1 block rounded border border-gray-400 bg-white px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900" />
+          <input id="review-q" type="search" name="q" maxLength={100} defaultValue={term ?? ""} className="of-input mt-1.5 w-auto" />
         </div>
-        <button type="submit" className="rounded border border-gray-400 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900">
+        <button type="submit" className="of-btn of-btn-line">
           Search
         </button>
       </form>

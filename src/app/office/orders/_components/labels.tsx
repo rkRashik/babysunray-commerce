@@ -30,6 +30,40 @@ const LABEL: Record<string, string> = {
 };
 export const label = (value: string) => LABEL[value] ?? value.replace(/_/g, " ");
 
+// The tone of a status pill (First Light): waiting on someone (amber), done (green), moving (blue), off the normal path (red),
+// or quiet. The word always says the state; the colour only groups it.
+const TONE: Record<string, "wait" | "ok" | "move" | "bad" | "quiet"> = {
+  pending_verification: "wait",
+  verification_expired: "bad",
+  confirmed: "ok",
+  cancelled: "bad",
+  closed: "quiet",
+  unfulfilled: "quiet",
+  packed: "move",
+  dispatched: "move",
+  delivered: "ok",
+  rto: "bad",
+  rto_received: "bad",
+  unpaid: "quiet",
+  partially_collected: "wait",
+  collected: "wait",
+  settled: "ok",
+  none: "quiet",
+  requested: "wait",
+  in_progress: "wait",
+  resolved: "ok",
+};
+export const tone = (value: string) => TONE[value] ?? "quiet";
+
+/** A status as a word in a toned pill. */
+export function StatusPill({ value, testId }: { value: string; testId?: string }) {
+  return (
+    <span className="of-pill" data-tone={tone(value)} data-testid={testId}>
+      {label(value)}
+    </span>
+  );
+}
+
 export const bdt = (paisa: number) => `৳ ${formatPaisa(paisa)}`;
 
 /** "in 3 h 20 min" / "4 h 5 min ago", from the server's clock at render time. */
@@ -40,19 +74,34 @@ export function relative(target: Date, now: Date): string {
   return minutes >= 0 ? `in ${text}` : `${text} ago`;
 }
 
-export function Dimensions({ order }: { order: Pick<Order, "orderStatus" | "fulfilmentStatus" | "paymentStatus" | "returnStatus"> }) {
+export function Dimensions({ order, compact = false }: { order: Pick<Order, "orderStatus" | "fulfilmentStatus" | "paymentStatus" | "returnStatus">; compact?: boolean }) {
   const items: [string, string][] = [
     ["Order", order.orderStatus],
     ["Fulfilment", order.fulfilmentStatus],
     ["Payment", order.paymentStatus],
     ["Return", order.returnStatus],
   ];
+  if (compact) {
+    // In a list: four pills in a row, each still named for screen readers.
+    return (
+      <dl className="flex flex-wrap gap-1.5">
+        {items.map(([name, value]) => (
+          <div key={name} className="contents">
+            <dt className="sr-only">{name}</dt>
+            <dd className="of-pill" data-tone={tone(value)} title={name}>
+              {label(value)}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    );
+  }
   return (
     <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
       {items.map(([name, value]) => (
-        <div key={name} className="rounded border border-gray-300 bg-gray-50 px-2 py-1">
-          <dt className="text-xs text-gray-600">{name}</dt>
-          <dd className="font-medium" data-dimension={name.toLowerCase()}>
+        <div key={name} className="space-y-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
+          <dt className="text-xs font-semibold text-gray-600">{name}</dt>
+          <dd className="of-pill whitespace-normal" data-tone={tone(value)} data-dimension={name.toLowerCase()}>
             {label(value)}
           </dd>
         </div>

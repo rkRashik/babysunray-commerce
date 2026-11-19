@@ -80,7 +80,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
           </p>
         ) : null}
         {overdue ? (
-          <p role="status" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950" data-testid="verification">
+          <p role="status" className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-950" data-testid="verification">
             Verification expired — Owner review. The 24-hour window ended {relative(order.verificationExpiresAt, now)}; its stock {order.orderStatus === "verification_expired" ? "was released" : "is being released"}.
             Confirming now reserves the stock again, only if it is still available. The order is not cancelled unless you cancel it.
           </p>

@@ -22,8 +22,8 @@ type Preview = {
 };
 type Result = { import: { id: string; productsCreated: number; variantsCreated: number; products: { id: string; slug: string; nameEn: string | null; nameBn: string | null }[] }; replayed: boolean };
 
-const BUTTON = "rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2 disabled:opacity-60";
-const SECONDARY = "rounded border border-gray-400 bg-white px-4 py-2 text-sm hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900";
+const BUTTON = "of-btn of-btn-primary";
+const SECONDARY = "of-btn of-btn-line";
 const taka = (paisa: number) => `${Math.floor(paisa / 100)}.${String(paisa % 100).padStart(2, "0")}`;
 
 async function send(path: string, form: FormData): Promise<{ status: number; body: Record<string, unknown> }> {
@@ -95,8 +95,8 @@ export function ImportWizard() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3 rounded border border-gray-300 bg-white p-4">
-        <label htmlFor={`${id}-file`} className="block text-sm font-medium">
+      <div className="space-y-3 of-card p-4 lg:p-5">
+        <label htmlFor={`${id}-file`} className="block text-sm font-semibold">
           Catalogue file (CSV UTF-8 or XLSX, at most 2 MB and 1,000 rows)
         </label>
         <input
@@ -109,7 +109,7 @@ export function ImportWizard() {
             setResult(null);
             setError(null);
           }}
-          className="block w-full rounded border border-gray-400 bg-white px-3 py-2 text-base"
+          className="of-input"
         />
         <button type="button" onClick={check} disabled={busy !== null} className={BUTTON}>
           {busy === "checking" ? "Checking…" : "Check file (nothing is saved)"}
@@ -117,13 +117,13 @@ export function ImportWizard() {
       </div>
 
       {error ? (
-        <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
           {error}
         </p>
       ) : null}
 
       {preview && !result ? (
-        <section aria-labelledby={`${id}-preview`} className="space-y-4 rounded border border-gray-300 bg-white p-4" data-testid="import-preview">
+        <section aria-labelledby={`${id}-preview`} className="space-y-4 of-card p-4 lg:p-5" data-testid="import-preview">
           <h2 id={`${id}-preview`} className="text-base font-semibold">
             Preview ({preview.format.toUpperCase()}): nothing has been saved
           </h2>
@@ -140,7 +140,7 @@ export function ImportWizard() {
             <dd>{preview.counts.emptyRows}</dd>
           </dl>
           {preview.warnings.map((w) => (
-            <p key={w.code} className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            <p key={w.code} className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-950">
               {w.message}
             </p>
           ))}

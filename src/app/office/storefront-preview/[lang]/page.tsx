@@ -1,147 +1,160 @@
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { SunMark } from "@/app/_design/sun-mark";
 import { installationIdentity } from "@/config/installation";
 import { getDb } from "@/db/client";
 import { dictionary, isLang, localised } from "@/modules/storefront/i18n";
 import { listPreviewProducts, previewFacets } from "@/modules/storefront/service";
 import { requireOffice } from "../../_lib/session";
-import { previewConcept } from "../_components/concept";
-import { Search } from "../_components/header";
-import { base, Localised, ProductGrid } from "../_components/parts";
+import { NoPhoto } from "../_components/no-photo";
+import { base, HowToOrder, Localised, Photo, ProductGrid, ProductRail, productName, SectionHeading, tintFor, TrustLines } from "../_components/parts";
 
-// Home page prototype in three concepts (Gates H.27 and H.30): the installation's name and optional description
-// (src/config/installation.ts), the Owner's categories, featured products and what is new. No slogan, claim,
-// review or stock photo in either: only configured or Owner data. The products and their order are the same.
+const MAX_CATEGORIES = 8;
+const MAX_SIZES = 10;
+// The opening's three arches, middle tallest: the sunrise.
+const ARCHES = [
+  { box: "w-[30%] aspect-[4/5.2]", tint: "bg-sf-sky" },
+  { box: "w-[36%] aspect-[4/6.2]", tint: "bg-sf-butter" },
+  { box: "w-[30%] aspect-[4/4.6]", tint: "bg-sf-sage" },
+];
+
+// Home page of the storefront preview (First Light). One bold moment, then calm: the opening on the sun wash with the
+// shop's own line (or "New Arrivals") and its newest photographed products in three arches; the three approved promises;
+// shortcuts by size (parents shop by the baby's age) and by category; featured and new products; and how ordering works.
+// Everything shown is the installation's configured text (src/config/installation.ts) or the Owner's data: no slogan,
+// claim, review, discount or stock photo.
 export default async function PreviewHome({ params }: { params: Promise<{ lang: string }> }) {
   const { lang } = await params;
   if (!isLang(lang)) notFound();
   const principal = await requireOffice("storefront:preview");
   const db = getDb();
-  const [{ items }, facets, concept] = [await listPreviewProducts(db, principal, {}), await previewFacets(db, principal), await previewConcept()];
+  const [{ items }, facets] = [await listPreviewProducts(db, principal, {}), await previewFacets(db, principal)];
+  const categories = facets.categories.slice(0, MAX_CATEGORIES);
+  // Each category is shown by the first photographed product in it (the catalogue's own order); no photo, no picture.
+  const covers = await Promise.all(categories.map(async (c) => (await listPreviewProducts(db, principal, { category: c.slug })).items.find((p) => p.photo) ?? null));
   const t = dictionary(lang);
   const identity = installationIdentity();
-  const line = localised(lang, identity.storeLine.en, identity.storeLine.bn);
+  const other = lang === "en" ? "bn" : "en";
+  const lineHere = localised(lang, identity.storeLine.en, identity.storeLine.bn);
+  const line = lineHere ?? localised(other, identity.storeLine.en, identity.storeLine.bn);
+  const lineLang = lineHere === null ? other : lang;
   const featured = items.filter((p) => p.featured).slice(0, 4);
   const latest = items.filter((p) => !p.featured).slice(0, 8);
-  const family = concept === "family";
+  const photographed = [...latest, ...featured].filter((p) => p.photo).slice(0, 3);
+  // The tallest arch (the middle) gets the newest photo.
+  const heroes = photographed.length === 3 ? [photographed[1], photographed[0], photographed[2]] : photographed;
+  const headline = line ?? t.latest;
 
-  // Concept C: A's display name and amber rule, then B's search and category chips, all above the fold on a phone.
-  const hybridHero = (
-    <section aria-labelledby="sf-hero" className="space-y-6 border-b border-sf-line pb-10 pt-2">
-      <div className="max-w-3xl">
-        <h1 id="sf-hero" className="sf-display text-4xl leading-tight sm:text-5xl">
-          {identity.storeName}
-        </h1>
-        <span aria-hidden="true" className="mt-5 block h-px w-20 bg-sf-amber" />
-        {line ? <p className="mt-5 max-w-xl text-lg leading-relaxed text-sf-umber">{line}</p> : null}
-      </div>
-      <div className="max-w-xl">
-        <Search lang={lang} id="sf-search-hero" large />
-      </div>
-      <ul aria-label={t.categories} className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        <li className="shrink-0">
-          <Link href={`${base(lang)}/products`} className="sf-pill inline-flex min-h-11 items-center bg-sf-cocoa px-5 font-semibold text-sf-ivory">
-            {t.shopAll}
-          </Link>
-        </li>
-        {facets.categories.map((c) => (
-          <li key={c.slug} className="shrink-0">
-            <Link href={`${base(lang)}/products?category=${c.slug}`} className="sf-pill inline-flex min-h-11 items-center border border-sf-cocoa bg-white px-5 font-medium">
-              <Localised lang={lang} en={c.nameEn} bn={c.nameBn} />
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-
-  const hero = concept === "hybrid" ? hybridHero : family ? (
-    // Concept B: search first, then every category as a large chip (scrolls sideways on a phone).
-    <section aria-labelledby="sf-hero" className="sf-card space-y-5 bg-sf-sand px-5 py-8 sm:px-10 sm:py-10">
-      <h1 id="sf-hero" className="text-3xl font-bold leading-tight sm:text-4xl">
-        {identity.storeName}
-      </h1>
-      {line ? <p className="max-w-xl text-lg leading-relaxed">{line}</p> : null}
-      <div className="max-w-xl">
-        <Search lang={lang} id="sf-search-hero" large />
-      </div>
-      <ul aria-label={t.categories} className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        <li className="shrink-0">
-          <Link href={`${base(lang)}/products`} className="sf-pill inline-flex min-h-11 items-center bg-sf-cocoa px-5 font-semibold text-sf-ivory">
-            {t.shopAll}
-          </Link>
-        </li>
-        {facets.categories.map((c) => (
-          <li key={c.slug} className="shrink-0">
-            <Link href={`${base(lang)}/products?category=${c.slug}`} className="sf-pill inline-flex min-h-11 items-center border border-sf-cocoa bg-white px-5 font-medium">
-              <Localised lang={lang} en={c.nameEn} bn={c.nameBn} />
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </section>
-  ) : (
-    // Concept A: the name set large in the display face, a fine amber rule, categories as a quiet index.
-    <section aria-labelledby="sf-hero" className="grid gap-10 border-b border-sf-line pb-12 pt-4 md:grid-cols-[3fr_2fr] md:items-end">
-      <div>
-        <h1 id="sf-hero" className="sf-display max-w-2xl text-4xl leading-tight sm:text-6xl">
-          {identity.storeName}
-        </h1>
-        <span aria-hidden="true" className="mt-6 block h-px w-24 bg-sf-amber" />
-        {line ? <p className="mt-6 max-w-xl text-lg leading-relaxed text-sf-umber">{line}</p> : null}
-      </div>
-      <ul aria-label={t.categories} className="divide-y divide-sf-line border-y border-sf-line">
-        {facets.categories.map((c) => (
-          <li key={c.slug}>
-            <Link href={`${base(lang)}/products?category=${c.slug}`} className="flex min-h-12 items-center justify-between gap-4 py-2 text-lg hover:underline hover:underline-offset-4">
-              <Localised lang={lang} en={c.nameEn} bn={c.nameBn} />
-              <span aria-hidden="true">→</span>
-            </Link>
-          </li>
-        ))}
-        <li>
-          <Link href={`${base(lang)}/products`} className="flex min-h-12 items-center justify-between gap-4 py-2 text-lg font-medium text-sf-tan hover:underline hover:underline-offset-4">
-            {t.shopAll}
-            <span aria-hidden="true">→</span>
-          </Link>
-        </li>
-      </ul>
-    </section>
-  );
-
-  const heading = family ? "text-2xl font-bold" : "sf-display text-3xl";
   return (
-    <div className={family ? "space-y-10" : concept === "hybrid" ? "space-y-12" : "space-y-16"}>
-      {hero}
+    <div className="space-y-12 lg:space-y-20">
+      <section aria-labelledby="sf-hero" className="-mx-4 -mt-5 overflow-hidden bg-sf-sun-soft lg:mx-0 lg:-mt-2 lg:rounded-[2.5rem]">
+        <div className="grid items-end gap-6 px-5 pt-8 lg:grid-cols-[1.05fr_1fr] lg:gap-12 lg:px-14 lg:pt-14">
+          <div className="sf-enter space-y-5 lg:self-center lg:pb-14">
+            <SunMark className="sf-rays h-7 w-12 text-sf-sun" />
+            <h1 id="sf-hero" lang={line !== null && lineLang !== lang ? lineLang : undefined} className={`sf-display max-w-[14ch] ${headline.length > 40 ? "text-[2.125rem] lg:text-[3.5rem]" : "text-[2.75rem] lg:text-[4.75rem]"}`}>
+              {headline}
+            </h1>
+            <div className="flex flex-wrap gap-3">
+              <Link href={`${base(lang)}/products`} className="sf-btn sf-btn-lg">
+                {t.shopAll}
+                <ArrowRight aria-hidden="true" size={20} strokeWidth={2} className="rtl:rotate-180" />
+              </Link>
+              {facets.sizes.length ? (
+                <a href="#sf-sizes" className="sf-btn sf-btn-ghost sf-btn-lg hidden sm:inline-flex">
+                  {t.shopBySize}
+                </a>
+              ) : null}
+            </div>
+          </div>
+          <div className="mx-auto flex w-full max-w-[30rem] items-end justify-center gap-2.5 lg:gap-4" data-testid="hero-photo">
+            {heroes.length ? (
+              heroes.map((p, i) => {
+                const arch = heroes.length === 3 ? ARCHES[i] : { box: heroes.length === 1 ? "w-[62%] aspect-[4/5.4]" : "w-[44%] aspect-[4/5.4]", tint: tintFor(p.id) };
+                return (
+                  <Link key={p.id} href={`${base(lang)}/products/${p.slug}`} className={`group block ${arch.box}`} aria-label={productName(lang, p)}>
+                    <div className={`sf-photo sf-arch-open h-full w-full ${arch.tint}`}>
+                      {p.photo ? <Photo photo={p.photo} lang={lang} name={productName(lang, p)} sizes="(min-width: 1024px) 16vw, 34vw" priority decorative className="transition-transform duration-700 ease-out group-hover:scale-[1.04]" /> : null}
+                    </div>
+                  </Link>
+                );
+              })
+            ) : (
+              <div aria-hidden="true" className="sf-arch-open flex aspect-[4/5] w-[62%] items-center justify-center bg-sf-butter">
+                <SunMark className="h-16 w-28 text-sf-sun" />
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <TrustLines lang={lang} className="-mt-4 lg:-mt-8" />
 
       {items.length === 0 ? (
-        <p className="max-w-xl text-lg" role="status">
-          {t.noProducts}
-        </p>
+        <section className="sf-card px-6 py-10 text-center">
+          <p role="status" className="mx-auto max-w-xl text-lg">
+            {t.noProducts}
+          </p>
+        </section>
+      ) : null}
+
+      {facets.sizes.length ? (
+        <section aria-labelledby="sf-sizes" id="sf-sizes" className="scroll-mt-24">
+          <SectionHeading id="sf-sizes-title" title={t.shopBySize} />
+          <ul aria-label={t.shopBySize} className="sf-rail gap-2.5 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0">
+            {facets.sizes.slice(0, MAX_SIZES).map((s) => (
+              <li key={s}>
+                <Link href={`${base(lang)}/products?size=${encodeURIComponent(s)}`} className="sf-chip sf-option min-h-14 min-w-24 bg-sf-card text-[1.0625rem] lg:min-w-32">
+                  {s}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {categories.length ? (
+        <section aria-labelledby="sf-categories">
+          <SectionHeading id="sf-categories" title={t.shopByCategory} action={{ href: `${base(lang)}/products`, label: t.seeAll }} />
+          <ul aria-label={t.shopByCategory} className={`grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-5 ${categories.length >= 4 ? "lg:grid-cols-4" : categories.length === 3 ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
+            {categories.map((c, i) => {
+              const cover = covers[i];
+              return (
+                <li key={c.slug}>
+                  <Link href={`${base(lang)}/products?category=${c.slug}`} className={`group flex h-full flex-col items-center gap-3 rounded-[1.5rem] px-3 pt-4 pb-4 text-center transition-transform active:scale-[0.98] ${tintFor(c.slug)}`}>
+                    <div className="sf-photo sf-arch aspect-[4/5] w-[72%] bg-sf-card/60">
+                      {cover?.photo ? (
+                        <Photo photo={cover.photo} lang={lang} name={productName(lang, cover)} sizes="(min-width: 1024px) 16vw, 32vw" className="transition-transform duration-700 ease-out group-hover:scale-[1.04]" decorative />
+                      ) : (
+                        <NoPhoto label="" />
+                      )}
+                    </div>
+                    <p className="text-[1.0625rem] font-bold">
+                      <Localised lang={lang} en={c.nameEn} bn={c.nameBn} />
+                    </p>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       ) : null}
 
       {featured.length ? (
-        <section aria-labelledby="sf-featured" className="space-y-6">
-          <h2 id="sf-featured" className={heading}>
-            {t.featured}
-          </h2>
-          <ProductGrid products={featured} lang={lang} label={t.featured} concept={concept} lead={concept === "editorial"} />
+        <section aria-labelledby="sf-featured">
+          <SectionHeading id="sf-featured" title={t.featured} />
+          <ProductGrid products={featured} lang={lang} label={t.featured} />
         </section>
       ) : null}
 
       {latest.length ? (
-        <section aria-labelledby="sf-latest" className="space-y-6">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 id="sf-latest" className={heading}>
-              {t.latest}
-            </h2>
-            <Link href={`${base(lang)}/products`} className="inline-flex min-h-11 items-center font-medium text-sf-tan underline underline-offset-4">
-              {t.shopAll}
-            </Link>
-          </div>
-          <ProductGrid products={latest} lang={lang} label={t.latest} concept={concept} />
+        <section aria-labelledby="sf-latest">
+          <SectionHeading id="sf-latest" title={t.latest} action={{ href: `${base(lang)}/products`, label: t.seeAll }} />
+          <ProductRail products={latest} lang={lang} label={t.latest} />
         </section>
       ) : null}
+
+      <HowToOrder lang={lang} />
     </div>
   );
 }

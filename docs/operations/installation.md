@@ -28,9 +28,9 @@ Steps 1 to 4 are the same as for BabySunray, described once in [getting-started.
 | `STORE_NAME` | Preview header and home page, the development status page and its title | At most 60 characters, no line breaks or control characters. |
 | `STORE_LINE_EN`, `STORE_LINE_BN` | A one-line description on the preview home page and footer, in that language (the other language if one is missing, marked with its `lang`) | At most 200 characters each. |
 | `STORE_CONTACT_PHONE`, `STORE_CONTACT_EMAIL` | The preview footer, only when set | Digits, spaces, hyphens and an optional leading `+`; an email address. |
-| `STORE_THEME_INK`, `STORE_THEME_ACCENT`, `STORE_THEME_PAPER` | Preview text, accent and background colours (prototype tokens; the final design is not decided, BR-6) | `#rrggbb`. Refused, with the defaults kept, unless text stays readable: ink on paper at least 7:1, ink on accent and the fixed secondary text colours at least 4.5:1 (WCAG contrast). |
+| `STORE_THEME_INK`, `STORE_THEME_ACCENT`, `STORE_THEME_PAPER` | Storefront text colour, action colour (buttons, the current tab) and page colour (defaults: First Light, the approved logo colours `#332923`, `#c28b56`, `#f9f6f1`; [design system](../design/storefront-design-system.md)) | `#rrggbb`. Refused, with the defaults kept, unless text stays readable: ink on paper at least 7:1; ink on the action colour, the fixed secondary text and error colours on paper, and paper and the light footer tone on ink at least 4.5:1 (WCAG contrast). |
 
-No logo or image setting exists: the preview shows the name as text. Logos and photos never go into the repository.
+Logo: each installation has its own `logo.png` (the wordmark) and `mark.png` (the compact mark) in `public/brand/`, served from the site's own origin. BabySunray's approved logo (Direction A, background removed, never redrawn) is committed there, so a Git-based deployment such as Netlify ships it; the repository is private. **A copy for another business must delete or replace both files before handover** (the rehearsal does this in its clean clone). Without the files, the storefront, the tracking page and the Office show the shop's name as text (`src/app/_design/brand.tsx`). Product photos never go into the repository.
 
 **Not settings,** because they are business decisions an installation makes in code and policy, never values a user can change:
 
@@ -90,6 +90,6 @@ Exact versions from `package-lock.json` on 2026-11-16, with the licence each pac
 | `@axe-core/playwright` | 4.14.0 | MPL-2.0 | Development only |
 | `read-excel-file` | 9.3.14 | MIT | Development only (tests read the XLSX exports with it). The application reads and writes XLSX with its own code. |
 | `ajv`, `ajv-formats`, `@seriousme/openapi-schema-validator` | 8.20.0, 3.0.1, 2.11.0 | MIT | Development only |
-| Fonts | none bundled | — | The preview uses the device's own fonts (Noto Sans Bengali, Nirmala UI, Vrinda, Shonar Bangla, then the system font). |
-| Logo and photos | not in the repository | — | BabySunray's logo and photos are never part of a copy. |
+| Fonts | Fraunces, Figtree, Tiro Bangla, Hind Siliguri (`@fontsource` 5.3, self-hosted) | SIL Open Font License 1.1 | Bundled from the packages at build time; nothing is fetched from another site. |
+| Logo and photos | the logo files are in `public/brand/`; photos are not in the repository | — | BabySunray's logo is deleted or replaced in a copy for another business; its photos are never part of a copy. |
 | PostgreSQL 18 and its `pg_dump` / `pg_restore` | installed separately | PostgreSQL Licence | Not shipped; each installation installs its own. |

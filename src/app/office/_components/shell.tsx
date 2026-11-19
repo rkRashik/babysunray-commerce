@@ -1,11 +1,82 @@
+import {
+  BarChart3,
+  CheckCircle2,
+  ClipboardCheck,
+  ClipboardList,
+  Eye,
+  FileDown,
+  FileText,
+  FolderTree,
+  ImageIcon,
+  LayoutDashboard,
+  ListChecks,
+  type LucideIcon,
+  PackageCheck,
+  PackagePlus,
+  Rocket,
+  Shirt,
+  Truck,
+  Upload,
+} from "lucide-react";
 import Link from "next/link";
+import { BrandMark } from "@/app/_design/brand";
+import { flFontVariables } from "@/app/_design/fonts";
+import { installationIdentity } from "@/config/installation";
 import { SignOutButton } from "./auth-forms";
+import { OfficeMenu } from "./office-menu";
 
 type Crumb = { href: string; label: string; lang?: string };
+type Current = "dashboard" | "products" | "new" | "import" | "preparation" | "reviews" | "categories" | "orders" | "delivery" | "reports" | "counts" | "exports" | "media" | "preview" | "policies" | "launch";
 
-const NAV_LINK = "rounded px-1 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900";
+// The Owner Office's navigation, grouped by the work it serves. Every Office screen is reachable from here.
+const NAV: { group: string; items: { key: Current; href: string; label: string; icon: LucideIcon }[] }[] = [
+  {
+    group: "Daily work",
+    items: [
+      { key: "dashboard", href: "/office/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { key: "orders", href: "/office/orders", label: "Orders", icon: ClipboardList },
+      { key: "counts", href: "/office/stock-counts", label: "Stock counts", icon: PackageCheck },
+    ],
+  },
+  {
+    group: "Catalogue",
+    items: [
+      { key: "products", href: "/office", label: "Products", icon: Shirt },
+      { key: "new", href: "/office/products/new", label: "New product", icon: PackagePlus },
+      { key: "import", href: "/office/import", label: "Import", icon: Upload },
+      { key: "preparation", href: "/office/catalogue-preparation", label: "Preparation", icon: ListChecks },
+      { key: "reviews", href: "/office/product-reviews", label: "Product reviews", icon: ClipboardCheck },
+      { key: "categories", href: "/office/categories", label: "Categories", icon: FolderTree },
+      { key: "media", href: "/office/media-health", label: "Photo storage", icon: ImageIcon },
+    ],
+  },
+  {
+    group: "Money and records",
+    items: [
+      { key: "reports", href: "/office/reports", label: "Reports", icon: BarChart3 },
+      { key: "exports", href: "/office/exports", label: "Exports", icon: FileDown },
+    ],
+  },
+  {
+    group: "Shop",
+    items: [
+      { key: "delivery", href: "/office/settings/delivery", label: "Delivery charges", icon: Truck },
+      { key: "preview", href: "/office/storefront-preview", label: "Storefront preview", icon: Eye },
+      { key: "policies", href: "/office/policies", label: "Policy drafts", icon: FileText },
+      { key: "launch", href: "/office/launch-readiness", label: "Launch readiness", icon: Rocket },
+    ],
+  },
+];
 
-// Neutral internal layout for the Owner Office. Functional only: not an approved visual design.
+/** The First Light surface of the Office: its fonts and its remapped palette (globals.css, `.of`). */
+export const officeSurface = `of ${flFontVariables}`;
+
+// The three pages the Owner uses all day, always one tap away on a phone (bottom bar); everything else is in its "Menu".
+const QUICK: Current[] = ["dashboard", "orders", "products"];
+
+// The Owner Office layout (First Light, the professional side of the system): a cocoa sidebar on a desktop; on a phone a
+// slim top bar, and a bottom bar (Dashboard, Orders, Products, Menu) under the thumb. The Menu lists every page, grouped,
+// in large rows with their icons.
 export function OfficeShell({
   title,
   titleLang,
@@ -13,6 +84,7 @@ export function OfficeShell({
   notice,
   breadcrumbs = [],
   current,
+  actions,
 }: {
   title: string;
   /** "bn" when the title is a Bangla product name. */
@@ -21,96 +93,118 @@ export function OfficeShell({
   notice?: string;
   /** Where this page sits, from Products down; the page itself is the title. */
   breadcrumbs?: Crumb[];
-  current?: "dashboard" | "products" | "new" | "import" | "preparation" | "reviews" | "categories" | "orders" | "delivery" | "reports" | "counts" | "exports" | "media" | "preview" | "policies" | "launch";
+  current?: Current;
+  /** Buttons or links beside the title (the page's main actions). */
+  actions?: React.ReactNode;
 }) {
+  const { storeName } = installationIdentity();
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
+    <div className={`${officeSurface} min-h-screen lg:flex`}>
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-10 focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:ring-2 focus:ring-gray-900"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-full focus:bg-white focus:px-4 focus:py-2 focus:shadow-lg"
       >
         Skip to content
       </a>
-      <header className="border-b border-gray-300 bg-white">
-        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <nav aria-label="Owner Office" className="flex flex-wrap items-center gap-4 text-sm">
-            <span className="font-semibold">Owner Office</span>
-            <Link href="/office/dashboard" aria-current={current === "dashboard" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              Dashboard
-            </Link>
-            <Link href="/office" aria-current={current === "products" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              Products
-            </Link>
-            <Link href="/office/products/new" aria-current={current === "new" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              New product
-            </Link>
-            <Link href="/office/import" aria-current={current === "import" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              Import
-            </Link>
-            <Link href="/office/catalogue-preparation" aria-current={current === "preparation" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              Preparation
-            </Link>
-            <Link href="/office/product-reviews" aria-current={current === "reviews" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              Product reviews
-            </Link>
-            <Link href="/office/categories" aria-current={current === "categories" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              Categories
-            </Link>
-            <Link href="/office/orders" aria-current={current === "orders" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              Orders
-            </Link>
-            <Link href="/office/settings/delivery" aria-current={current === "delivery" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              Delivery charges
-            </Link>
-            <Link href="/office/reports" aria-current={current === "reports" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              Reports
-            </Link>
-            <Link href="/office/stock-counts" aria-current={current === "counts" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              Stock counts
-            </Link>
-            <Link href="/office/exports" aria-current={current === "exports" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              Exports
-            </Link>
-            <Link href="/office/media-health" aria-current={current === "media" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              Photo storage
-            </Link>
-            <Link href="/office/storefront-preview" aria-current={current === "preview" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              Storefront preview
-            </Link>
-            <Link href="/office/policies" aria-current={current === "policies" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              Policy drafts
-            </Link>
-            <Link href="/office/launch-readiness" aria-current={current === "launch" ? "page" : undefined} className={`${NAV_LINK} aria-[current=page]:font-semibold aria-[current=page]:underline`}>
-              Launch readiness
-            </Link>
-          </nav>
-          <SignOutButton />
+      <aside className="z-30 bg-of-night text-[#eadfcf] lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-64 lg:shrink-0 lg:flex-col">
+        <div className="flex items-center gap-3 px-4 py-3 lg:px-5 lg:pt-6 lg:pb-5">
+          <span className="inline-flex shrink-0 items-center justify-center rounded-xl bg-sf-paper p-1">
+            <BrandMark name={storeName} size={34} />
+          </span>
+          <div className="min-w-0 flex-1 leading-tight">
+            <p className="truncate font-bold text-white">{storeName}</p>
+            <p className="text-[0.8125rem] text-[#bfae9b]">Owner Office</p>
+          </div>
+          <SignOutButton dark />
         </div>
-      </header>
-      <main id="main" tabIndex={-1} className="mx-auto max-w-4xl space-y-6 px-4 py-6 focus:outline-none">
-        {breadcrumbs.length ? (
-          <nav aria-label="Breadcrumb" className="text-sm text-gray-700">
-            <ol className="flex flex-wrap items-center gap-1">
-              {breadcrumbs.map((crumb) => (
-                <li key={crumb.href} className="flex items-center gap-1">
-                  <Link href={crumb.href} lang={crumb.lang} className="underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900">
-                    {crumb.label}
-                  </Link>
-                  <span aria-hidden="true">›</span>
-                </li>
-              ))}
-            </ol>
-          </nav>
-        ) : null}
-        <h1 lang={titleLang} className="text-xl font-semibold break-words">
-          {title}
-        </h1>
-        {notice ? (
-          <p role="status" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900">
-            {notice}
-          </p>
-        ) : null}
-        {children}
+        <nav aria-label="Owner Office" className="hidden lg:block lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:px-3 lg:pb-5">
+          <ul className="space-y-4">
+            {NAV.map(({ group, items }) => (
+              <li key={group}>
+                <p className="px-3 pb-1.5 text-[0.75rem] font-semibold tracking-wide text-[#bfae9b]">{group}</p>
+                <ul className="space-y-0.5">
+                  {items.map(({ key, href, label, icon: Icon }) => (
+                    <li key={key}>
+                      <Link href={href} aria-current={current === key ? "page" : undefined} className="of-nav-link">
+                        <Icon aria-hidden="true" size={18} strokeWidth={1.75} className="shrink-0" />
+                        {label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </aside>
+      <nav aria-label="Quick links" className="of-bar lg:hidden">
+        <ul className="mx-auto grid h-[var(--of-bar-h)] max-w-lg grid-cols-4">
+          {NAV.flatMap((g) => g.items)
+            .filter((i) => QUICK.includes(i.key))
+            .sort((a, b) => QUICK.indexOf(a.key) - QUICK.indexOf(b.key))
+            .map(({ key, href, label, icon: Icon }) => (
+              <li key={key}>
+                <Link href={href} aria-current={current === key ? "page" : undefined} className="of-tab">
+                  <Icon aria-hidden="true" size={24} strokeWidth={1.75} />
+                  <span>{label}</span>
+                </Link>
+              </li>
+            ))}
+          <li>
+            <OfficeMenu title="All pages" closeLabel="Close menu" label="Menu" highlighted={current !== undefined && !QUICK.includes(current)}>
+              <nav aria-label="Owner Office">
+                {NAV.map(({ group, items }) => (
+                  <div key={group} className="pb-2">
+                    <p className="px-3 pt-3 pb-1 text-[0.8125rem] font-semibold text-gray-600">{group}</p>
+                    <ul>
+                      {items.map(({ key, href, label, icon: Icon }) => (
+                        <li key={key}>
+                          <Link href={href} aria-current={current === key ? "page" : undefined} className="of-menu-link">
+                            <Icon aria-hidden="true" size={22} strokeWidth={1.75} className="shrink-0 text-gray-600" />
+                            {label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </nav>
+            </OfficeMenu>
+          </li>
+        </ul>
+      </nav>
+      <main id="main" tabIndex={-1} className="min-w-0 flex-1 focus:outline-none">
+        <div className="mx-auto max-w-5xl space-y-6 px-4 pt-6 pb-[calc(var(--of-bar-h)+2.5rem)] lg:px-10 lg:pt-10 lg:pb-16">
+          <div className="space-y-2">
+            {breadcrumbs.length ? (
+              <nav aria-label="Breadcrumb" className="text-sm text-gray-600">
+                <ol className="flex flex-wrap items-center gap-1">
+                  {breadcrumbs.map((crumb) => (
+                    <li key={crumb.href} className="flex items-center gap-1">
+                      <Link href={crumb.href} lang={crumb.lang} className="rounded font-medium text-gray-700 underline-offset-4 hover:underline">
+                        {crumb.label}
+                      </Link>
+                      <span aria-hidden="true">›</span>
+                    </li>
+                  ))}
+                </ol>
+              </nav>
+            ) : null}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h1 lang={titleLang} className="text-[1.625rem] leading-tight font-bold tracking-[-0.01em] break-words lg:text-[1.875rem]">
+                {title}
+              </h1>
+              {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+            </div>
+          </div>
+          {notice ? (
+            <p role="status" className="flex items-center gap-2.5 rounded-xl bg-green-50 px-4 py-3 text-sm font-semibold text-green-800">
+              <CheckCircle2 aria-hidden="true" size={18} strokeWidth={2} className="shrink-0" />
+              {notice}
+            </p>
+          ) : null}
+          {children}
+        </div>
       </main>
     </div>
   );
@@ -120,8 +214,8 @@ export function OfficeShell({
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const id = `section-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   return (
-    <section aria-labelledby={id} className="space-y-3 rounded border border-gray-300 bg-white p-4">
-      <h2 id={id} className="text-base font-semibold">
+    <section aria-labelledby={id} className="of-card space-y-4 p-5 lg:p-6">
+      <h2 id={id} className="text-[1.0625rem] font-bold">
         {title}
       </h2>
       {children}

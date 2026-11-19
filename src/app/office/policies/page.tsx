@@ -36,7 +36,7 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
         </p>
       </div>
       {drafts.map((draft, i) => (
-        <section key={draft.kind} id={draft.kind} aria-labelledby={`h-${draft.kind}`} className="scroll-mt-4 space-y-4 rounded border border-gray-300 bg-white p-4">
+        <section key={draft.kind} id={draft.kind} aria-labelledby={`h-${draft.kind}`} className="scroll-mt-4 space-y-4 of-card p-4 lg:p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 id={`h-${draft.kind}`} className="text-base font-semibold">
               {POLICY_TITLES[draft.kind]}

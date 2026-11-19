@@ -50,5 +50,6 @@ describe("npm run netlify:env", () => {
     expect(run(["--out", path.join(dir, "b.env")]).status).toBe(1);
     expect(run(["--out", path.join(dir, "c.env"), "--url", "http://shop-example.netlify.app"]).status).toBe(1);
     expect(existsSync(path.join(process.cwd(), "x.env"))).toBe(false);
-  });
+    // Four child processes in a row: slower than the 5 s default when the whole suite runs in parallel.
+  }, 30_000);
 });

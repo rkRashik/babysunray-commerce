@@ -10,14 +10,15 @@ export type InstallationIdentity = {
   storeLine: { en: string | null; bn: string | null };
   /** Shown only when configured. */
   contact: { phone: string | null; email: string | null };
-  /** Storefront preview colours (prototype tokens), each checked for readable contrast. */
+  /** Storefront colours (First Light): text (ink), the action colour (accent) and the page (paper), each checked for readable contrast. */
   theme: { ink: string; accent: string; paper: string };
 };
 
+// First Light: the approved logo colours (BR-2) Deep Cocoa, Muted Amber and Warm Ivory.
 export const DEFAULT_THEME = { ink: "#332923", accent: "#c28b56", paper: "#f9f6f1" };
-// The fixed secondary tokens the preview also draws with (src/app/globals.css); the configured colours must keep
-// them readable.
-const SECONDARY = { umber: "#6b5b4f", tan: "#7a4e24", sand: "#e8d5bf" };
+// The fixed secondary tokens the storefront also draws with (src/app/globals.css); the configured colours must keep
+// them readable: secondary text on the page, and the oat tone as light text on an ink footer.
+const SECONDARY = { ink2: "#6b5b4f", danger: "#a63a2b", light: "#eadfcf" };
 export const DEFAULT_STORE_NAME = "Storefront";
 
 type Env = Record<string, string | undefined>;
@@ -70,8 +71,8 @@ export function readInstallationIdentity(env: Env): { identity: InstallationIden
       const checks: [string, number, number][] = [
         ["ink on paper", contrast(candidate.ink, candidate.paper), 7],
         ["ink on accent", contrast(candidate.ink, candidate.accent), 4.5],
-        ["secondary text on paper", Math.min(contrast(SECONDARY.umber, candidate.paper), contrast(SECONDARY.tan, candidate.paper)), 4.5],
-        ["light text on ink", Math.min(contrast(SECONDARY.sand, candidate.ink), contrast(candidate.paper, candidate.ink)), 4.5],
+        ["secondary text on paper", Math.min(contrast(SECONDARY.ink2, candidate.paper), contrast(SECONDARY.danger, candidate.paper)), 4.5],
+        ["light text on ink", Math.min(contrast(SECONDARY.light, candidate.ink), contrast(candidate.paper, candidate.ink)), 4.5],
       ];
       const failed = checks.filter(([, ratio, min]) => ratio < min);
       if (failed.length) problems.push(`The STORE_THEME_* colours are not readable enough (${failed.map(([what, ratio, min]) => `${what} ${ratio.toFixed(1)}:1, needs ${min}:1`).join("; ")}). The default colours are used.`);

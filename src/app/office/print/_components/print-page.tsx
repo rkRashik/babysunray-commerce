@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatTime } from "../../_components/shell";
+import { formatTime, officeSurface } from "../../_components/shell";
 import { PrintButton } from "./print-button";
 
 // A printable Owner document: plain black-on-white A4 layout (see the print rules in globals.css), with the
@@ -19,14 +19,14 @@ export function PrintPage({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-white text-black">
-      <div className="no-print flex flex-wrap items-center gap-4 border-b border-gray-300 px-4 py-3 text-sm">
-        <Link href={back.href} className="underline">
+    <div className={`${officeSurface} min-h-screen print:bg-white`}>
+      <div className="no-print flex flex-wrap items-center gap-4 border-b border-gray-200 bg-white px-4 py-3 text-sm">
+        <Link href={back.href} className="of-btn of-btn-line">
           {back.label}
         </Link>
         <PrintButton />
       </div>
-      <main className="print-sheet mx-auto max-w-[190mm] space-y-4 px-4 py-4">
+      <main className="print-sheet mx-auto my-4 max-w-[190mm] space-y-4 bg-white px-4 py-4 text-black shadow-sm print:my-0 print:shadow-none sm:px-8 sm:py-8">
         <header className="border-b border-black pb-2">
           <h1 className="text-lg font-semibold">{title}</h1>
           {scope ? <p className="text-sm">{scope}</p> : null}

@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { getDb } from "@/db/client";
 import { DomainError } from "@/modules/domain-error";
@@ -9,7 +10,9 @@ import { bdt, relative } from "../orders/_components/labels";
 
 export const metadata = { title: "Dashboard · Owner Office" };
 
-const FIELD = "mt-1 block w-32 rounded border border-gray-400 bg-white px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900";
+const FIELD = "of-input mt-1.5 w-32";
+// Queues where the Owner must act now (a call, a decision): drawn first, with an amber edge.
+const URGENT = new Set(["pending", "overdue", "cancellation_requests"]);
 
 function StockTable({ rows, caption }: { rows: StockRow[]; caption: string }) {
   return (
@@ -29,7 +32,7 @@ function StockTable({ rows, caption }: { rows: StockRow[]; caption: string }) {
           {rows.map((r) => (
             <tr key={r.variantId}>
               <td className="py-1 pr-3">
-                <Link href={`/office/skus/${encodeURIComponent(r.sku)}`} className="underline">
+                <Link href={`/office/skus/${encodeURIComponent(r.sku)}`} className="inline-flex min-h-11 items-center underline underline-offset-4">
                   {r.sku}
                 </Link>
               </td>
@@ -63,14 +66,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const now = d.generatedAt;
 
   return (
-    <OfficeShell title="Dashboard" current="dashboard">
-      <p className="text-sm text-gray-700" data-testid="generated-at">
+    <OfficeShell
+      title="Dashboard"
+      current="dashboard"
+      actions={
+        <Link href="/office/orders/new" className="of-btn of-btn-primary">
+          <Plus aria-hidden="true" size={18} strokeWidth={2} />
+          New order
+        </Link>
+      }
+    >
+      <p className="text-sm text-gray-600" data-testid="generated-at">
         Figures as of {formatTime(d.generatedAt)}. Reload the page for current figures. A pending order is not a sale, and a delivered order is not
         money received until its collection and settlement are recorded.
       </p>
 
       {d.unconfiguredZones.length ? (
-        <p role="alert" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+        <p role="alert" className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-950">
           No active delivery charge for {d.unconfiguredZones.map((z) => ZONE_LABELS[z]).join(" and ")}: orders for{" "}
           {d.unconfiguredZones.length > 1 ? "these zones" : "this zone"} cannot be taken.{" "}
           <Link href="/office/settings/delivery" className="underline">
@@ -81,23 +93,27 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       ) : null}
 
       <Section title="Order work queues">
-        <ul className="grid gap-3 sm:grid-cols-2" aria-label="Order work queues">
-          {d.queues.map((q) => (
-            <li key={q.queue} className="rounded border border-gray-300 p-3" data-queue={q.queue}>
-              <div className="flex items-baseline justify-between gap-2">
-                <h3 className="text-sm font-medium">{q.label}</h3>
-                <span className="text-2xl font-semibold tabular-nums" data-testid={`count-${q.queue}`}>
+        <ul className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-3" aria-label="Order work queues">
+          {[...d.queues].sort((a, b) => Number(URGENT.has(b.queue) && b.count > 0) - Number(URGENT.has(a.queue) && a.count > 0)).map((q) => (
+            <li
+              key={q.queue}
+              className={`flex flex-col rounded-2xl border bg-white ${q.count > 0 ? "col-span-2 p-4 sm:col-span-1" : "p-3 sm:p-4"} ${URGENT.has(q.queue) && q.count > 0 ? "border-amber-300 shadow-[inset_4px_0_0_var(--color-sf-sun)]" : "border-gray-200"}`}
+              data-queue={q.queue}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h3 className={`leading-snug font-semibold text-gray-700 ${q.count === 0 ? "text-[0.8125rem] sm:text-sm" : "text-sm"}`}>{q.label}</h3>
+                <span className={`leading-none font-bold tabular-nums ${q.count === 0 ? "text-2xl text-gray-400 sm:text-[2rem]" : "text-[2rem]"}`} data-testid={`count-${q.queue}`}>
                   {q.count}
                 </span>
               </div>
               {q.count === 0 ? (
-                <p className="mt-1 text-xs text-gray-600">None right now.</p>
+                <p className="mt-2 hidden text-xs text-gray-600 sm:block">None right now.</p>
               ) : (
                 <>
-                  <ul className="mt-2 space-y-1 text-sm">
+                  <ul className="mt-3 space-y-1.5 border-t border-gray-200 pt-3 text-sm">
                     {q.oldest.map((o) => (
                       <li key={o.id} className="flex flex-wrap justify-between gap-x-2">
-                        <Link href={`/office/orders/${o.id}`} className="underline">
+                        <Link href={`/office/orders/${o.id}`} className="inline-flex min-h-11 items-center underline underline-offset-4">
                           {formatOrderNumber(o.number)}
                         </Link>
                         <span className="text-xs text-gray-600">
@@ -112,7 +128,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                       </li>
                     ))}
                   </ul>
-                  <Link href={`/office/orders?queue=${q.queue}`} className="mt-2 inline-block text-sm underline">
+                  <Link href={`/office/orders?queue=${q.queue}`} className="mt-auto inline-flex min-h-11 items-center pt-2 text-sm font-semibold underline underline-offset-4">
                     Show all {q.count}
                     <span className="sr-only"> ({q.label})</span>
                   </Link>
@@ -124,18 +140,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </Section>
 
       <Section title="Returns and inspection">
-        <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
-          <div>
+        <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+          <div className="rounded-xl bg-gray-50 px-4 py-3">
             <dt className="text-gray-600">Return requested, parcel not received</dt>
-            <dd className="text-lg font-semibold tabular-nums">{d.returns.awaitingParcel}</dd>
+            <dd className="mt-1 text-2xl font-bold tabular-nums">{d.returns.awaitingParcel}</dd>
           </div>
-          <div>
+          <div className="rounded-xl bg-gray-50 px-4 py-3">
             <dt className="text-gray-600">Return received, decision pending</dt>
-            <dd className="text-lg font-semibold tabular-nums">{d.returns.awaitingDecision}</dd>
+            <dd className="mt-1 text-2xl font-bold tabular-nums">{d.returns.awaitingDecision}</dd>
           </div>
-          <div>
+          <div className="rounded-xl bg-gray-50 px-4 py-3">
             <dt className="text-gray-600">Approved, refund or completion pending</dt>
-            <dd className="text-lg font-semibold tabular-nums">{d.returns.approvedOpen}</dd>
+            <dd className="mt-1 text-2xl font-bold tabular-nums">{d.returns.approvedOpen}</dd>
           </div>
         </dl>
         {(["return", "rto"] as const).map((source) => {
@@ -183,7 +199,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         ) : null}
         <form method="get" action="/office/dashboard" className="flex flex-wrap items-end gap-3">
           <div>
-            <label htmlFor="low" className="block text-sm font-medium">
+            <label htmlFor="low" className="block text-sm font-semibold">
               Show SKUs with at most this many available
             </label>
             <input id="low" name="low" inputMode="numeric" defaultValue={rawLow ?? ""} className={FIELD} aria-describedby="low-hint" />
@@ -191,12 +207,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               Your own choice for this view only; no low-stock level is set by the system.
             </p>
           </div>
-          <button type="submit" className="mb-5 rounded border border-gray-400 bg-white px-4 py-2 text-sm hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900">
+          <button type="submit" className="of-btn of-btn-line mb-6">
             Show
           </button>
         </form>
         {lowError ? (
-          <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+          <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
             {lowError}
           </p>
         ) : d.stock.low ? (
@@ -213,16 +229,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         ) : null}
       </Section>
 
-      <p className="text-sm">
-        <Link href="/office/reports" className="underline">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <Link href="/office/reports" className="of-btn of-btn-line">
           Reports and COD reconciliation
-        </Link>{" "}
-        ·{" "}
-        <Link href="/office/print/picking" className="underline">
+        </Link>
+        <Link href="/office/print/picking" className="of-btn of-btn-line">
           Picking list and packing summary
-        </Link>{" "}
+        </Link>
         <span className="text-gray-600">(confirmed orders not dispatched yet)</span>
-      </p>
+      </div>
     </OfficeShell>
   );
 }

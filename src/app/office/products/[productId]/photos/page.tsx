@@ -28,8 +28,8 @@ const UPLOAD_ERRORS: Record<string, string> = {
   failed: "Something went wrong and nothing was saved. Please try again.",
 };
 
-const INPUT = "mt-1 block w-full rounded border border-gray-400 bg-white px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900";
-const BUTTON = "rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2";
+const INPUT = "of-input mt-1.5";
+const BUTTON = "of-btn of-btn-primary";
 
 /** A plain multipart form to the upload route (works without JavaScript; the server renders the key). */
 function UploadForm({ productId, version, replaceMediaId, label }: { productId: string; version: number; replaceMediaId?: string; label: string }) {
@@ -40,7 +40,7 @@ function UploadForm({ productId, version, replaceMediaId, label }: { productId: 
       <input type="hidden" name="version" value={String(version)} />
       {replaceMediaId ? <input type="hidden" name="replaceMediaId" value={replaceMediaId} /> : null}
       <div>
-        <label htmlFor={`image-${id}`} className="block text-sm font-medium">
+        <label htmlFor={`image-${id}`} className="block text-sm font-semibold">
           {label} <span className="text-gray-600">(required)</span>
         </label>
         <input id={`image-${id}`} type="file" name="image" accept="image/jpeg,image/png,image/webp" required aria-describedby={`image-${id}-hint`} className={INPUT} />
@@ -52,11 +52,11 @@ function UploadForm({ productId, version, replaceMediaId, label }: { productId: 
       {replaceMediaId ? null : (
         <>
           <div>
-            <label htmlFor={`alt-en-${id}`} className="block text-sm font-medium">What the photo shows (English)</label>
+            <label htmlFor={`alt-en-${id}`} className="block text-sm font-semibold">What the photo shows (English)</label>
             <input id={`alt-en-${id}`} name="altEn" maxLength={300} className={INPUT} />
           </div>
           <div>
-            <label htmlFor={`alt-bn-${id}`} className="block text-sm font-medium">What the photo shows (Bangla)</label>
+            <label htmlFor={`alt-bn-${id}`} className="block text-sm font-semibold">What the photo shows (Bangla)</label>
             <input id={`alt-bn-${id}`} name="altBn" maxLength={300} lang="bn" className={INPUT} />
           </div>
         </>
@@ -90,12 +90,12 @@ export default async function PhotosPage({ params, searchParams }: Props) {
   return (
     <OfficeShell title="Photos" breadcrumbs={crumbs} notice={noticeFor(done)}>
       {problem ? (
-        <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
           {problem}
         </p>
       ) : null}
       {!storage.ok ? (
-        <p role="status" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+        <p role="status" className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-950">
           Photos cannot be stored or shown on this server: {storage.problem} Product photos are kept outside the project in a folder you choose (runbook, Product photos).
         </p>
       ) : null}

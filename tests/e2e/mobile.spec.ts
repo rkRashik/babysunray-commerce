@@ -18,7 +18,7 @@ test("an assisted order on a phone: create, confirm and read it without sideways
   await ensureZones();
   page.on("dialog", (dialog) => void dialog.accept());
   const sku = await seedSku(3);
-  await page.getByRole("navigation", { name: "Owner Office" }).getByRole("link", { name: "Orders" }).tap();
+  await page.getByRole("navigation", { name: "Quick links" }).getByRole("link", { name: "Orders" }).tap();
   await expect(page.getByRole("heading", { level: 1, name: "Orders" })).toBeVisible();
   await noSideScroll(page);
   await page.getByRole("link", { name: "New assisted order" }).tap();
@@ -42,8 +42,24 @@ test("an assisted order on a phone: create, confirm and read it without sideways
 
 test("navigation and the main screens work without sideways scrolling", async ({ page }) => {
   await noSideScroll(page);
-  const nav = page.getByRole("navigation", { name: "Owner Office" });
-  await nav.getByRole("link", { name: "New product" }).tap();
+  // The bottom bar has the daily pages; the Menu has every page, in large rows.
+  const bar = page.getByRole("navigation", { name: "Quick links" });
+  await expect(bar.getByRole("link")).toHaveCount(3);
+  expect(await smallTargets(page)).toEqual([]);
+  await bar.getByRole("button", { name: "Menu" }).tap();
+  const menu = page.getByRole("dialog", { name: "All pages" });
+  await expect(menu).toBeVisible();
+  for (const name of ["Dashboard", "Orders", "Stock counts", "Products", "New product", "Import", "Categories", "Reports", "Exports", "Delivery charges", "Storefront preview", "Launch readiness"]) {
+    await expect(menu.getByRole("link", { name, exact: true })).toBeVisible();
+  }
+  await noSideScroll(page);
+  // Escape closes it and returns focus to the Menu button.
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(bar.getByRole("button", { name: "Menu" })).toBeFocused();
+  await bar.getByRole("button", { name: "Menu" }).tap();
+  await page.getByRole("dialog", { name: "All pages" }).getByRole("link", { name: "New product", exact: true }).tap();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 1, name: "New draft product" })).toBeVisible();
   await noSideScroll(page);
 
@@ -78,7 +94,7 @@ test("navigation and the main screens work without sideways scrolling", async ({
   await expect(page.getByTestId("on-hand")).toHaveText("2");
   await noSideScroll(page);
 
-  await nav.getByRole("link", { name: "Products" }).tap();
+  await bar.getByRole("link", { name: "Products" }).tap();
   const search = page.getByRole("search", { name: "Search products" });
   await search.getByLabel("Search").fill(sku);
   await search.getByRole("button", { name: "Search" }).tap();
@@ -113,41 +129,45 @@ test("dashboard, reports, exports and a stock count on a phone, without sideways
   await noSideScroll(page);
 });
 
-test("storefront preview on a phone: the menu, size and colour by touch, the cart and checkout, without sideways scrolling", async ({ page }) => {
+test("storefront preview on a phone: the tab bar, search sheet, size and colour by touch, the bag and checkout, without sideways scrolling", async ({ page }) => {
   await ensureZones();
   const product = await seedStorefrontProduct();
   await page.goto("/office/storefront-preview/en");
   await noSideScroll(page);
-  const menu = page.getByTestId("mobile-menu");
-  await menu.getByText("Menu").tap();
-  await expect(menu.getByRole("link", { name: "All products" })).toBeVisible();
-  await menu.getByRole("searchbox").fill(product.nameEn);
-  await menu.getByRole("button", { name: "Search" }).tap();
+  await expect(page.getByTestId("tab-bar")).toBeVisible();
+  // Search opens from the tab bar with the field focused, so the keyboard comes up at once.
+  await page.getByTestId("tab-search").tap();
+  const sheet = page.getByRole("dialog", { name: "Search products" });
+  await expect(sheet.getByRole("searchbox")).toBeFocused();
+  await sheet.getByRole("searchbox").fill(product.nameEn);
+  await sheet.getByRole("button", { name: "Search" }).tap();
   await expect(page.getByTestId("result-count")).toHaveText("1 product");
   await noSideScroll(page);
-  await page.getByRole("link", { name: new RegExp(product.nameEn) }).tap();
+  await page.getByRole("link", { name: new RegExp(`^${product.nameEn}`) }).tap();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(product.nameEn);
+  // A product has its buying bar instead of the tab bar: never two bars.
+  await expect(page.getByTestId("tab-bar")).toHaveCount(0);
   await noSideScroll(page);
   const chip = (text: string) => page.locator("label").filter({ has: page.getByRole("radio", { name: new RegExp(`^${text}`) }) });
   await chip("0-3M").tap();
   await chip("Ivory").tap();
   await page.getByRole("button", { name: "One more" }).tap();
-  await page.getByRole("button", { name: "Add to cart" }).tap();
+  await page.getByRole("button", { name: /^Add to Bag/ }).tap();
   await expect(page.getByTestId("cart-count")).toHaveText("2");
   // Touch targets of the buying controls are at least 44 × 44 CSS pixels.
-  for (const control of [page.getByRole("button", { name: "One more" }), page.getByRole("button", { name: "Add to cart" }), chip("0-3M")]) {
+  for (const control of [page.getByRole("button", { name: "One more" }), page.getByRole("button", { name: /^Add to Bag/ }), chip("0-3M")]) {
     const box = (await control.boundingBox())!;
     expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
   }
-  await page.getByRole("link", { name: /^Cart/ }).tap();
+  await page.getByRole("link", { name: /^Bag/ }).tap();
   await expect(page.getByTestId("subtotal")).toHaveText("৳ 1,700");
   await page.getByTestId(`cart-line-${product.skus[0]}`).getByRole("button", { name: /^One fewer/ }).tap();
   await expect(page.getByTestId("subtotal")).toHaveText("৳ 850");
-  await page.getByLabel(/^Dhaka City/).tap();
+  await chip("Dhaka City").tap();
   await expect(page.getByTestId("total")).toHaveText("৳ 910");
   await noSideScroll(page);
-  await page.getByRole("link", { name: "Go to checkout" }).tap();
-  await expect(page.getByTestId("simulation-note")).toBeVisible();
+  await page.getByRole("link", { name: "Checkout", exact: true }).tap();
+  await expect(page.getByTestId("checkout-steps")).toBeVisible();
   await noSideScroll(page);
 });
 
@@ -160,20 +180,20 @@ test("checkout simulation on a 360-pixel-wide phone: every step fits, nothing is
   const chip = (text: string) => page.locator("label").filter({ has: page.getByRole("radio", { name: new RegExp(`^${text}`) }) });
   await chip("0-3M").tap();
   await chip("Ivory").tap();
-  await page.getByRole("button", { name: "কার্টে যোগ করুন" }).tap();
+  await page.getByRole("button", { name: /^কার্টে যোগ করুন/ }).tap();
   await expect(page.getByTestId("cart-count")).toHaveText("১");
   await page.goto("/office/storefront-preview/bn/checkout");
   await noSideScroll(page);
   await page.getByLabel("পুরো নাম").fill("পরীক্ষামূলক গ্রাহক");
   await page.getByLabel("মোবাইল নম্বর").fill("01711000053");
-  await page.getByLabel("ডেলিভারির ঠিকানা").fill("বাড়ি ৫৩, পরীক্ষা রোড");
-  await page.getByLabel(/^ঢাকা সিটি/).tap();
-  await page.getByRole("button", { name: "অর্ডার যাচাই করুন" }).tap();
+  await page.getByRole("button", { name: "এগিয়ে যান" }).tap();
+  await page.getByLabel("ডেলিভারি ঠিকানা").fill("বাড়ি ৫৩, পরীক্ষা রোড");
+  await chip("ঢাকা সিটি").tap();
+  await noSideScroll(page);
+  await page.getByRole("button", { name: "এগিয়ে যান" }).tap();
   await expect(page.getByTestId("checkout-review")).toBeVisible();
   await noSideScroll(page);
-  const before = await page.evaluate(() => document.body.innerText.length);
-  expect(before).toBeGreaterThan(0);
-  await page.getByRole("button", { name: "অর্ডার দিন (সিমুলেশন)" }).tap();
+  await page.getByRole("button", { name: "অর্ডার করুন (সিমুলেশন)" }).tap();
   await expect(page.getByTestId("simulation-result")).toContainText("এটি ছিল একটি সিমুলেশন");
   await noSideScroll(page);
   const db = await testDatabase();
@@ -184,19 +204,17 @@ test("checkout simulation on a 360-pixel-wide phone: every step fits, nothing is
   }
 });
 
-test("Concept B on a phone: search outside the menu, Add to cart and its answer always on screen, no sideways scrolling", async ({ page }) => {
+test("on a phone: search in the tab bar, Add to Bag and its answer always on screen, no sideways scrolling", async ({ page }) => {
   const product = await seedStorefrontProduct();
-  await page.goto("/office/storefront-preview");
-  await page.getByTestId("open-family-en").tap();
-  await expect(page.locator(".sf")).toHaveAttribute("data-concept", "family");
-  await expect(page.locator("header").getByRole("searchbox")).toBeVisible();
+  await page.goto("/office/storefront-preview/en");
+  await expect(page.getByTestId("tab-search")).toBeInViewport();
   await noSideScroll(page);
   await page.goto(`/office/storefront-preview/en/products/${product.slug}`);
-  const add = page.getByRole("button", { name: "Add to cart" });
+  const add = page.getByRole("button", { name: /^Add to Bag/ });
   await expect(add).toBeInViewport();
   await add.tap();
   await expect(page.getByTestId("add-message")).toBeInViewport();
-  await expect(page.getByTestId("add-message")).toHaveText("Choose a size and colour first.");
+  await expect(page.getByTestId("add-message")).toHaveText("Select a size and colour first.");
   await page.mouse.wheel(0, 3000);
   await expect(add).toBeInViewport();
   await noSideScroll(page);
@@ -206,7 +224,7 @@ test("Concept B on a phone: search outside the menu, Add to cart and its answer 
 async function smallTargets(page: import("@playwright/test").Page): Promise<string[]> {
   return page.evaluate(() => {
     const small: string[] = [];
-    for (const el of document.querySelectorAll<HTMLElement>("header a, header button, header input, header summary, main a, main button, main input:not([type=hidden]), main select, main textarea, main summary")) {
+    for (const el of document.querySelectorAll<HTMLElement>("header a, header button, header input, header summary, main a, main button, main input:not([type=hidden]), main select, main textarea, main summary, nav a, nav button")) {
       const choice = el.matches("input[type=radio], input[type=checkbox]");
       const target = choice ? (el.closest("label") ?? el.parentElement ?? el) : el;
       const r = target.getBoundingClientRect();
@@ -218,13 +236,11 @@ async function smallTargets(page: import("@playwright/test").Page): Promise<stri
   });
 }
 
-test("Concept C on a 360-pixel phone: every page fits, every control is at least 44 pixels, axe passes, and the checkout records nothing", async ({ page }) => {
+test("the storefront on a 360-pixel phone: every page fits, every control is at least 44 pixels, axe passes, and the checkout records nothing", async ({ page }) => {
   await ensureZones();
   const product = await seedStorefrontProduct({ featured: true });
   await page.setViewportSize({ width: 360, height: 740 });
-  await page.goto("/office/storefront-preview");
-  await page.getByTestId("open-hybrid-en").tap();
-  await expect(page.locator(".sf")).toHaveAttribute("data-concept", "hybrid");
+  await page.goto("/office/storefront-preview/en");
   const axe = async () => {
     const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
     expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
@@ -242,12 +258,12 @@ test("Concept C on a 360-pixel phone: every page fits, every control is at least
     await check(`${lang}/products/${product.slug}`);
   }
 
-  // The buying panel: Add to cart in the fixed bar at once, its answer beside it.
+  // The buying panel: Add to Bag in the fixed bar at once, its answer just above it.
   await page.goto(`/office/storefront-preview/en/products/${product.slug}`);
-  await expect(page.getByRole("button", { name: "Add to cart" })).toBeInViewport();
+  await expect(page.getByRole("button", { name: /^Add to Bag/ })).toBeInViewport();
   await page.locator("label").filter({ has: page.getByRole("radio", { name: /^0-3M/ }) }).tap();
   await page.locator("label").filter({ has: page.getByRole("radio", { name: /^Ivory/ }) }).tap();
-  await page.getByRole("button", { name: "Add to cart" }).tap();
+  await page.getByRole("button", { name: /^Add to Bag/ }).tap();
   await expect(page.getByTestId("add-message")).toBeInViewport();
   await expect(page.getByTestId("cart-count")).toHaveText("1");
   await check("bn/cart");
@@ -260,18 +276,21 @@ test("Concept C on a 360-pixel phone: every page fits, every control is at least
     await check("bn/checkout");
     await page.getByLabel("পুরো নাম").fill("পরীক্ষামূলক গ্রাহক");
     await page.getByLabel("মোবাইল নম্বর").fill("০১৭১১-০০০০৮১");
-    await page.getByLabel("ডেলিভারির ঠিকানা").fill("বাড়ি ৮১, পরীক্ষা রোড");
-    await page.getByLabel(/^ঢাকা সিটি/).tap();
-    await page.getByRole("button", { name: "অর্ডার যাচাই করুন" }).tap();
+    await page.getByRole("button", { name: "এগিয়ে যান" }).tap();
+    await page.getByLabel("ডেলিভারি ঠিকানা").fill("বাড়ি ৮১, পরীক্ষা রোড");
+    await page.locator("label").filter({ has: page.getByRole("radio", { name: /^ঢাকা সিটি/ }) }).tap();
+    expect(await smallTargets(page)).toEqual([]);
+    await axe();
+    await page.getByRole("button", { name: "এগিয়ে যান" }).tap();
     await expect(page.getByTestId("checkout-review")).toBeVisible();
     await noSideScroll(page);
     expect(await smallTargets(page)).toEqual([]);
-    await page.getByRole("button", { name: "অর্ডার দিন (সিমুলেশন)" }).tap();
+    await axe();
+    await page.getByRole("button", { name: "অর্ডার করুন (সিমুলেশন)" }).tap();
     const result = page.getByTestId("simulation-result");
     await expect(result).toBeVisible();
     await expect(page.getByTestId("next-steps")).toContainText("এরপর যা হবে");
     await expect(page.getByTestId("reference-preview")).toBeVisible();
-    await expect(page.getByTestId("checkout-steps").locator("[aria-current=step]")).toContainText("সারসংক্ষেপ");
     await noSideScroll(page);
     expect(await smallTargets(page)).toEqual([]);
     await axe();

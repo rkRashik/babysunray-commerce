@@ -1,18 +1,23 @@
+import type { Viewport } from "next";
 import { notFound } from "next/navigation";
+import { flFontVariables } from "@/app/_design/fonts";
 import { installationIdentity } from "@/config/installation";
 import { getDb } from "@/db/client";
 import { dictionary, isLang } from "@/modules/storefront/i18n";
 import { previewFacets } from "@/modules/storefront/service";
 import { requireOffice } from "../../_lib/session";
-import { previewConcept } from "../_components/concept";
+import { SfFrame } from "../_components/frame";
 import { Header } from "../_components/header";
-import { Footer, PreviewBanner } from "../_components/parts";
+import { TabBar } from "../_components/header-client";
+import { Footer, PreviewStrip } from "../_components/parts";
 
 export const metadata = { title: "Storefront preview · Owner Office" };
+// The page may draw under a phone's rounded corners and home indicator; the bars keep clear of them (safe-area insets).
+export const viewport: Viewport = { viewportFit: "cover", themeColor: "#f9f6f1" };
 
 // The private storefront preview (Owner only, `storefront:preview`). It lives under /office, so every response
 // carries the Office's private headers (no framing, noindex, no-store); each page and action also checks the
-// session itself, since a layout check alone is not access control. The wrapper's `lang` gives screen readers
+// session itself, since a layout check alone is not access control. The frame's `lang` gives screen readers
 // and fonts the chosen language.
 export default async function PreviewLayout({ children, params }: { children: React.ReactNode; params: Promise<{ lang: string }> }) {
   const { lang } = await params;
@@ -21,20 +26,20 @@ export default async function PreviewLayout({ children, params }: { children: Re
   const facets = await previewFacets(getDb(), principal);
   const t = dictionary(lang);
   const identity = installationIdentity();
-  const concept = await previewConcept();
-  // The installation's preview colours (validated for contrast) replace the prototype tokens for this subtree.
-  const theme = { "--color-sf-cocoa": identity.theme.ink, "--color-sf-amber": identity.theme.accent, "--color-sf-ivory": identity.theme.paper } as React.CSSProperties;
+  // The installation's colours (validated for contrast) replace ink, sun and paper for this subtree.
+  const theme = { "--color-sf-ink": identity.theme.ink, "--color-sf-sun": identity.theme.accent, "--color-sf-paper": identity.theme.paper } as React.CSSProperties;
   return (
-    <div lang={lang} data-concept={concept} className="sf min-h-screen bg-sf-ivory text-sf-cocoa" style={theme}>
-      <a href="#sf-main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-10 focus:rounded-sm focus:bg-white focus:px-3 focus:py-2">
+    <SfFrame lang={lang} className={`sf ${flFontVariables} flex min-h-dvh flex-col`} style={theme}>
+      <a href="#sf-main" className="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-50 focus:rounded-full focus:bg-sf-card focus:px-5 focus:py-3 focus:shadow-lg">
         {t.skip}
       </a>
-      <PreviewBanner lang={lang} concept={concept} />
-      <Header lang={lang} facets={facets} storeName={identity.storeName} concept={concept} />
-      <main id="sf-main" tabIndex={-1} className="mx-auto max-w-6xl px-4 py-8 focus:outline-none">
+      <PreviewStrip lang={lang} />
+      <Header lang={lang} facets={facets} storeName={identity.storeName} />
+      <main id="sf-main" tabIndex={-1} className="mx-auto w-full max-w-7xl flex-1 px-4 pt-5 pb-4 focus:outline-none lg:px-8 lg:pt-10">
         {children}
       </main>
-      <Footer lang={lang} identity={identity} />
-    </div>
+      <Footer lang={lang} identity={identity} facets={facets} />
+      <TabBar lang={lang} categories={facets.categories} />
+    </SfFrame>
   );
 }

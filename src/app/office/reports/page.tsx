@@ -8,7 +8,7 @@ import { CodTable, OutstandingView, PeriodReportView } from "./_components/repor
 
 export const metadata = { title: "Reports · Owner Office" };
 
-const FIELD = "mt-1 block rounded border border-gray-400 bg-white px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900";
+const FIELD = "of-input mt-1.5 w-auto";
 
 // Period report and COD reconciliation. Dates are Bangladesh calendar dates, both included; they are in the URL
 // (no personal data), so a refresh or a printed copy shows the same figures.
@@ -21,20 +21,20 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
   return (
     <OfficeShell title="Reports" current="reports">
-      <form method="get" action="/office/reports" className="flex flex-wrap items-end gap-3 rounded border border-gray-300 bg-white p-4">
+      <form method="get" action="/office/reports" className="flex flex-wrap items-end gap-3 of-card p-4 lg:p-5">
         <div>
-          <label htmlFor="from" className="block text-sm font-medium">
+          <label htmlFor="from" className="block text-sm font-semibold">
             From (Dhaka date)
           </label>
           <input id="from" type="date" name="from" defaultValue={range?.from ?? (typeof query.from === "string" ? query.from : "")} className={FIELD} />
         </div>
         <div>
-          <label htmlFor="to" className="block text-sm font-medium">
+          <label htmlFor="to" className="block text-sm font-semibold">
             To (included)
           </label>
           <input id="to" type="date" name="to" defaultValue={range?.to ?? (typeof query.to === "string" ? query.to : "")} className={FIELD} />
         </div>
-        <button type="submit" className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2">
+        <button type="submit" className="of-btn of-btn-primary">
           Show
         </button>
         {range ? (
@@ -45,7 +45,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       </form>
 
       {error ? (
-        <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
           {error}
         </p>
       ) : null}

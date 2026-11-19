@@ -23,7 +23,7 @@ export default async function StockCountsPage() {
         as a stock adjustment with your reason.
       </p>
       {drafts.length ? (
-        <p role="status" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+        <p role="status" className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-950">
           {drafts.length === 1 ? "A count is" : `${drafts.length} counts are`} still in progress:{" "}
           {drafts.map((d, i) => (
             <span key={d.id}>

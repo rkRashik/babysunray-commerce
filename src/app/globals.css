@@ -1,29 +1,56 @@
 @import "tailwindcss";
 
-/* Storefront preview prototype tokens (src/app/office/storefront-preview). Taken from the approved logo colours
-   as a reference only: the website's colour system and typography are not decided (BR-6), so this is a
-   prototype. Contrast on ivory: cocoa 13.1:1, umber 6.0:1, tan-ink 6.6:1; amber is used behind cocoa text
-   (4.8:1) or as decoration, never as text on ivory (2.7:1). */
+/* =====================================================================================================================
+   First Light: the BabySunray design system (docs/design/storefront-design-system.md). One family of tokens for the
+   storefront (the Owner-only preview and the guest tracking page, `.sf`) and the Owner Office (`.of`).
+   Cocoa to read, amber to act, ivory to rest. The approved logo colours (BR-2) are the base: Deep Cocoa #332923, Muted
+   Amber #C28B56, Warm Ivory #F9F6F1. An installation replaces ink, sun and paper with its own colours, checked for contrast
+   (src/config/installation.ts).
+   Contrast (WCAG): ink on paper 13.1:1, ink-2 on paper 6.0:1, sun-deep on paper 5.7:1, ink on sun 4.8:1, ink on sun-soft
+   11.6:1, danger on its soft ground 5.5:1, success 5.3:1, warn 6.1:1, info 6.0:1, field outlines on paper 3.2:1.
+   Amber is never text on ivory (2.6:1): it is a field behind ink.
+   ===================================================================================================================== */
 @theme {
-  --color-sf-cocoa: #332923;
-  --color-sf-amber: #c28b56;
-  --color-sf-ivory: #f9f6f1;
-  --color-sf-sand: #e8d5bf;
-  --color-sf-umber: #6b5b4f;
-  --color-sf-tan: #7a4e24;
-  --color-sf-line: #e3d7c8;
-  --color-sf-danger: #9b2c2c;
+  --color-sf-ink: #332923;
+  --color-sf-ink-2: #6b5b4f;
+  --color-sf-paper: #f9f6f1;
+  --color-sf-card: #fffdf9;
+  --color-sf-sun: #c28b56;
+  --color-sf-sun-deep: #8a5524;
+  --color-sf-sun-glow: #e8b67c;
+  --color-sf-sun-soft: #f6e7d2;
+  --color-sf-mist: #f2ece3;
+  --color-sf-line: #e6ddd1;
+  --color-sf-line-strong: #968878;
+  /* Garment tints: decorative grounds behind products and categories, always with ink text. */
+  --color-sf-peach: #f4d9c6;
+  --color-sf-butter: #f3e3ae;
+  --color-sf-sage: #d9e2cf;
+  --color-sf-sky: #d6e4ec;
+  --color-sf-blush: #f1d3d0;
+  --color-sf-oat: #eadfcf;
+  /* States: always with a word or an icon, never colour alone. */
+  --color-sf-danger: #a63a2b;
+  --color-sf-danger-soft: #fbe9e5;
+  --color-sf-success: #2f6b4f;
+  --color-sf-success-soft: #e1efe6;
+  --color-sf-warn: #7a5200;
+  --color-sf-warn-soft: #fbefd0;
+  --color-sf-info: #2e5a73;
+  --color-sf-info-soft: #dfebf2;
+  /* The Owner Office's dark sidebar. */
+  --color-of-night: #2a211c;
+  --color-of-night-2: #43362e;
+  --color-of-canvas: #f4efe8;
 }
 
-/* Bangla text: installed system fonts that cover the script, and room for its taller glyphs. A fallback for
-   legibility only, not a brand typeface (open decision 4). */
+/* Bangla text anywhere: the First Light Bangla face when the page loaded it, else installed fonts that cover the script. */
 :lang(bn) {
-  font-family: "Noto Sans Bengali", "Nirmala UI", "Vrinda", "Shonar Bangla", system-ui, sans-serif;
+  font-family: var(--font-fl-bn-text, "Noto Sans Bengali"), var(--font-fl-text, system-ui), "Noto Sans Bengali", "Nirmala UI", "Vrinda", "Shonar Bangla", system-ui, sans-serif;
   line-height: 1.7;
 }
 
-/* Printed Owner documents (src/app/office/print): A4, readable text, page numbers, and no screen-only controls.
-   Functional only, not an approved visual design. */
+/* Printed Owner documents (src/app/office/print): A4, readable text, page numbers, and no screen-only controls. */
 @page {
   size: A4;
   margin: 14mm 12mm 16mm;
@@ -52,65 +79,1198 @@
   }
 }
 
-/* Storefront preview: one visible focus style everywhere (cocoa on light, ivory on the dark band), and no
-   motion for people who ask for less. */
+/* The logo's fallbacks when an installation has no logo files (src/app/_design/brand.tsx). */
+.fl-wordmark {
+  font-family: var(--font-fl-display), var(--font-fl-bn-display), Georgia, serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.fl-mark-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background: var(--color-sf-sun-soft);
+  color: var(--color-sf-ink);
+  font-family: var(--font-fl-display), Georgia, serif;
+  font-weight: 600;
+  font-size: 1.25rem;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------------
+   The storefront. Mobile first: 360 to 430 px phones, then tablet and desktop at the lg breakpoint (1024 px).
+   Ivory ground, cocoa ink, one amber action per screen ("amber means go"), garment tints behind products, the arch (the
+   logo's sunrise) as the frame of every product photo, and the ray mark only at good moments.
+   ------------------------------------------------------------------------------------------------------------------- */
+@layer components {
+.sf {
+  --sf-text: var(--font-fl-text), var(--font-fl-bn-text), "Noto Sans Bengali", "Nirmala UI", system-ui, sans-serif;
+  --sf-display: var(--font-fl-display), var(--font-fl-bn-display), Georgia, "Noto Serif Bengali", serif;
+  --sf-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --sf-ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+  --sf-bar-h: 4.5rem;
+  --sf-shadow: 0 1px 2px rgb(51 41 35 / 0.06), 0 10px 28px rgb(51 41 35 / 0.09);
+  font-family: var(--sf-text);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  background: var(--color-sf-paper);
+  color: var(--color-sf-ink);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  caret-color: var(--color-sf-ink);
+}
+.sf:lang(bn),
+.sf :lang(bn) {
+  --sf-text: var(--font-fl-bn-text), var(--font-fl-text), "Noto Sans Bengali", "Nirmala UI", system-ui, sans-serif;
+  --sf-display: var(--font-fl-bn-display), var(--font-fl-display), "Noto Serif Bengali", Georgia, serif;
+  font-family: var(--sf-text);
+  line-height: 1.65;
+}
+.sf ::selection {
+  background: var(--color-sf-sun-soft);
+  color: var(--color-sf-ink);
+}
 .sf :focus-visible {
-  outline: 2px solid var(--color-sf-cocoa);
-  outline-offset: 2px;
+  outline: 2.5px solid var(--color-sf-ink);
+  outline-offset: 3px;
 }
-.sf .sf-dark :focus-visible {
-  outline-color: var(--color-sf-ivory);
+.sf .sf-on-dark :focus-visible {
+  outline-color: var(--color-sf-sun-glow);
 }
-.sf h1:lang(en),
-.sf h2:lang(en) {
-  letter-spacing: -0.015em;
+/* Headings: the warm serif for moments (Fraunces; Tiro Bangla in Bangla). `sf-plain` keeps a heading in the text face. */
+.sf :is(h1, h2, h3) {
+  font-family: var(--sf-display);
+  font-weight: 500;
+  line-height: 1.12;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
 }
-@media (prefers-reduced-motion: reduce) {
-  .sf * {
-    scroll-behavior: auto !important;
-    transition: none !important;
+.sf :is(h1, h2, h3):lang(bn),
+.sf:lang(bn) :is(h1, h2, h3) {
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+.sf :is(h1, h2, h3).sf-plain {
+  font-family: var(--sf-text);
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+.sf .sf-display {
+  font-family: var(--sf-display);
+  font-weight: 500;
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+}
+.sf .sf-display:lang(bn),
+.sf:lang(bn) .sf-display {
+  font-weight: 400;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+.sf .sf-num {
+  font-variant-numeric: tabular-nums;
+}
+.sf .sf-price {
+  font-family: var(--sf-text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Buttons. The amber button is the next step and appears once per screen. Ink is a strong second choice; ghost is quiet. */
+.sf .sf-btn {
+  display: inline-flex;
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  background: var(--color-sf-sun);
+  padding: 0 1.5rem;
+  color: var(--color-sf-ink);
+  font-family: var(--sf-text);
+  font-size: 1.0625rem;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  transition:
+    transform 120ms var(--sf-ease-out),
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+.sf .sf-btn:hover {
+  background: color-mix(in srgb, var(--color-sf-sun) 84%, white);
+}
+.sf .sf-btn:active:not(:disabled):not([aria-disabled="true"]) {
+  transform: scale(0.97);
+}
+.sf .sf-btn:disabled,
+.sf .sf-btn[aria-disabled="true"] {
+  background: #e6ded3;
+  color: var(--color-sf-ink-2);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.sf .sf-btn-ink {
+  background: var(--color-sf-ink);
+  color: var(--color-sf-paper);
+}
+.sf .sf-btn-ink:hover {
+  background: color-mix(in srgb, var(--color-sf-ink) 86%, white);
+}
+.sf .sf-btn-ghost {
+  background: transparent;
+  color: var(--color-sf-ink);
+  box-shadow: inset 0 0 0 1.5px var(--color-sf-ink);
+}
+.sf .sf-btn-ghost:hover {
+  background: var(--color-sf-mist);
+}
+.sf .sf-btn-soft {
+  background: var(--color-sf-sun-soft);
+  color: var(--color-sf-ink);
+}
+.sf .sf-btn-soft:hover {
+  background: color-mix(in srgb, var(--color-sf-sun-soft) 80%, var(--color-sf-sun));
+}
+.sf .sf-btn-sm {
+  min-height: 2.75rem;
+  padding: 0 1.125rem;
+  font-size: 0.9375rem;
+}
+.sf .sf-btn-lg {
+  min-height: 3.5rem;
+  padding: 0 1.75rem;
+}
+.sf .sf-icon-btn {
+  display: inline-flex;
+  height: 2.75rem;
+  width: 2.75rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  transition:
+    background-color 160ms ease,
+    transform 120ms var(--sf-ease-out);
+}
+.sf .sf-icon-btn:hover {
+  background: var(--color-sf-mist);
+}
+.sf .sf-icon-btn:active {
+  transform: scale(0.94);
+}
+.sf .sf-icon-btn-ring {
+  background: var(--color-sf-card);
+  box-shadow: inset 0 0 0 1px var(--color-sf-line);
+}
+.sf .sf-link {
+  font-weight: 650;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 4px;
+  text-decoration-color: var(--color-sf-sun);
+}
+.sf .sf-link:hover {
+  text-decoration-color: currentColor;
+}
+
+/* Chips: a choice (radio or checkbox inside a label), or a link with aria-current. 44 px tall. */
+.sf .sf-chip {
+  position: relative;
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border-radius: 9999px;
+  border: 1.5px solid var(--color-sf-line-strong);
+  background: var(--color-sf-card);
+  padding: 0 1.125rem;
+  font-size: 0.9375rem;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 120ms var(--sf-ease-out);
+}
+.sf .sf-chip:hover {
+  border-color: var(--color-sf-ink);
+}
+.sf .sf-chip:active {
+  transform: scale(0.97);
+}
+.sf .sf-chip[aria-current="page"],
+.sf .sf-chip:has(input:checked) {
+  border-color: var(--color-sf-ink);
+  background: var(--color-sf-ink);
+  color: var(--color-sf-paper);
+}
+.sf .sf-chip:has(input:focus-visible) {
+  outline: 2.5px solid var(--color-sf-ink);
+  outline-offset: 3px;
+}
+.sf .sf-chip:has(input:disabled) {
+  cursor: not-allowed;
+}
+/* Size and colour choices on a product: larger, and chosen = a thick ink outline on the sun wash, so it reads as "picked". */
+.sf .sf-option {
+  min-height: 3.25rem;
+  min-width: 4.5rem;
+  border-radius: 1rem;
+  padding: 0 1rem;
+  font-size: 1rem;
+  font-weight: 650;
+}
+.sf .sf-option:has(input:checked) {
+  background: var(--color-sf-sun-soft);
+  color: var(--color-sf-ink);
+  box-shadow: inset 0 0 0 1px var(--color-sf-ink);
+}
+/* A size or colour that is sold out: still selectable to read about, dashed and struck through. */
+.sf .sf-chip[data-out="true"] {
+  border-style: dashed;
+  color: var(--color-sf-ink-2);
+  background: transparent;
+}
+.sf .sf-chip[data-out="true"] .sf-chip-label {
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+.sf .sf-chip[data-out="true"]:has(input:checked) {
+  background: var(--color-sf-mist);
+  color: var(--color-sf-ink);
+}
+
+/* Large choice cards (delivery area): a radio inside a label, the circle drawn here. */
+.sf .sf-choice {
+  display: flex;
+  min-height: 4rem;
+  cursor: pointer;
+  align-items: center;
+  gap: 0.875rem;
+  border-radius: 1rem;
+  border: 1.5px solid var(--color-sf-line-strong);
+  background: var(--color-sf-card);
+  padding: 0.75rem 1rem;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+.sf .sf-choice:hover {
+  border-color: var(--color-sf-ink);
+}
+.sf .sf-choice:has(input:checked) {
+  border-color: var(--color-sf-ink);
+  background: var(--color-sf-sun-soft);
+  box-shadow: inset 0 0 0 1px var(--color-sf-ink);
+}
+.sf .sf-choice:has(input:focus-visible) {
+  outline: 2.5px solid var(--color-sf-ink);
+  outline-offset: 3px;
+}
+.sf .sf-choice[data-invalid="true"] {
+  border-color: var(--color-sf-danger);
+}
+.sf .sf-radio {
+  display: inline-flex;
+  height: 1.5rem;
+  width: 1.5rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 2px solid var(--color-sf-ink);
+}
+.sf .sf-choice:has(input:checked) .sf-radio::after {
+  content: "";
+  height: 0.75rem;
+  width: 0.75rem;
+  border-radius: 9999px;
+  background: var(--color-sf-ink);
+}
+
+/* Form fields: 17 px text (no zoom on iOS), 54 px tall, a thick ink outline on focus. */
+.sf .sf-field {
+  display: block;
+  width: 100%;
+  min-height: 3.375rem;
+  border-radius: 0.875rem;
+  border: 1.5px solid var(--color-sf-line-strong);
+  background: var(--color-sf-card);
+  padding: 0 1rem;
+  font-size: 1.0625rem;
+  color: var(--color-sf-ink);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+.sf textarea.sf-field {
+  padding-block: 0.875rem;
+  resize: vertical;
+}
+.sf .sf-field::placeholder {
+  color: #7c6e63;
+}
+.sf .sf-field:hover {
+  border-color: var(--color-sf-ink-2);
+}
+.sf .sf-field:focus {
+  outline: none;
+  border-color: var(--color-sf-ink);
+  box-shadow: 0 0 0 4px var(--color-sf-sun-soft);
+}
+.sf .sf-field:focus-visible {
+  outline: 2.5px solid var(--color-sf-ink);
+  outline-offset: -1.5px;
+}
+.sf .sf-field[aria-invalid="true"] {
+  border: 2px solid var(--color-sf-danger);
+  background: #fff9f7;
+  box-shadow: 0 0 0 4px var(--color-sf-danger-soft);
+}
+.sf .sf-label {
+  display: block;
+  margin-bottom: 0.375rem;
+  font-size: 0.9375rem;
+  font-weight: 650;
+}
+.sf .sf-hint {
+  font-size: 0.875rem;
+  color: var(--color-sf-ink-2);
+}
+.sf .sf-error {
+  display: flex;
+  gap: 0.375rem;
+  align-items: flex-start;
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--color-sf-danger);
+}
+
+/* Cards, notes and badges. */
+.sf .sf-card {
+  border-radius: 1.25rem;
+  border: 1px solid var(--color-sf-line);
+  background: var(--color-sf-card);
+}
+.sf .sf-note {
+  display: flex;
+  gap: 0.625rem;
+  border-radius: 0.875rem;
+  padding: 0.75rem 0.875rem;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  background: var(--color-sf-info-soft);
+  color: var(--color-sf-info);
+}
+.sf .sf-note[data-tone="sun"] {
+  background: var(--color-sf-sun-soft);
+  color: var(--color-sf-ink);
+}
+.sf .sf-note[data-tone="warn"] {
+  background: var(--color-sf-warn-soft);
+  color: var(--color-sf-warn);
+}
+.sf .sf-note[data-tone="bad"] {
+  background: var(--color-sf-danger-soft);
+  color: var(--color-sf-danger);
+}
+.sf .sf-note[data-tone="ok"] {
+  background: var(--color-sf-success-soft);
+  color: var(--color-sf-success);
+}
+.sf .sf-note > svg {
+  margin-top: 0.125rem;
+  flex-shrink: 0;
+}
+.sf .sf-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  min-height: 1.625rem;
+  border-radius: 9999px;
+  background: var(--color-sf-card);
+  padding: 0.125rem 0.625rem;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--color-sf-ink);
+  white-space: nowrap;
+}
+.sf .sf-badge[data-tone="ok"] {
+  background: var(--color-sf-success-soft);
+  color: var(--color-sf-success);
+}
+.sf .sf-badge[data-tone="low"] {
+  background: var(--color-sf-warn-soft);
+  color: var(--color-sf-warn);
+}
+.sf .sf-badge[data-tone="out"] {
+  background: var(--color-sf-danger-soft);
+  color: var(--color-sf-danger);
+}
+.sf .sf-badge[data-tone="info"] {
+  background: var(--color-sf-info-soft);
+  color: var(--color-sf-info);
+}
+.sf .sf-badge[data-tone="sun"] {
+  background: var(--color-sf-sun-soft);
+  color: var(--color-sf-sun-deep);
+}
+.sf .sf-badge[data-tone="ink"] {
+  background: var(--color-sf-ink);
+  color: var(--color-sf-paper);
+}
+
+/* Photographs. Every product photo sits in the arch (4:5, the top fully rounded, the foot 22 px): the logo's sunrise, and a
+   tidy grid from mixed home photography. The tint behind shows while loading and when there is no photo. */
+.sf .sf-photo {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.375rem;
+  background: var(--color-sf-oat);
+  isolation: isolate;
+}
+.sf .sf-photo img {
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+}
+.sf .sf-arch {
+  border-radius: 9999px 9999px 1.375rem 1.375rem;
+}
+.sf .sf-arch-open {
+  border-radius: 9999px 9999px 0 0;
+}
+.sf .sf-no-photo {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  /* Darker than ink-2: it sits on any garment tint (at least 6:1 on the lightest). */
+  color: #574a41;
+  font-size: 0.8125rem;
+  font-weight: 550;
+  text-align: center;
+}
+
+/* Horizontal rails: native scrolling with snap; the rail bleeds to the screen edge on a phone. */
+.sf .sf-rail {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 1rem;
+  margin-inline: -1rem;
+  padding-inline: 1rem;
+  scrollbar-width: none;
+}
+.sf .sf-rail::-webkit-scrollbar {
+  display: none;
+}
+.sf .sf-rail > * {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+
+/* The language switch: both languages always visible, the current one filled. */
+.sf .sf-seg {
+  display: inline-flex;
+  border-radius: 9999px;
+  background: var(--color-sf-oat);
+  padding: 0.1875rem;
+}
+.sf .sf-seg > * {
+  display: inline-flex;
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  padding: 0 0.625rem;
+  font-family: var(--font-fl-text), var(--font-fl-bn-text), system-ui, sans-serif;
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--color-sf-ink-2);
+}
+.sf .sf-seg > [aria-current="true"] {
+  background: var(--color-sf-ink);
+  color: var(--color-sf-paper);
+}
+.sf .sf-seg > a:hover {
+  color: var(--color-sf-ink);
+}
+
+/* Bars fixed to the bottom of a phone screen: the tab bar on browsing pages, the buying or checkout bar where there is a
+   main action. Over the content, above the home indicator. */
+.sf .sf-bar {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 40;
+  border-top: 1px solid var(--color-sf-line);
+  background: rgb(255 253 249 / 0.95);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+}
+@media (max-width: 1023.98px) {
+  .sf:has(.sf-bar) > footer {
+    padding-bottom: calc(var(--sf-bar-h) + env(safe-area-inset-bottom, 0px));
+  }
+  .sf:not(:has(> footer)):has(.sf-bar) {
+    padding-bottom: calc(var(--sf-bar-h) + env(safe-area-inset-bottom, 0px));
+  }
+  html:has(.sf .sf-bar) {
+    scroll-padding-bottom: calc(var(--sf-bar-h) + 5rem);
+  }
+}
+@media (min-width: 1024px) {
+  .sf .sf-bar-phone {
+    display: none;
+  }
+}
+/* The tab bar: icon and word together, always. The current item has an amber cap and ink colour. */
+.sf .sf-tab {
+  position: relative;
+  display: flex;
+  height: 100%;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1875rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.15;
+  color: var(--color-sf-ink-2);
+  text-align: center;
+}
+.sf .sf-tab[aria-current="page"] {
+  color: var(--color-sf-ink);
+}
+.sf .sf-tab[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  height: 0.25rem;
+  width: 1.75rem;
+  border-radius: 0 0 0.375rem 0.375rem;
+  background: var(--color-sf-sun);
+}
+.sf .sf-count {
+  display: inline-flex;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--color-sf-sun);
+  padding: 0 0.3125rem;
+  color: var(--color-sf-ink);
+  font-family: var(--font-fl-text), var(--font-fl-bn-text), system-ui, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 750;
+  line-height: 1;
+}
+.sf .sf-count[data-bump="true"] {
+  animation: sf-bump 420ms var(--sf-ease-out);
+}
+@keyframes sf-bump {
+  40% {
+    transform: scale(1.35);
   }
 }
 
-/* Storefront preview design concepts (Gate H.27), for the founder to compare; neither is approved (BR-6). Same
-   colour tokens and contrast as above; only type, shape and layout differ. System fonts only, nothing downloaded.
-   Concept A, Editorial Boutique: an installed book serif for English display text and headings (Bangla keeps its
-   own script font above), generous space, square edges. */
-.sf:is([data-concept="editorial"], [data-concept="hybrid"]) :is(h1, h2, .sf-display):lang(en) {
-  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
-  font-weight: 500;
-}
-.sf:is([data-concept="editorial"], [data-concept="hybrid"]) :is(h1, h2):lang(bn) {
-  font-weight: 600;
-}
-/* Concept B, Modern Family Shop: rounded cards and controls, pill-shaped badges and category chips, and on a phone
-   Add to cart (with its answer) in a bar fixed to the bottom of the screen; the page and focus scrolling keep
-   clear of it, so it never hides content or a focused control. */
-.sf[data-concept="family"] :is(button, input, select, textarea, details, .sf-card) {
-  border-radius: 0.75rem;
-}
-/* Concept C, the proposed hybrid (Gate H.30): Concept A's display face for English headings and its photography-led
-   tiles, a middle radius (0.5rem) on cards and controls, pill badges and chips, and Concept B's phone bar. */
-.sf[data-concept="hybrid"] :is(button, input, select, textarea, details, .sf-card) {
-  border-radius: 0.5rem;
-}
-.sf:is([data-concept="family"], [data-concept="hybrid"]) .sf-pill {
+/* Numbered steps (how to order, checkout progress, what happens next). */
+.sf .sf-step-num {
+  display: inline-flex;
+  height: 2rem;
+  width: 2rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
   border-radius: 9999px;
+  background: var(--color-sf-oat);
+  font-family: var(--font-fl-text), var(--font-fl-bn-text), system-ui, sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 750;
+  color: var(--color-sf-ink);
 }
-@media (max-width: 767px) {
-  .sf:is([data-concept="family"], [data-concept="hybrid"]) .sf-buy {
+.sf .sf-step-num[data-state="current"] {
+  background: var(--color-sf-ink);
+  color: var(--color-sf-paper);
+}
+.sf .sf-step-num[data-state="done"] {
+  background: var(--color-sf-success);
+  color: #fff;
+}
+
+/* The tracking timeline: a dot per milestone joined by a line; done in green with a tick, now in amber with a halo. */
+.sf .sf-timeline > li {
+  position: relative;
+  display: flex;
+  gap: 0.875rem;
+  padding-bottom: 1.25rem;
+}
+.sf .sf-timeline > li:last-child {
+  padding-bottom: 0;
+}
+.sf .sf-timeline > li::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0.8125rem;
+  top: 1.875rem;
+  bottom: 0.125rem;
+  width: 2px;
+  background: var(--color-sf-line-strong);
+  opacity: 0.5;
+}
+.sf .sf-timeline > li:last-child::before {
+  display: none;
+}
+.sf .sf-timeline > li[data-state="done"]::before {
+  background: var(--color-sf-success);
+  opacity: 1;
+}
+.sf .sf-timeline-dot {
+  display: inline-flex;
+  height: 1.75rem;
+  width: 1.75rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--color-sf-oat);
+  color: var(--color-sf-ink-2);
+}
+.sf [data-state="done"] > .sf-timeline-dot {
+  background: var(--color-sf-success);
+  color: #fff;
+}
+.sf [data-state="now"] > .sf-timeline-dot {
+  background: var(--color-sf-sun);
+  color: var(--color-sf-ink);
+  box-shadow: 0 0 0 5px var(--color-sf-sun-soft);
+}
+
+/* The answer to "Add to Bag": in the buying panel on a desktop; on a phone a toast just above the buying bar. Empty, it
+   takes no space but stays in the page, so screen readers hear every new answer. */
+.sf .sf-snack {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 1rem;
+}
+.sf .sf-snack[data-state="ok"],
+.sf .sf-snack[data-state="error"] {
+  padding: 0.5rem 0.75rem 0.5rem 1rem;
+  animation: sf-enter 320ms var(--sf-ease-out) both;
+}
+.sf .sf-snack[data-state="ok"] {
+  background: var(--color-sf-success-soft);
+  color: var(--color-sf-success);
+  font-weight: 650;
+}
+.sf .sf-snack[data-state="error"] {
+  min-height: 3.25rem;
+  background: var(--color-sf-danger-soft);
+  color: var(--color-sf-danger);
+  font-weight: 650;
+}
+@media (max-width: 1023.98px) {
+  .sf .sf-snack {
+    position: fixed;
+    inset-inline: 0.75rem;
+    bottom: calc(var(--sf-bar-h) + env(safe-area-inset-bottom, 0px) + 0.5rem);
+    z-index: 41;
+  }
+  .sf .sf-snack[data-state="ok"] {
+    background: var(--color-sf-ink);
+    color: var(--color-sf-paper);
+    box-shadow: 0 10px 30px -10px rgb(31 24 20 / 0.45);
+  }
+  .sf .sf-snack[data-state="ok"] :focus-visible {
+    outline-color: var(--color-sf-sun-glow);
+  }
+  .sf .sf-snack[data-state="ok"] a {
+    color: var(--color-sf-sun-glow);
+  }
+  .sf .sf-snack[data-state="error"] {
+    box-shadow: 0 10px 30px -10px rgb(31 24 20 / 0.3);
+  }
+}
+
+/* Sheets (sheet.tsx, Base UI Drawer): from the bottom on a phone, from the top for search, from the right on a desktop. */
+.sf .sf-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgb(51 41 35 / 0.45);
+  opacity: calc(1 - var(--drawer-swipe-progress, 0));
+  transition: opacity 400ms var(--sf-ease-sheet);
+}
+.sf .sf-sheet-backdrop[data-starting-style],
+.sf .sf-sheet-backdrop[data-ending-style] {
+  opacity: 0;
+}
+.sf .sf-sheet-viewport {
+  position: fixed;
+  inset: 0;
+  z-index: 61;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.sf .sf-sheet-viewport[data-direction="down"] {
+  align-items: flex-end;
+}
+.sf .sf-sheet-viewport[data-direction="up"] {
+  align-items: flex-start;
+}
+.sf .sf-sheet-viewport[data-direction="right"] {
+  justify-content: flex-end;
+}
+.sf .sf-sheet {
+  pointer-events: auto;
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  background: var(--color-sf-card);
+  color: var(--color-sf-ink);
+  outline: none;
+  box-shadow: 0 -12px 40px -12px rgb(51 41 35 / 0.3);
+  overscroll-behavior: contain;
+  transition: transform 420ms var(--sf-ease-sheet);
+}
+.sf .sf-sheet[data-swiping] {
+  transition-duration: 0ms;
+  user-select: none;
+}
+.sf .sf-sheet[data-ending-style] {
+  transition-duration: calc(var(--drawer-swipe-strength, 1) * 400ms);
+}
+.sf .sf-sheet[data-direction="down"] {
+  max-height: 88dvh;
+  border-radius: 1.75rem 1.75rem 0 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  transform: translateY(var(--drawer-swipe-movement-y, 0px));
+}
+.sf .sf-sheet[data-direction="down"]:is([data-starting-style], [data-ending-style]) {
+  transform: translateY(100%);
+}
+.sf .sf-sheet[data-direction="up"] {
+  max-height: 92dvh;
+  border-radius: 0 0 1.75rem 1.75rem;
+  padding-top: env(safe-area-inset-top, 0px);
+  transform: translateY(var(--drawer-swipe-movement-y, 0px));
+  box-shadow: 0 12px 40px -12px rgb(51 41 35 / 0.3);
+}
+.sf .sf-sheet[data-direction="up"]:is([data-starting-style], [data-ending-style]) {
+  transform: translateY(-100%);
+}
+.sf .sf-sheet[data-direction="right"] {
+  height: 100%;
+  width: min(27rem, 100vw);
+  border-radius: 1.75rem 0 0 1.75rem;
+  transform: translateX(var(--drawer-swipe-movement-x, 0px));
+  box-shadow: -12px 0 40px -12px rgb(51 41 35 / 0.3);
+}
+.sf .sf-sheet[data-direction="right"]:is([data-starting-style], [data-ending-style]) {
+  transform: translateX(100%);
+}
+.sf .sf-sheet-handle {
+  margin: 0.625rem auto 0;
+  height: 0.3125rem;
+  width: 2.75rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: var(--color-sf-line-strong);
+  opacity: 0.6;
+}
+.sf .sf-sheet-head {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem 0.5rem;
+}
+.sf .sf-sheet-content {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.sf .sf-sheet-body {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.5rem 1.25rem 1.25rem;
+}
+.sf .sf-sheet-foot {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.75rem;
+  border-top: 1px solid var(--color-sf-line);
+  padding: 0.875rem 1.25rem;
+}
+
+/* Loading: a slow shimmer in warm tones (space is always reserved, so nothing jumps); still when motion is reduced. */
+.sf .sf-skeleton {
+  border-radius: 0.75rem;
+  background: linear-gradient(90deg, #efe8de 0%, #f8f3eb 50%, #efe8de 100%) 0 0 / 200% 100%;
+  animation: sf-shimmer 1.4s linear infinite;
+}
+@keyframes sf-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+.sf .sf-enter {
+  animation: sf-enter 320ms var(--sf-ease-out) both;
+}
+/* Movement only, never a fade: text is readable (and checkable for contrast) from the first frame. */
+@keyframes sf-enter {
+  from {
+    transform: translateY(14px);
+  }
+}
+/* The ray mark at a good moment: the rays breathe a few times, then rest. */
+.sf .sf-rays .fl-rays {
+  transform-origin: 20px 20px;
+  animation: sf-rays 1.8s ease-in-out 3;
+}
+@keyframes sf-rays {
+  50% {
+    opacity: 0.45;
+    transform: scale(1.08);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sf *,
+  .sf *::before,
+  .sf *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0ms !important;
+    animation: none !important;
+  }
+}
+}
+
+/* ---------------------------------------------------------------------------------------------------------------------
+   The Owner Office: the same family, denser. A dark cocoa sidebar, an ivory canvas, white cards, amber for the one primary
+   action of a form. The Office pages use Tailwind's neutral, red, amber, green and blue utilities; inside `.of` those scales
+   are remapped to First Light tones, so every page shares one palette without a class per page.
+   ------------------------------------------------------------------------------------------------------------------- */
+.of {
+  --color-white: #fffdf9;
+  --color-black: #1f1814;
+  --color-gray-50: #f4efe8;
+  --color-gray-100: #efe8de;
+  --color-gray-200: #e6ddd1;
+  --color-gray-300: #e0d5c7;
+  --color-gray-400: #968878;
+  --color-gray-500: #7c6e63;
+  --color-gray-600: #6b5b4f;
+  --color-gray-700: #574a41;
+  --color-gray-800: #43362e;
+  --color-gray-900: #332923;
+  --color-red-50: #fbe9e5;
+  --color-red-200: #f0c3ba;
+  --color-red-300: #e5ab9f;
+  --color-red-700: #a63a2b;
+  --color-red-800: #96301f;
+  --color-red-900: #7c2618;
+  --color-amber-50: #fbefd0;
+  --color-amber-100: #f6e7d2;
+  --color-amber-300: #e3c77e;
+  --color-amber-700: #8a5524;
+  --color-amber-800: #7a5200;
+  --color-amber-900: #6b4800;
+  --color-amber-950: #4f3500;
+  --color-green-50: #e1efe6;
+  --color-green-300: #a9cdb7;
+  --color-green-700: #2f6b4f;
+  --color-green-800: #285c44;
+  --color-green-900: #22503b;
+  --color-green-950: #1c4231;
+  --color-blue-50: #dfebf2;
+  --color-blue-800: #2e5a73;
+  --color-blue-950: #1f3f52;
+  --of-text: var(--font-fl-text), var(--font-fl-bn-text), "Noto Sans Bengali", "Nirmala UI", system-ui, sans-serif;
+  font-family: var(--of-text);
+  background: var(--color-of-canvas);
+  color: var(--color-gray-900);
+  -webkit-font-smoothing: antialiased;
+}
+.of :lang(bn) {
+  font-family: var(--font-fl-bn-text), var(--font-fl-text), "Noto Sans Bengali", "Nirmala UI", system-ui, sans-serif;
+}
+.of ::selection {
+  background: var(--color-sf-sun-soft);
+}
+/* Softer corners than the plain functional layout had: cards and controls 10 px, pills stay pills. */
+.of .rounded {
+  border-radius: 0.625rem;
+}
+@layer base {
+  .of :focus-visible {
+    outline: 2.5px solid var(--color-gray-900);
+    outline-offset: 2px;
+  }
+  .of a {
+    text-decoration-color: var(--color-sf-sun);
+    text-decoration-thickness: 1.5px;
+  }
+  .of table th {
+    font-weight: 650;
+  }
+  .of thead th {
+    background: #fbf8f3;
+    color: var(--color-gray-600);
+    font-size: 0.8125rem;
+  }
+  .of summary {
+    cursor: pointer;
+  }
+  .of input[type="checkbox"],
+  .of input[type="radio"] {
+    accent-color: var(--color-gray-900);
+  }
+}
+@layer components {
+  .of .of-btn {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    padding: 0 1.125rem;
+    font-size: 0.9375rem;
+    font-weight: 650;
+    line-height: 1.2;
+    white-space: nowrap;
+    transition:
+      transform 120ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 160ms ease;
+  }
+  .of .of-btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .of .of-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .of .of-btn-primary {
+    background: var(--color-sf-sun);
+    color: var(--color-gray-900);
+  }
+  .of .of-btn-primary:hover {
+    background: color-mix(in srgb, var(--color-sf-sun) 84%, white);
+  }
+  .of .of-btn-ink {
+    background: var(--color-gray-900);
+    color: var(--color-white);
+  }
+  .of .of-btn-ink:hover {
+    background: var(--color-gray-800);
+  }
+  .of .of-btn-line {
+    background: var(--color-white);
+    color: var(--color-gray-900);
+    box-shadow: inset 0 0 0 1.5px var(--color-gray-400);
+  }
+  .of .of-btn-line:hover {
+    box-shadow: inset 0 0 0 1.5px var(--color-gray-900);
+    background: var(--color-gray-50);
+  }
+  .of .of-input {
+    display: block;
+    width: 100%;
+    min-height: 2.75rem;
+    border-radius: 0.625rem;
+    border: 1.5px solid var(--color-gray-400);
+    background: var(--color-white);
+    padding: 0.5rem 0.75rem;
+    font-size: 1rem;
+    color: var(--color-gray-900);
+    transition:
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+  .of .of-input:hover {
+    border-color: var(--color-gray-600);
+  }
+  .of .of-input:focus {
+    outline: none;
+    border-color: var(--color-gray-900);
+    box-shadow: 0 0 0 4px var(--color-sf-sun-soft);
+  }
+  .of .of-input:focus-visible {
+    outline: 2.5px solid var(--color-gray-900);
+    outline-offset: -1.5px;
+  }
+  .of .of-input[aria-invalid="true"] {
+    border-color: var(--color-red-700);
+  }
+  .of .of-card {
+    border-radius: 1rem;
+    border: 1px solid var(--color-gray-300);
+    background: var(--color-white);
+  }
+  .of .of-nav-link {
+    display: flex;
+    min-height: 2.5rem;
+    align-items: center;
+    gap: 0.75rem;
+    border-radius: 0.75rem;
+    padding: 0 0.75rem;
+    font-size: 0.9375rem;
+    font-weight: 550;
+    color: #eadfcf;
+    text-decoration: none;
+    transition: background-color 140ms ease;
+  }
+  .of .of-nav-link:hover {
+    background: var(--color-of-night-2);
+    color: #fff;
+  }
+  .of .of-nav-link[aria-current="page"] {
+    background: var(--color-of-night-2);
+    color: #fff;
+    box-shadow: inset 3px 0 0 var(--color-sf-sun);
+  }
+  .of .of-nav-link:focus-visible {
+    outline-color: var(--color-sf-sun-glow);
+  }
+  /* The phone's bottom bar and its Menu (shell.tsx, office-menu.tsx): icon and word together, the current item capped in amber. */
+  .of {
+    --of-bar-h: 4.25rem;
+  }
+  .of .of-bar {
     position: fixed;
     inset-inline: 0;
     bottom: 0;
-    z-index: 5;
-    padding: 0.75rem 1rem;
-    border-top: 1px solid var(--color-sf-line);
-    background: var(--color-sf-ivory);
+    z-index: 30;
+    border-top: 1px solid var(--color-gray-300);
+    background: rgb(255 253 249 / 0.97);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    backdrop-filter: blur(12px);
   }
-  .sf:is([data-concept="family"], [data-concept="hybrid"]):has(.sf-buy) {
-    padding-bottom: 8rem;
+  .of .of-tab {
+    position: relative;
+    display: flex;
+    height: 100%;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.1875rem;
+    font-size: 0.75rem;
+    font-weight: 650;
+    line-height: 1.15;
+    color: var(--color-gray-600);
+    text-align: center;
+    text-decoration: none;
   }
-  html:has(.sf:is([data-concept="family"], [data-concept="hybrid"]) .sf-buy) {
-    scroll-padding-bottom: 8rem;
+  .of .of-tab[aria-current="page"] {
+    color: var(--color-gray-900);
+  }
+  .of .of-tab[aria-current="page"]::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    height: 0.25rem;
+    width: 1.75rem;
+    border-radius: 0 0 0.375rem 0.375rem;
+    background: var(--color-sf-sun);
+  }
+  .of .of-menu-link {
+    display: flex;
+    min-height: 3.25rem;
+    align-items: center;
+    gap: 0.875rem;
+    border-radius: 0.875rem;
+    padding: 0 0.75rem;
+    font-size: 1.0625rem;
+    font-weight: 550;
+    color: var(--color-gray-900);
+    text-decoration: none;
+  }
+  .of .of-menu-link:hover {
+    background: var(--color-gray-100);
+  }
+  .of .of-menu-link[aria-current="page"] {
+    background: var(--color-amber-100);
+    font-weight: 700;
+  }
+  .of .of-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 1.625rem;
+    border-radius: 0.5rem;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.8125rem;
+    font-weight: 650;
+    line-height: 1.35;
+    white-space: nowrap;
+  }
+  .of .of-pill::before {
+    content: "";
+    height: 0.5rem;
+    width: 0.5rem;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background: currentColor;
+  }
+  .of .of-pill[data-tone="wait"] {
+    background: var(--color-sf-warn-soft);
+    color: var(--color-sf-warn);
+  }
+  .of .of-pill[data-tone="ok"] {
+    background: var(--color-sf-success-soft);
+    color: var(--color-sf-success);
+  }
+  .of .of-pill[data-tone="move"] {
+    background: var(--color-sf-info-soft);
+    color: var(--color-sf-info);
+  }
+  .of .of-pill[data-tone="bad"] {
+    background: var(--color-sf-danger-soft);
+    color: var(--color-sf-danger);
+  }
+  .of .of-pill[data-tone="quiet"] {
+    background: var(--color-sf-oat);
+    color: var(--color-gray-600);
+  }
+  .of .of-skeleton {
+    border-radius: 0.625rem;
+    background: linear-gradient(90deg, #efe8de 0%, #f8f3eb 50%, #efe8de 100%) 0 0 / 200% 100%;
+    animation: sf-shimmer 1.4s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .of *,
+    .of *::before,
+    .of *::after {
+      transition-duration: 0ms !important;
+      animation: none !important;
+    }
   }
 }

@@ -1,22 +1,24 @@
 "use client";
 
+import { CircleAlert, Info, Minus, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useState } from "react";
+import { SunMark } from "@/app/_design/sun-mark";
 import { parseQuantity, removeLine, setQuantity } from "@/modules/storefront/cart";
 import { dictionary, formatTaka, type Lang, localised, toBnDigits } from "@/modules/storefront/i18n";
 import type { Quote, QuotedLine } from "@/modules/storefront/service";
 import { quoteCartAction } from "../actions";
 import { useCart } from "./cart-store";
 
-// The cart page. Each change asks the server for current prices, stock and the delivery charge (quoteCartAction);
-// nothing shown here comes from the browser except SKUs and quantities. Problems are named per line, and checkout
-// stays blocked until they are fixed.
+// The bag. Each change asks the server for current prices, stock and the delivery charge (quoteCartAction); nothing
+// shown here comes from the browser except SKUs and quantities. Problems are named per line, and checkout stays blocked
+// until they are fixed. On a phone the total and Checkout sit in a bar under the thumb.
 
 export function lineName(lang: Lang, line: QuotedLine, fallback: string) {
   return localised(lang, line.nameEn, line.nameBn) ?? localised(lang === "en" ? "bn" : "en", line.nameEn, line.nameBn) ?? fallback;
 }
 
-function useQuote(zone: string) {
+export function useQuote(zone: string) {
   const [lines, setLines] = useCart();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -39,7 +41,17 @@ function useQuote(zone: string) {
   return { lines, setLines, quote, state, retry: () => setAttempt((a) => a + 1) };
 }
 
-export { useQuote };
+/** A line's thumbnail: the product's first photo in a small arch, or the empty ground. */
+export function LineThumb({ line, className = "" }: { line: QuotedLine; className?: string }) {
+  return (
+    <div className={`sf-photo sf-arch shrink-0 bg-sf-oat ${className}`}>
+      {line.photo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={`/office/media/${line.photo.id}?w=320`} alt="" width={line.photo.width} height={line.photo.height} loading="lazy" />
+      ) : null}
+    </div>
+  );
+}
 
 function LineRow({ line, lang, onQuantity, onRemove }: { line: QuotedLine; lang: Lang; onQuantity: (n: number) => void; onRemove: () => void }) {
   const t = dictionary(lang);
@@ -59,101 +71,130 @@ function LineRow({ line, lang, onQuantity, onRemove }: { line: QuotedLine; lang:
   };
   const problem = line.status === "ok" ? null : line.status === "insufficient" ? t.lineStatus.insufficient(line.available) : t.lineStatus[line.status];
   return (
-    <li className="grid grid-cols-[5rem_1fr] gap-4 border-b border-sf-line py-5 sm:grid-cols-[6rem_1fr_auto]" data-testid={`cart-line-${line.sku}`}>
-      <div className="aspect-[4/5] overflow-hidden rounded-sm bg-sf-sand">
-        {line.photo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={`/office/media/${line.photo.id}?w=320`} alt="" width={line.photo.width} height={line.photo.height} className="h-full w-full object-cover" />
-        ) : null}
-      </div>
-      <div className="space-y-2">
-        <p className="font-medium">
-          {line.productSlug ? (
-            <Link href={`/office/storefront-preview/${lang}/products/${line.productSlug}`} className="underline-offset-4 hover:underline">
-              {name}
-            </Link>
-          ) : (
-            name
-          )}
-        </p>
-        <p className="text-sm text-sf-umber">{[line.size, line.colour].filter(Boolean).join(", ")}</p>
-        {line.unitPricePaisa !== null ? <p className="text-sm tabular-nums">{t.each(formatTaka(line.unitPricePaisa, lang))}</p> : null}
+    <li className="sf-card flex gap-3.5 p-3 lg:gap-5 lg:p-4" data-testid={`cart-line-${line.sku}`}>
+      <LineThumb line={line} className="aspect-[4/5] w-[5.5rem] lg:w-28" />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-start justify-between gap-3">
+          <p className="font-semibold leading-snug">
+            {line.productSlug ? (
+              <Link href={`/office/storefront-preview/${lang}/products/${line.productSlug}`} className="hover:underline hover:underline-offset-4">
+                {name}
+              </Link>
+            ) : (
+              name
+            )}
+          </p>
+          <p className="sf-price shrink-0" aria-label={t.lineTotal}>
+            {line.lineTotalPaisa !== null ? formatTaka(line.lineTotalPaisa, lang) : "—"}
+          </p>
+        </div>
+        <p className="text-[0.875rem] text-sf-ink-2">{[line.size, line.colour].filter(Boolean).join(", ")}</p>
+        {line.unitPricePaisa !== null ? <p className="sf-num text-[0.875rem] text-sf-ink-2">{t.each(formatTaka(line.unitPricePaisa, lang))}</p> : null}
         {problem ? (
-          <p className="font-medium text-sf-danger" data-testid="line-problem">
+          <p className="sf-note mt-1 font-semibold" data-tone="bad" data-testid="line-problem">
             {problem}
           </p>
         ) : null}
-        <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor={`${id}-qty`} className="sr-only">
-            {`${t.quantity}: ${name}`}
-          </label>
-          <button type="button" aria-label={`${t.decrease}: ${name}`} onClick={() => line.quantity > 1 && onQuantity(line.quantity - 1)} className="min-h-11 min-w-11 rounded-sm border border-sf-line bg-white text-lg">
-            −
-          </button>
-          <input
-            id={`${id}-qty`}
-            inputMode="numeric"
-            autoComplete="off"
-            value={typed}
-            onChange={(e) => setTyped(e.target.value)}
-            onBlur={(e) => commit(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && commit(e.currentTarget.value)}
-            aria-invalid={error ? true : undefined}
-            aria-describedby={error ? `${id}-error` : undefined}
-            className="min-h-11 w-20 rounded-sm border border-sf-line bg-white px-3 text-center text-base tabular-nums"
-          />
-          <button type="button" aria-label={`${t.increase}: ${name}`} onClick={() => onQuantity(Math.min(1000, line.quantity + 1))} className="min-h-11 min-w-11 rounded-sm border border-sf-line bg-white text-lg">
-            +
-          </button>
-          <button type="button" onClick={onRemove} className="min-h-11 rounded-sm px-2 font-medium text-sf-tan underline underline-offset-4">
-            {t.remove(name)}
+        <div className="mt-auto flex items-center justify-between gap-3 pt-2">
+          <div className="inline-flex h-12 items-center rounded-full border-[1.5px] border-sf-line-strong bg-sf-card">
+            <label htmlFor={`${id}-qty`} className="sr-only">
+              {`${t.quantity}: ${name}`}
+            </label>
+            <button type="button" aria-label={`${t.decrease}: ${name}`} onClick={() => line.quantity > 1 && onQuantity(line.quantity - 1)} className="sf-icon-btn">
+              <Minus aria-hidden="true" size={16} strokeWidth={2} />
+            </button>
+            <input
+              id={`${id}-qty`}
+              inputMode="numeric"
+              autoComplete="off"
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              onBlur={(e) => commit(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && commit(e.currentTarget.value)}
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? `${id}-error` : undefined}
+              className="sf-num h-full w-10 bg-transparent text-center font-semibold focus:outline-none focus-visible:rounded-md focus-visible:outline-2"
+            />
+            <button type="button" aria-label={`${t.increase}: ${name}`} onClick={() => onQuantity(Math.min(1000, line.quantity + 1))} className="sf-icon-btn">
+              <Plus aria-hidden="true" size={16} strokeWidth={2} />
+            </button>
+          </div>
+          <button type="button" onClick={onRemove} aria-label={t.remove(name)} className="sf-icon-btn text-sf-ink-2 hover:text-sf-danger">
+            <Trash2 aria-hidden="true" size={20} strokeWidth={1.75} />
           </button>
         </div>
         {error ? (
-          <p id={`${id}-error`} className="text-sm font-medium text-sf-danger">
+          <p id={`${id}-error`} className="text-[0.875rem] font-semibold text-sf-danger">
             {error}
           </p>
         ) : null}
       </div>
-      <p className="col-start-2 font-semibold tabular-nums sm:col-start-3 sm:text-right" aria-label={t.lineTotal}>
-        {line.lineTotalPaisa !== null ? formatTaka(line.lineTotalPaisa, lang) : "—"}
-      </p>
     </li>
   );
 }
 
-export function Totals({ quote, lang, zone, onZone }: { quote: Quote | null; lang: Lang; zone: string; onZone: (zone: string) => void }) {
+/** The delivery area choice: the configured zones with their charges. */
+export function ZoneChoice({ quote, lang, zone, onZone, invalid }: { quote: Quote | null; lang: Lang; zone: string; onZone: (zone: string) => void; invalid?: boolean }) {
   const t = dictionary(lang);
   return (
-    <div className="space-y-4">
-      <fieldset>
-        <legend className="mb-2 font-medium">{t.zone}</legend>
-        <div className="space-y-2">
-          {(quote?.zones ?? []).map((z) => (
-            <label key={z.code} className="flex min-h-11 items-center gap-3">
-              <input type="radio" name="zone" value={z.code} checked={zone === z.code} onChange={() => onZone(z.code)} className="h-5 w-5 accent-sf-cocoa" />
-              <span>
-                {t.deliveryZone[z.code]}{" "}
-                <span className="text-sf-umber tabular-nums">{z.chargePaisa === null ? `(${t.chargeNotSet})` : `(${formatTaka(z.chargePaisa, lang)})`}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <dl className="grid grid-cols-[1fr_auto] gap-y-2 tabular-nums" data-testid="totals">
-        <dt>{t.subtotal}</dt>
-        <dd className="text-right" data-testid="subtotal">
-          {quote ? formatTaka(quote.subtotalPaisa, lang) : "—"}
-        </dd>
-        <dt>{t.deliveryLine}</dt>
-        <dd className="text-right" data-testid="delivery">
-          {quote?.deliveryChargePaisa != null ? formatTaka(quote.deliveryChargePaisa, lang) : zone ? t.chargeNotSet : t.chooseZone}
-        </dd>
-        <dt className="border-t border-sf-line pt-2 font-semibold">{t.total}</dt>
-        <dd className="border-t border-sf-line pt-2 text-right text-lg font-semibold" data-testid="total">
-          {quote?.totalPaisa != null ? formatTaka(quote.totalPaisa, lang) : "—"}
-        </dd>
-      </dl>
+    <fieldset aria-invalid={invalid || undefined}>
+      <legend className="mb-2.5 font-bold">{t.zone}</legend>
+      <div className="grid gap-2.5">
+        {(quote?.zones ?? []).map((z) => (
+          <label key={z.code} className="sf-choice" data-invalid={invalid || undefined}>
+            <input type="radio" name="zone" value={z.code} checked={zone === z.code} onChange={() => onZone(z.code)} className="sr-only" />
+            <span aria-hidden="true" className="sf-radio" />
+            <span className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-3">
+              <span className="font-bold">{t.deliveryZone[z.code]}</span>
+              <span className="sf-num text-[0.9375rem] text-sf-ink-2">{z.chargePaisa === null ? t.chargeNotSet : formatTaka(z.chargePaisa, lang)}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+/** Subtotal, delivery and total, from the server's quote. */
+export function TotalsList({ quote, lang, zone }: { quote: Quote | null; lang: Lang; zone: string }) {
+  const t = dictionary(lang);
+  return (
+    <dl className="sf-num grid grid-cols-[1fr_auto] gap-y-2 text-[0.9375rem]" data-testid="totals">
+      <dt className="text-sf-ink-2">{t.subtotal}</dt>
+      <dd className="text-end whitespace-nowrap" data-testid="subtotal">
+        {quote ? formatTaka(quote.subtotalPaisa, lang) : "—"}
+      </dd>
+      <dt className="text-sf-ink-2">{t.deliveryLine}</dt>
+      <dd className="text-end" data-testid="delivery">
+        {quote?.deliveryChargePaisa != null ? formatTaka(quote.deliveryChargePaisa, lang) : zone ? t.chargeNotSet : t.chooseZone}
+      </dd>
+      <dt className="mt-2 border-t border-sf-line pt-3 font-bold">{t.total}</dt>
+      <dd className="sf-price mt-2 self-end border-t border-sf-line pt-3 text-end text-[1.5rem]" data-testid="total">
+        {quote?.totalPaisa != null ? formatTaka(quote.totalPaisa, lang) : "—"}
+      </dd>
+    </dl>
+  );
+}
+
+/** The delivery area choice and the totals, from the server's quote. */
+export function Totals({ quote, lang, zone, onZone }: { quote: Quote | null; lang: Lang; zone: string; onZone: (zone: string) => void }) {
+  return (
+    <div className="space-y-5">
+      <ZoneChoice quote={quote} lang={lang} zone={zone} onZone={onZone} />
+      <TotalsList quote={quote} lang={lang} zone={zone} />
+    </div>
+  );
+}
+
+export function EmptyBag({ lang, message }: { lang: Lang; message: string }) {
+  const t = dictionary(lang);
+  return (
+    <div className="mx-auto flex max-w-md flex-col items-center gap-5 py-12 text-center" role="status">
+      <SunMark className="h-10 w-16 text-sf-sun" />
+      <p className="text-xl font-bold">{message}</p>
+      <Link href={`/office/storefront-preview/${lang}/products`} className="sf-btn sf-btn-ink">
+        {t.continueShopping}
+      </Link>
     </div>
   );
 }
@@ -175,31 +216,23 @@ export function CartView({ lang }: { lang: Lang }) {
     setLines(next);
     setAnnouncement(next.length ? t.removedFromCart(lineName(lang, line, line.sku)) : t.cartEmptied);
   };
-  if (lines.length === 0) {
-    return (
-      <div className="space-y-4" role="status">
-        <p className="text-lg">{announcement && announcement !== t.cartEmptied ? announcement : t.cartEmpty}</p>
-        <Link href={`/office/storefront-preview/${lang}/products`} className="inline-flex min-h-11 items-center rounded-sm bg-sf-cocoa px-5 font-semibold text-sf-ivory">
-          {t.continueShopping}
-        </Link>
-      </div>
-    );
-  }
+  if (lines.length === 0) return <EmptyBag lang={lang} message={announcement && announcement !== t.cartEmptied ? announcement : t.cartEmpty} />;
+  const checkout = `/office/storefront-preview/${lang}/checkout`;
   return (
-    <div className="grid gap-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:gap-12">
       <div>
-        <p role="status" aria-live="polite" className="min-h-6 font-medium" data-testid="cart-announcement">
+        <p role="status" aria-live="polite" className="min-h-6 text-[0.9375rem] font-semibold" data-testid="cart-announcement">
           {announcement}
         </p>
-        <p className="text-sm text-sf-umber" data-testid="cart-state">
+        <p className="sf-hint mb-2 empty:hidden" data-testid="cart-state">
           {state === "loading" ? t.checkingCart : state === "error" ? t.cartCheckFailed : ""}
         </p>
         {state === "error" ? (
-          <button type="button" onClick={retry} className="mb-3 min-h-11 rounded-sm border border-sf-cocoa px-4 font-medium">
+          <button type="button" onClick={retry} className="sf-btn sf-btn-ghost sf-btn-sm mb-3">
             {t.retry}
           </button>
         ) : null}
-        <ul aria-label={t.cartTitle} className="border-t border-sf-line">
+        <ul aria-label={t.cartTitle} className="space-y-3">
           {(quote?.lines ?? []).map((line) => (
             <LineRow key={`${line.sku}-${line.quantity}`} line={line} lang={lang} onQuantity={(n) => changeQuantity(line, n)} onRemove={() => remove(line)} />
           ))}
@@ -210,24 +243,42 @@ export function CartView({ lang }: { lang: Lang }) {
             setLines([]);
             setAnnouncement(t.cartEmptied);
           }}
-          className="mt-4 min-h-11 font-medium text-sf-tan underline underline-offset-4"
+          className="sf-link mt-3 inline-flex min-h-11 items-center text-[0.9375rem] text-sf-ink-2"
         >
           {t.clearCart}
         </button>
       </div>
-      <aside aria-label={t.orderSummary} className="space-y-5 rounded-sm bg-white p-5 lg:self-start">
+      <aside aria-label={t.orderSummary} className="sf-card space-y-5 self-start p-5 lg:sticky lg:top-28 lg:p-7">
+        <h2 className="text-[1.5rem]">{t.orderSummary}</h2>
         <Totals quote={quote} lang={lang} zone={zone} onZone={setZone} />
-        <p className="text-sm text-sf-umber">{t.notInCart}</p>
+        <p className="sf-note">
+          <Info aria-hidden="true" size={18} strokeWidth={1.75} />
+          <span>{t.notInCart}</span>
+        </p>
         {blocked ? (
-          <p className="font-medium text-sf-danger" data-testid="checkout-blocked">
-            {t.fixCart}
+          <p className="sf-note font-semibold" data-tone="bad" data-testid="checkout-blocked">
+            <CircleAlert aria-hidden="true" size={18} strokeWidth={2} />
+            <span>{t.fixCart}</span>
           </p>
         ) : (
-          <Link href={`/office/storefront-preview/${lang}/checkout`} className="inline-flex min-h-12 w-full items-center justify-center rounded-sm bg-sf-cocoa px-5 text-lg font-semibold text-sf-ivory">
+          <Link href={checkout} className="sf-btn sf-btn-lg hidden w-full lg:flex">
             {t.toCheckout}
           </Link>
         )}
       </aside>
+      {blocked ? null : (
+        <div className="sf-bar sf-bar-phone">
+          <div className="mx-auto flex h-[var(--sf-bar-h)] max-w-lg items-center justify-between gap-4 px-4">
+            <p className="leading-tight">
+              <span className="block text-[0.8125rem] font-semibold text-sf-ink-2">{quote?.totalPaisa != null ? t.totalShort : t.subtotal}</span>
+              <span className="sf-price text-[1.25rem]">{formatTaka(quote?.totalPaisa ?? quote?.subtotalPaisa ?? 0, lang)}</span>
+            </p>
+            <Link href={checkout} className="sf-btn min-w-44">
+              {t.toCheckout}
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

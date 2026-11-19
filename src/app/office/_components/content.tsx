@@ -1,3 +1,4 @@
+import { Check, Circle } from "lucide-react";
 import { languages } from "@/modules/catalogue/content";
 import type { ReadinessBasis, ReadinessItem } from "@/modules/catalogue/readiness";
 
@@ -7,7 +8,7 @@ import type { ReadinessBasis, ReadinessItem } from "@/modules/catalogue/readines
 export function LanguageStatus({ en, bn }: { en: string | null; bn: string | null }) {
   const has = languages(en, bn);
   const part = (label: string, ok: boolean) => (
-    <span className={ok ? "text-gray-700" : "font-medium text-amber-900"}>
+    <span className={ok ? "text-gray-700" : "font-semibold text-amber-900"}>
       {label} {ok ? "✓" : "missing"}
     </span>
   );
@@ -45,22 +46,34 @@ const BASIS: Record<ReadinessBasis, { title: string; note: string }> = {
 
 /** The checklist, grouped by basis. Advisory only: there is no publish action. */
 export function ReadinessList({ items }: { items: ReadinessItem[] }) {
+  const done = items.filter((i) => i.met).length;
   return (
-    <div className="space-y-4" data-testid="readiness">
+    <div className="space-y-5" data-testid="readiness">
+      <div className="space-y-2">
+        <p className="flex items-baseline justify-between gap-3 text-sm font-semibold">
+          <span>
+            {done} of {items.length} done
+          </span>
+          <span className="font-normal text-gray-600">advisory</span>
+        </p>
+        <div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-gray-200">
+          <div className="h-full rounded-full bg-[var(--color-sf-sun)]" style={{ width: `${items.length ? Math.round((done / items.length) * 100) : 0}%` }} />
+        </div>
+      </div>
       <p className="text-sm text-gray-700">
         Advisory only. Nothing here publishes the product or approves publishing: no product is shown to customers, and the publication rule (I-6) is not approved.
       </p>
       {(Object.keys(BASIS) as ReadinessBasis[]).map((basis) => (
         <div key={basis}>
-          <h3 className="text-sm font-semibold">{BASIS[basis].title}</h3>
+          <h3 className="text-sm font-bold">{BASIS[basis].title}</h3>
           <p className="text-xs text-gray-600">{BASIS[basis].note}</p>
-          <ul className="mt-1 space-y-1 text-sm">
+          <ul className="mt-2 divide-y divide-gray-200 text-sm">
             {items
               .filter((i) => i.basis === basis)
               .map((i) => (
-                <li key={i.id} data-testid={`readiness-${i.id}`} data-met={i.met} className="flex gap-2">
-                  <span aria-hidden="true" className={i.met ? "text-green-800" : "text-amber-900"}>
-                    {i.met ? "✓" : "○"}
+                <li key={i.id} data-testid={`readiness-${i.id}`} data-met={i.met} className="flex gap-2.5 py-2">
+                  <span aria-hidden="true" className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${i.met ? "bg-green-700 text-white" : "text-gray-400"}`}>
+                    {i.met ? <Check size={13} strokeWidth={3} /> : <Circle size={18} strokeWidth={2} />}
                   </span>
                   <span>
                     <span className="font-medium">{i.label}</span> <span className="sr-only">{i.met ? "(done)" : "(not done)"}</span>

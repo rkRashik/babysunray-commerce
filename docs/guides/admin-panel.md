@@ -3,7 +3,7 @@
 **Status:** Draft — Founder Review
 **Purpose:** The screens of the private admin panel, their permissions, and how every page and form is protected.
 
-A functional internal area at `/office` (`src/app/office`), built with the Next.js App Router and Tailwind CSS. In the code it is called the Owner Office and its single role is `owner`. Its neutral layout is functional, not a final visual design.
+A functional internal area at `/office` (`src/app/office`), built with the Next.js App Router and Tailwind CSS. In the code it is called the Owner Office and its single role is `owner`. It wears the First Light design ([design system](../design/storefront-design-system.md)): a cocoa sidebar grouped by the work it serves (on a phone, the same links in a row that scrolls sideways), status words in toned pills, the main action of a page or form in amber.
 
 | Screen | Does | Permission |
 |---|---|---|

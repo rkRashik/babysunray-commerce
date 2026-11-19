@@ -17,6 +17,8 @@ test("the rehearsal copy shows its own identity in both languages and nothing of
     await expect(page.locator(".sf")).toHaveCSS("background-color", "rgb(251, 250, 247)");
     await expect(page.locator(".sf")).toHaveCSS("color", "rgb(31, 42, 68)");
     expect(await page.content()).not.toMatch(ORIGINAL_BRAND);
+    // The copy's logo files were deleted at handover: the name is shown as text, no logo image is requested.
+    await expect(page.locator('img[src^="/brand/"]')).toHaveCount(0);
   }
   for (const pathname of ["/", "/office", "/office/import", "/office/catalogue-preparation", "/office/media-health", "/office/dashboard", "/office/storefront-preview/en/cart", "/office/storefront-preview/bn/checkout", "/track"]) {
     await page.goto(pathname);

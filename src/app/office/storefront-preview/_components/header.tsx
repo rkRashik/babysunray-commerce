@@ -1,82 +1,55 @@
+import { Package } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
+import { BrandLogo } from "@/app/_design/brand";
 import { dictionary, type Lang } from "@/modules/storefront/i18n";
 import type { Facets } from "@/modules/storefront/service";
-import { CartLink, LanguageSwitch } from "./header-client";
+import { BagLink, LanguageSwitch, SearchForm } from "./header-client";
 import { base, Localised } from "./parts";
 
-// Site header of the preview. On a phone the navigation and search sit in a native disclosure (<details>), so
-// the menu opens with the keyboard and screen readers without any script; on wider screens they are inline.
+// The site header (First Light). A phone gets the logo and the language switch, both always visible: search, the shop,
+// the bag and the order page live in the tab bar under the thumb. A desktop gets the categories, search, the order page
+// and the bag in one row.
 
-function Nav({ lang, facets, className }: { lang: Lang; facets: Facets; className: string }) {
+// Three categories fit beside search on a wide desktop; below 1280 px only "Shop All" (the rest is one tap away there).
+const MAX_NAV = 3;
+
+export function Header({ lang, facets, storeName }: { lang: Lang; facets: Facets; storeName: string }) {
   const t = dictionary(lang);
-  const link = "inline-flex min-h-11 items-center rounded-sm underline-offset-4 hover:underline";
+  const link = "inline-flex min-h-11 items-center rounded-full px-3 text-[0.9375rem] font-semibold whitespace-nowrap transition-colors hover:bg-sf-sun-soft";
   return (
-    <ul className={className}>
-      <li>
-        <Link href={`${base(lang)}/products`} className={link}>
-          {t.shopAll}
+    <header className="sticky top-0 z-30 border-b border-sf-line bg-sf-paper/95 backdrop-blur-md">
+      <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 lg:h-20 lg:gap-4 lg:px-8">
+        <Link href={base(lang)} className="me-auto inline-flex min-h-11 shrink-0 items-center rounded-lg lg:me-0" data-testid="store-home">
+          <BrandLogo name={storeName} height={36} className="lg:h-[44px] lg:w-auto" textClassName="text-[1.5rem] lg:text-[1.75rem]" />
         </Link>
-      </li>
-      {facets.categories.map((c) => (
-        <li key={c.slug}>
-          <Link href={`${base(lang)}/products?category=${c.slug}`} className={link}>
-            <Localised lang={lang} en={c.nameEn} bn={c.nameBn} />
-          </Link>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-export function Search({ lang, id, large = false }: { lang: Lang; id: string; large?: boolean }) {
-  const t = dictionary(lang);
-  return (
-    <form action={`${base(lang)}/products`} method="get" role="search" className="flex items-center gap-2">
-      <label htmlFor={id} className="sr-only">
-        {t.searchLabel}
-      </label>
-      <input id={id} type="search" name="q" maxLength={100} placeholder={t.searchPlaceholder} className={`${large ? "min-h-12 text-lg" : "min-h-11 text-base"} w-full min-w-0 rounded-sm border border-sf-line bg-white px-3 placeholder:text-sf-umber`} />
-      <button type="submit" className={`${large ? "min-h-12 bg-sf-cocoa px-5 text-sf-ivory" : "min-h-11 px-3 hover:bg-sf-cocoa hover:text-sf-ivory"} rounded-sm border border-sf-cocoa font-medium`}>
-        {t.search}
-      </button>
-    </form>
-  );
-}
-
-// Concepts B and C keep search outside the phone menu, so browsing starts with one tap less; Concept A keeps the header
-// quiet. A and C set the shop name in the display face.
-export function Header({ lang, facets, storeName, concept }: { lang: Lang; facets: Facets; storeName: string; concept: "editorial" | "family" | "hybrid" }) {
-  const t = dictionary(lang);
-  const family = concept !== "editorial";
-  return (
-    <header className="border-b border-sf-line bg-sf-ivory">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-        <Link href={base(lang)} className={`mr-auto inline-flex min-h-11 items-center rounded-sm text-xl ${concept === "family" ? "font-bold" : "sf-display font-medium tracking-wide"}`}>
-          {storeName}
-        </Link>
-        <nav aria-label={t.mainNav} className="hidden md:block">
-          <Nav lang={lang} facets={facets} className="flex flex-wrap items-center gap-x-5" />
+        <nav aria-label={t.mainNav} className="me-auto hidden min-w-0 lg:block">
+          <ul className="flex items-center gap-1">
+            <li>
+              <Link href={`${base(lang)}/products`} className={link}>
+                {t.shopAll}
+              </Link>
+            </li>
+            {facets.categories.slice(0, MAX_NAV).map((c) => (
+              <li key={c.slug} className="hidden xl:list-item">
+                <Link href={`${base(lang)}/products?category=${c.slug}`} className={link}>
+                  <Localised lang={lang} en={c.nameEn} bn={c.nameBn} />
+                </Link>
+              </li>
+            ))}
+          </ul>
         </nav>
-        <div className="hidden w-64 md:block">
-          <Search lang={lang} id="sf-search-wide" />
+        <div className="hidden w-56 lg:block xl:w-60">
+          <SearchForm lang={lang} id="sf-search-header" />
         </div>
         <Suspense>
           <LanguageSwitch lang={lang} />
         </Suspense>
-        <CartLink lang={lang} />
-        {family ? (
-          <div className="w-full md:hidden">
-            <Search lang={lang} id="sf-search-narrow" />
-          </div>
-        ) : null}
-        <details className="w-full md:hidden" data-testid="mobile-menu">
-          <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-sm font-medium">{t.menu}</summary>
-          <nav aria-label={t.mainNav} className="space-y-3 pb-3 pt-1">
-            {family ? null : <Search lang={lang} id="sf-search-narrow" />}
-            <Nav lang={lang} facets={facets} className="flex flex-col" />
-          </nav>
-        </details>
+        <Link href={`${base(lang)}/order`} className="sf-btn sf-btn-ghost sf-btn-sm hidden gap-2 px-3 lg:inline-flex xl:px-4">
+          <Package aria-hidden="true" size={18} strokeWidth={1.75} />
+          <span className="sr-only xl:not-sr-only">{t.tabOrder}</span>
+        </Link>
+        <BagLink lang={lang} place="header" />
       </div>
     </header>
   );

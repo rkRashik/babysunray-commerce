@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { productCursorCodec } from "@/api/v1/schemas";
 import { getDb } from "@/db/client";
@@ -19,7 +20,7 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
   closed: "Closed",
 };
 const PAGE_SIZE = 25;
-const FIELD = "mt-1 block w-full rounded border border-gray-400 bg-white px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900";
+const FIELD = "of-input mt-1.5";
 
 const href = (params: Record<string, string | undefined>) => {
   const query = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => Boolean(e[1])));
@@ -51,10 +52,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   return (
     <OfficeShell title="Orders" current="orders">
       <div className="flex flex-wrap gap-3">
-        <Link href="/office/orders/new" className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2">
+        <Link href="/office/orders/new" className="of-btn of-btn-primary">
+          <Plus aria-hidden="true" size={18} strokeWidth={2} />
           New assisted order
         </Link>
-        <Link href={href({ attention: "true" })} className="rounded border border-gray-400 bg-white px-4 py-2 text-sm hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900">
+        <Link href={href({ attention: "true" })} className="of-btn of-btn-line">
           Needs attention
         </Link>
       </div>
@@ -64,9 +66,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </p>
       ) : null}
       <div role="search" aria-label="Find orders">
-        <form method="get" action="/office/orders" className="flex flex-col gap-3 rounded border border-gray-300 bg-white p-4 sm:flex-row sm:items-end">
+        <form method="get" action="/office/orders" className="of-card flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
           <div className="flex-1">
-            <label htmlFor="order-number" className="block text-sm font-medium">
+            <label htmlFor="order-number" className="block text-sm font-semibold">
               Order number
             </label>
             <input id="order-number" name="number" defaultValue={number} maxLength={20} inputMode="text" className={FIELD} aria-describedby="order-number-hint" />
@@ -75,7 +77,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             </p>
           </div>
           <div>
-            <label htmlFor="order-status" className="block text-sm font-medium">
+            <label htmlFor="order-status" className="block text-sm font-semibold">
               Order status
             </label>
             <select id="order-status" name="status" defaultValue={status ?? ""} className={FIELD}>
@@ -88,11 +90,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             </select>
           </div>
           <div className="flex gap-2 sm:pb-[1.375rem]">
-            <button type="submit" className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2">
+            <button type="submit" className="of-btn of-btn-primary">
               Show
             </button>
             {status || number || attention || queue ? (
-              <Link href="/office/orders" className="rounded border border-gray-400 bg-white px-4 py-2 text-sm hover:bg-gray-100">
+              <Link href="/office/orders" className="of-btn of-btn-line">
                 Clear
               </Link>
             ) : null}
@@ -101,7 +103,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       </div>
 
       {error ? (
-        <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
           {error}
         </p>
       ) : page.items.length === 0 ? (
@@ -109,37 +111,37 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           {status || number || attention || queue ? "No orders match." : "No orders yet."} <Link href="/office/orders/new" className="underline">Create an assisted order</Link>.
         </p>
       ) : (
-        <ul aria-label="Orders" className="divide-y divide-gray-200 rounded border border-gray-300 bg-white">
+        <ul aria-label="Orders" className="of-card divide-y divide-gray-200 overflow-hidden">
           {page.items.map((o) => (
-            <li key={o.id} className="space-y-2 px-4 py-3">
+            <li key={o.id} className="space-y-2.5 px-4 py-3.5 transition-colors hover:bg-[#fbf8f3] lg:px-5">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <Link href={`/office/orders/${o.id}`} className="font-medium underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900">
+                <Link href={`/office/orders/${o.id}`} className="inline-flex min-h-11 items-center text-[1.0625rem] font-bold underline-offset-4 hover:underline">
                   {formatOrderNumber(o.number)}
                 </Link>
-                <span className="text-sm tabular-nums">{bdt(o.totalPaisa)}</span>
+                <span className="font-bold tabular-nums">{bdt(o.totalPaisa)}</span>
               </div>
-              <p className="text-xs text-gray-600">
+              <p className="text-sm text-gray-600">
                 {o.customerName} · {formatTime(o.createdAt)}
                 {verificationOverdue(o, now) ? (
                   <strong className="ml-2 text-red-800">Verification deadline passed</strong>
                 ) : o.orderStatus === "pending_verification" ? (
-                  <span className="ml-2">Verify {relative(o.verificationExpiresAt, now)}</span>
+                  <span className="ml-2 font-semibold text-amber-900">Verify {relative(o.verificationExpiresAt, now)}</span>
                 ) : null}
               </p>
-              <Dimensions order={o} />
+              <Dimensions order={o} compact />
             </li>
           ))}
         </ul>
       )}
       {next || after ? (
-        <nav aria-label="Pages" className="flex gap-4 text-sm">
+        <nav aria-label="Pages" className="flex gap-2 text-sm">
           {after ? (
-            <Link href={href({ status, attention: attention ? "true" : undefined, queue, number: number || undefined })} className="underline">
+            <Link href={href({ status, attention: attention ? "true" : undefined, queue, number: number || undefined })} className="of-btn of-btn-line">
               First page
             </Link>
           ) : null}
           {next ? (
-            <Link href={next} className="underline">
+            <Link href={next} className="of-btn of-btn-line">
               Next page
             </Link>
           ) : null}

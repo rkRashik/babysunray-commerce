@@ -1,5 +1,6 @@
 "use client";
 
+import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 
@@ -40,28 +41,28 @@ export function SignInForm() {
     setPending(false);
   }
 
-  const input = "mt-1 block w-full rounded border border-gray-400 px-3 py-2 text-base focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900";
+  const input = "of-input mt-1.5";
   return (
     // method="post" as a second guard: even a native submission never carries the password in a URL.
     <form method="post" onSubmit={onSubmit} className="space-y-4">
       <div>
-        <label htmlFor="email" className="block text-sm font-medium">
+        <label htmlFor="email" className="block text-sm font-semibold">
           Email
         </label>
         <input id="email" name="email" type="email" autoComplete="username" required className={input} />
       </div>
       <div>
-        <label htmlFor="password" className="block text-sm font-medium">
+        <label htmlFor="password" className="block text-sm font-semibold">
           Password
         </label>
         <input id="password" name="password" type="password" autoComplete="current-password" required minLength={15} maxLength={128} className={input} />
       </div>
       {error ? (
-        <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
           {error}
         </p>
       ) : null}
-      <button type="submit" disabled={!ready || pending} className="w-full rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-60">
+      <button type="submit" disabled={!ready || pending} className="of-btn of-btn-primary w-full min-h-12 text-base">
         {pending ? "Signing in…" : "Sign in"}
       </button>
       <noscript>
@@ -71,7 +72,7 @@ export function SignInForm() {
   );
 }
 
-export function SignOutButton() {
+export function SignOutButton({ dark = false }: { dark?: boolean }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   async function signOut() {
@@ -85,8 +86,16 @@ export function SignOutButton() {
     }
   }
   return (
-    <button type="button" onClick={signOut} disabled={pending} className="rounded border border-gray-400 px-3 py-1 text-sm hover:bg-gray-100 disabled:opacity-60">
-      {pending ? "Signing out…" : "Sign out"}
+    <button
+      type="button"
+      onClick={signOut}
+      disabled={pending}
+      title={dark ? "Sign out" : undefined}
+      className={`of-btn min-h-10 px-3.5 text-sm ${dark ? "lg:w-10 lg:px-0 " : ""}${dark ? "text-[#eadfcf] shadow-[inset_0_0_0_1.5px_rgb(234_223_207/0.35)] hover:bg-of-night-2 hover:text-white focus-visible:outline-sf-sun-glow" : "of-btn-line"}`}
+    >
+      {dark ? <LogOut aria-hidden="true" size={17} strokeWidth={1.9} className="hidden lg:block" /> : null}
+      {/* In the desktop sidebar the icon stands for the words, which stay for screen readers. */}
+      <span className={dark ? "lg:sr-only" : undefined}>{pending ? "Signing out…" : "Sign out"}</span>
     </button>
   );
 }

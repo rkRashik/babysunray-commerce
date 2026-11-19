@@ -1,21 +1,33 @@
 "use client";
 
-import { useId, useState } from "react";
+import { Check, CircleAlert, Minus, Plus, Ruler, ShoppingBag } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useId, useState } from "react";
 import { addToCart, parseQuantity } from "@/modules/storefront/cart";
 import { dictionary, formatTaka, type Lang } from "@/modules/storefront/i18n";
 import type { PreviewVariant } from "@/modules/storefront/service";
 import { useCart } from "./cart-store";
+import { BagLink } from "./header-client";
+import { Sheet } from "./sheet";
 
-// Size and colour choice, quantity and "Add to cart" on the product page. Sizes show the product's own
-// measurements in cm under the label. Availability comes from the server render; the cart page checks it again
-// against the database. Adding to the cart holds no stock (the cart is not a reservation).
+// Size and colour choice, quantity and "Add to Bag" on the product page. The selected size shows the product's own
+// measurements in cm; the size guide opens in a sheet. Availability comes from the server render; the bag checks it again
+// against the database. Adding holds no stock (the bag is not a reservation). On a phone the add button and the bag sit in
+// a bar under the thumb, and the answer to an add appears just above it.
 
-type Props = { lang: Lang; productName: string; variants: PreviewVariant[]; sizes: string[]; measurements: Record<string, string> };
+type Props = {
+  lang: Lang;
+  productName: string;
+  variants: PreviewVariant[];
+  sizes: string[];
+  measurements: Record<string, string>;
+  /** The size chart (server-rendered), shown in the size guide sheet; null when there are no measurements. */
+  sizeChart: React.ReactNode;
+};
 
-const CHIP =
-  "relative flex min-h-11 cursor-pointer flex-col justify-center rounded-sm border px-4 py-2 has-[:checked]:border-2 has-[:checked]:border-sf-cocoa has-[:checked]:bg-white has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-sf-cocoa";
+type Message = { text: string; error: boolean };
 
-export function VariantPicker({ lang, productName, variants, sizes, measurements }: Props) {
+export function VariantPicker({ lang, productName, variants, sizes, measurements, sizeChart }: Props) {
   const t = dictionary(lang);
   const id = useId();
   const [lines, setLines] = useCart();
@@ -23,7 +35,14 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
   const [size, setSize] = useState<string | null>(sizes.length === 1 ? sizes[0] : null);
   const [colour, setColour] = useState<string | null>(colours.length === 1 ? colours[0] : null);
   const [quantity, setQuantity] = useState("1");
-  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+  const [message, setMessage] = useState<Message | null>(null);
+
+  // A success message steps aside after a few seconds; an error stays until the next action.
+  useEffect(() => {
+    if (!message || message.error) return;
+    const timer = setTimeout(() => setMessage(null), 6000);
+    return () => clearTimeout(timer);
+  }, [message]);
 
   const selected =
     variants.find((v) => (sizes.length === 0 || v.size === size) && (colours.length === 0 || v.colour === colour)) ?? (variants.length === 1 ? variants[0] : null);
@@ -32,6 +51,7 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
   const prices = variants.map((v) => v.pricePaisa);
   const price = selected ? formatTaka(selected.pricePaisa, lang) : Math.min(...prices) === Math.max(...prices) ? formatTaka(prices[0], lang) : t.from(formatTaka(Math.min(...prices), lang));
   const inCart = selected ? (lines.find((l) => l.sku === selected.sku)?.quantity ?? 0) : 0;
+  const out = selected !== null && selected.available === 0;
 
   function add() {
     if (!selected) return setMessage({ text: t.chooseFirst, error: true });
@@ -49,78 +69,133 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
   };
 
   return (
-    <div className="space-y-6">
-      <p className="text-2xl font-semibold tabular-nums" data-testid="price">
-        {price}
-      </p>
+    <div className="space-y-6 lg:space-y-7">
+      <div className="space-y-1.5">
+        <p className="sf-price text-[1.875rem] leading-none" data-testid="price">
+          {price}
+        </p>
+        <p className="pt-1">
+          <span data-testid="availability" className="sf-badge" data-tone={!selected ? undefined : out ? "out" : selected.available <= 3 ? "low" : "ok"}>
+            {selected ? (out ? t.soldOut : `${t.inStock}: ${t.available(selected.available)}`) : t.chooseFirst}
+          </span>
+        </p>
+      </div>
+
       {sizes.length ? (
         <fieldset>
-          <legend className="mb-2 font-medium">{size ? t.chosen(t.size, size) : t.chooseSize}</legend>
-          <div className="flex flex-wrap gap-2">
+          {/* Floated, so the size guide can sit on the legend's line (a rendered legend would push it into the chips). */}
+          <legend className="float-left mb-2 flex min-h-11 items-center text-[1.0625rem] font-bold">{size ? t.chosen(t.size, size) : t.chooseSize}</legend>
+          {sizeChart ? (
+            <div className="float-right mb-2">
+              <Sheet
+                title={t.sizeGuide}
+                closeLabel={t.close}
+                testId="size-guide-sheet"
+                triggerClassName="sf-btn sf-btn-soft sf-btn-sm gap-1.5"
+                trigger={
+                  <>
+                    <Ruler aria-hidden="true" size={18} strokeWidth={1.75} />
+                    {t.sizeGuide}
+                  </>
+                }
+              >
+                <div className="sf-sheet-body">{sizeChart}</div>
+              </Sheet>
+            </div>
+          ) : null}
+          <div className="clear-both flex flex-wrap gap-2">
             {sizes.map((s) => (
-              <label key={s} className={`${CHIP} ${soldOutSize(s) ? "border-dashed border-sf-umber text-sf-umber" : "border-sf-line bg-sf-ivory"}`}>
-                <input type="radio" name={`${id}-size`} value={s} checked={size === s} onChange={() => setSize(s)} className="sr-only" />
-                <span className="font-semibold">{s}</span>
-                {measurements[s] ? <span className="text-xs text-sf-umber">{measurements[s]}</span> : null}
-                {soldOutSize(s) ? <span className="text-xs">{t.unavailableOption}</span> : null}
+              <label key={s} className="sf-chip sf-option" data-out={soldOutSize(s)}>
+                <input type="radio" name={`${id}-size`} value={s} checked={size === s} onChange={() => setSize(s)} className="sr-only" aria-describedby={soldOutSize(s) ? `${id}-out` : undefined} />
+                <span className="sf-chip-label">{s}</span>
               </label>
             ))}
           </div>
+          <p className="mt-2.5 min-h-6 text-[0.9375rem] font-medium text-sf-ink-2" aria-live="polite">
+            {size && measurements[size] ? measurements[size] : ""}
+            {size && soldOutSize(size) ? <span className="font-semibold text-sf-danger"> {t.unavailableOption}</span> : null}
+          </p>
+          <span id={`${id}-out`} hidden>
+            {t.unavailableOption}
+          </span>
         </fieldset>
       ) : null}
+
       {colours.length ? (
         <fieldset>
-          <legend className="mb-2 font-medium">{colour ? t.chosen(t.colour, colour) : t.chooseColour}</legend>
+          <legend className="mb-3 text-[1.0625rem] font-bold">{colour ? t.chosen(t.colour, colour) : t.chooseColour}</legend>
           <div className="flex flex-wrap gap-2">
             {colours.map((c) => {
               // A colour that does not exist in the chosen size cannot be chosen with it.
               const absent = size !== null && sizes.length > 0 && !variants.some((v) => v.size === size && v.colour === c);
               return (
-                <label key={c} className={`${CHIP} ${absent ? "cursor-not-allowed border-dashed border-sf-line text-sf-umber opacity-70" : soldOutColour(c) ? "border-dashed border-sf-umber text-sf-umber" : "border-sf-line bg-sf-ivory"}`}>
+                <label key={c} className={`sf-chip sf-option ${absent ? "opacity-45" : ""}`} data-out={!absent && soldOutColour(c)}>
                   <input type="radio" name={`${id}-colour`} value={c} checked={colour === c && !absent} disabled={absent} onChange={() => setColour(c)} className="sr-only" />
-                  <span className="font-medium">{c}</span>
-                  {absent ? <span className="text-xs">{t.notInThisSize}</span> : soldOutColour(c) ? <span className="text-xs">{t.unavailableOption}</span> : null}
+                  <span className="sf-chip-label">{c}</span>
+                  {absent ? <span className="sr-only"> ({t.notInThisSize})</span> : !absent && soldOutColour(c) ? <span className="sr-only"> ({t.unavailableOption})</span> : null}
                 </label>
               );
             })}
           </div>
         </fieldset>
       ) : null}
-      <p data-testid="availability" className={selected && selected.available === 0 ? "font-medium text-sf-danger" : "text-sf-umber"}>
-        {selected ? (selected.available === 0 ? t.soldOut : `${t.inStock}: ${t.available(selected.available)}`) : t.chooseFirst}
-      </p>
-      <div>
-        <label htmlFor={`${id}-qty`} className="mb-2 block font-medium">
-          {t.quantity}
-        </label>
-        <div className="flex items-stretch gap-2">
-          <button type="button" onClick={() => step(-1)} aria-label={t.decrease} className="min-h-11 min-w-11 rounded-sm border border-sf-line bg-white text-lg">
-            −
-          </button>
-          <input
-            id={`${id}-qty`}
-            inputMode="numeric"
-            autoComplete="off"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            aria-invalid={message?.error && parseQuantity(quantity) === null ? true : undefined}
-            className="min-h-11 w-20 rounded-sm border border-sf-line bg-white px-3 text-center text-base tabular-nums"
-          />
-          <button type="button" onClick={() => step(1)} aria-label={t.increase} className="min-h-11 min-w-11 rounded-sm border border-sf-line bg-white text-lg">
-            +
-          </button>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label htmlFor={`${id}-qty`} className="sf-label">
+            {t.quantity}
+          </label>
+          <div className="inline-flex h-[3.25rem] items-center rounded-full border-[1.5px] border-sf-line-strong bg-sf-card">
+            <button type="button" onClick={() => step(-1)} aria-label={t.decrease} className="sf-icon-btn ms-1">
+              <Minus aria-hidden="true" size={18} strokeWidth={2} />
+            </button>
+            <input
+              id={`${id}-qty`}
+              inputMode="numeric"
+              autoComplete="off"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              aria-invalid={message?.error && parseQuantity(quantity) === null ? true : undefined}
+              className="sf-num h-full w-12 bg-transparent text-center text-base font-semibold focus:outline-none focus-visible:rounded-md focus-visible:outline-2"
+            />
+            <button type="button" onClick={() => step(1)} aria-label={t.increase} className="sf-icon-btn me-1">
+              <Plus aria-hidden="true" size={18} strokeWidth={2} />
+            </button>
+          </div>
         </div>
-      </div>
-      {/* sf-buy: in Concept B on a phone, the button and its answer form a bar fixed to the bottom of the screen. */}
-      <div className="sf-buy space-y-3">
-        <p role="status" aria-live="polite" className={`empty:hidden ${message?.error ? "font-medium text-sf-danger" : "font-medium"}`} data-testid="add-message">
-          {message?.text ?? ""}
-        </p>
-        <button type="button" onClick={add} className="min-h-12 w-full rounded-sm bg-sf-cocoa px-6 text-lg font-semibold text-sf-ivory hover:bg-[#4a3c33] sm:w-auto">
+        <button type="button" onClick={add} className="sf-btn sf-btn-lg hidden min-w-64 flex-1 lg:inline-flex">
+          <ShoppingBag aria-hidden="true" size={20} strokeWidth={1.75} />
           {t.addToCart}
         </button>
       </div>
-      <p className="text-sm text-sf-umber">{t.notInCart}</p>
+
+      {/* One answer for both layouts: in the panel on a desktop, a snackbar above the buying bar on a phone. */}
+      <div role="status" aria-live="polite" className="sf-snack" data-state={message ? (message.error ? "error" : "ok") : "empty"}>
+        {message ? (
+          <span aria-hidden="true" className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${message.error ? "bg-sf-danger text-white" : "bg-sf-sun text-sf-ink"}`}>
+            {message.error ? <CircleAlert size={16} strokeWidth={2.5} /> : <Check size={16} strokeWidth={2.5} />}
+          </span>
+        ) : null}
+        <p className="min-w-0 flex-1 empty:hidden" data-testid="add-message">
+          {message?.text ?? ""}
+        </p>
+        {message && !message.error ? (
+          <Link href={`/office/storefront-preview/${lang}/cart`} className="inline-flex min-h-11 shrink-0 items-center font-semibold underline underline-offset-4">
+            {t.viewBag}
+          </Link>
+        ) : null}
+      </div>
+      <p className="sf-hint">{t.notInCart}</p>
+
+      <div className="sf-bar sf-bar-phone">
+        <div className="mx-auto flex h-[var(--sf-bar-h)] max-w-lg items-center gap-3 px-4">
+          <BagLink lang={lang} place="bar" />
+          <button type="button" onClick={add} className="sf-btn min-h-[3.25rem] flex-1 justify-between ps-6 pe-5" aria-disabled={out || undefined}>
+            <span>{t.addToCart}</span>
+            <span className="sf-num font-bold">{selected ? formatTaka(selected.pricePaisa, lang) : ""}</span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

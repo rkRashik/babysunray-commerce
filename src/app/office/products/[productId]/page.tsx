@@ -20,8 +20,7 @@ export const metadata = { title: "Product · Owner Office" };
 
 type Props = { params: Promise<{ productId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
-const BUTTON_LINK =
-  "inline-block rounded border border-gray-400 bg-white px-3 py-1 text-sm hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900";
+const BUTTON_LINK = "of-btn of-btn-line min-h-10 px-3.5 text-sm";
 
 export default async function ProductPage({ params, searchParams }: Props) {
   await requireOffice("catalog:read", "stock:read");
