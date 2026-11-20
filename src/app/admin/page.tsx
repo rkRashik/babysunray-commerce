@@ -138,13 +138,18 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
     searchError = `Search text must be at most ${MAX_SEARCH_LENGTH} characters, without control characters.`;
   }
   const db = getDb();
-  const categories = await listCategories(db);
-  const page = searchError ? { items: [], hasMore: false } : await listProducts(db, { limit: PAGE_SIZE, status, after, q, categoryId, missing, stock });
+  // Independent reads side by side: categories with the page of products, then flags, summaries and the rule.
+  const [categories, page] = await Promise.all([
+    listCategories(db),
+    searchError ? Promise.resolve({ items: [] as Product[], hasMore: false } as Awaited<ReturnType<typeof listProducts>>) : listProducts(db, { limit: PAGE_SIZE, status, after, q, categoryId, missing, stock }),
+  ]);
   const ids = page.items.map((p) => p.id);
-  const flags = await readinessFlags(db, ids);
-  const summaries = await productListSummaries(db, ids);
+  const [flags, summaries, rule] = await Promise.all([
+    readinessFlags(db, ids),
+    productListSummaries(db, ids),
+    page.items.some((p) => p.status === "draft") ? publicationRuleFor(db) : Promise.resolve(null),
+  ]);
   // What "complete" means: the basic product information plus the publication requirements in force, else the proposed ones.
-  const rule = page.items.some((p) => p.status === "draft") ? await publicationRuleFor(db) : null;
   const required = new Set<string>(READINESS_ITEMS.filter((i) => i.basis === "approved" || (!rule && i.basis === "pending")).map((i) => i.id));
   for (const id of rule?.items ?? []) required.add(id);
   const missingFor = (id: string) => {

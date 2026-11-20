@@ -1,6 +1,7 @@
 import "server-only";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { currentStoreIdentity } from "@/app/_design/identity";
 import { getDb } from "@/db/client";
 import type { Permission } from "@/modules/auth/permissions";
 import { assertPermission, getPrincipal, type Principal } from "@/modules/auth/principal";
@@ -23,6 +24,9 @@ export async function currentPrincipal(): Promise<Principal | null> {
  * why); FORBIDDEN (error page) without every permission.
  */
 export async function requireAdmin(...permissions: Permission[]): Promise<Principal> {
+  // A page always shows the store name in its shell: read it while the session is checked instead of after the page's own
+  // queries (each database round trip costs tens of milliseconds on a hosted database). Server Actions do not render a shell.
+  if (!(await headers()).get("next-action")) void currentStoreIdentity();
   const principal = await currentPrincipal().catch((error: unknown) => {
     if (error instanceof AuthConfigError) redirect("/admin/login");
     throw error;
