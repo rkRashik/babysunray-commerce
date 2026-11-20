@@ -84,7 +84,7 @@ export function SetupForm({ emailOn }: { emailOn: boolean }) {
         {!verified ? <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm">Email is not set up on this server, so your address is not verified yet. Everything works; add email later in the settings.</p> : null}
         <div className="space-y-2">
           <p className="flex items-center gap-2 text-sm font-semibold">
-            <KeyRound aria-hidden="true" size={18} /> Recovery codes · রিকভারি কোড
+            <KeyRound aria-hidden="true" size={18} /> Recovery codes
           </p>
           <p className="text-sm text-gray-700">If you ever lose your password, one of these codes lets you set a new one. Each works once. They are shown only now: save or print them and keep them somewhere safe.</p>
           <ol className="grid grid-cols-1 gap-1 rounded-xl bg-gray-50 p-4 font-mono text-sm sm:grid-cols-2" data-testid="recovery-codes">
@@ -120,9 +120,9 @@ export function SetupForm({ emailOn }: { emailOn: boolean }) {
         <p className="text-sm text-gray-700">
           Owner email: <strong>{email}</strong>
         </p>
-        {codeSent ? <Field id={id} name="code" text="Code from your email · ইমেইলের কোড" inputMode="numeric" autoComplete="one-time-code" required maxLength={6} hint="We sent a 6-digit code to this address. It works for 15 minutes." /> : null}
-        <Field id={id} name="name" text="Your name · আপনার নাম" autoComplete="name" required maxLength={100} />
-        <Field id={id} name="password" text="Password · পাসওয়ার্ড" type="password" autoComplete="new-password" required minLength={15} maxLength={128} hint="At least 15 characters. A short sentence is easy to remember and strong." />
+        {codeSent ? <Field id={id} name="code" text="Code from your email" inputMode="numeric" autoComplete="one-time-code" required maxLength={6} hint="We sent a 6-digit code to this address. It works for 15 minutes." /> : null}
+        <Field id={id} name="name" text="Your name" autoComplete="name" required maxLength={100} />
+        <Field id={id} name="password" text="Password" type="password" autoComplete="new-password" required minLength={15} maxLength={128} hint="At least 15 characters. A short sentence is easy to remember and strong." />
         <Field id={id} name="confirm" text="Password again" type="password" autoComplete="new-password" required minLength={15} maxLength={128} />
         {errorBox}
         <button type="submit" disabled={pending} className="of-btn of-btn-primary w-full">
@@ -140,7 +140,7 @@ export function SetupForm({ emailOn }: { emailOn: boolean }) {
       <Field
         id={id}
         name="token"
-        text="Setup code · সেটআপ কোড"
+        text="Setup code"
         type="password"
         autoComplete="off"
         required
@@ -148,7 +148,7 @@ export function SetupForm({ emailOn }: { emailOn: boolean }) {
         onChange={(e) => setToken(e.target.value)}
         hint="The value you set as ADMIN_SETUP_TOKEN in the site's settings."
       />
-      <Field id={id} name="email" text="Owner email · ইমেইল" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+      <Field id={id} name="email" text="Owner email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
       {!emailOn ? <p className="text-xs text-gray-600">Email is not set up on this server: your address cannot be verified now (you can add email later).</p> : null}
       {errorBox}
       <button type="submit" disabled={pending} className="of-btn of-btn-primary w-full gap-2">

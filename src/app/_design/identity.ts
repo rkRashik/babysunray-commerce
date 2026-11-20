@@ -12,7 +12,9 @@ import { storeIdentity } from "@/modules/settings/store";
 export const currentStoreIdentity = cache(async (): Promise<InstallationIdentity> => {
   try {
     return await storeIdentity(getDb());
-  } catch {
+  } catch (error) {
+    // Visible in the server log (no names or values): the store name then comes from the installation settings only.
+    console.error("The store identity could not be read from the database; using the installation settings.", (error as { code?: string })?.code ?? "");
     return installationIdentity();
   }
 });

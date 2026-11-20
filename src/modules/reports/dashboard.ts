@@ -1,5 +1,6 @@
 import "server-only";
-import { and, asc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, eq, ne, type SQL, sql } from "drizzle-orm";
+import { unionAll } from "drizzle-orm/pg-core";
 import type { Db } from "@/db/database";
 import { deliveryZones, inventoryBalances, orders, products, quarantineItems, returns, variants } from "@/db/schema";
 import { invalidInput } from "../domain-error";
@@ -21,7 +22,7 @@ export type QueueOrder = Pick<
   "id" | "number" | "createdAt" | "orderStatus" | "fulfilmentStatus" | "paymentStatus" | "totalPaisa" | "codCollectedPaisa" | "codSettledPaisa" | "codDeductedPaisa" | "verificationExpiresAt"
 >;
 export type QuarantineRow = { id: string; orderId: string; orderNumber: number; sku: string; quantity: number; receivedAt: Date };
-export type StockRow = { variantId: string; sku: string; nameEn: string | null; nameBn: string | null; onHand: number; reserved: number; available: number };
+export type StockRow = { variantId: string; sku: string; nameEn: string | null; nameBn: string | null; size: string | null; colour: string | null; onHand: number; reserved: number; available: number };
 
 export type Dashboard = {
   generatedAt: Date;
@@ -59,73 +60,113 @@ const QUEUE_COLUMNS = {
 const available = sql<number>`${inventoryBalances.onHand} - ${inventoryBalances.reserved}`.mapWith(Number);
 const sellable = and(eq(variants.status, "active"), ne(products.status, "archived"));
 
+/** The first rows of a stock list and its full count, in one query (the window count is taken before the limit). */
 async function stockList(tx: Db, maxAvailable: number) {
-  const where = and(sellable, sql`${inventoryBalances.onHand} - ${inventoryBalances.reserved} <= ${maxAvailable}`);
-  const [{ n }] = await tx
-    .select({ n: sql<number>`count(*)`.mapWith(Number) })
+  const rows = await tx
+    .select({
+      variantId: variants.id,
+      sku: variants.sku,
+      nameEn: products.nameEn,
+      nameBn: products.nameBn,
+      size: variants.size,
+      colour: variants.colour,
+      onHand: inventoryBalances.onHand,
+      reserved: inventoryBalances.reserved,
+      available,
+      total: sql<number>`count(*) over ()`.mapWith(Number),
+    })
     .from(variants)
     .innerJoin(products, eq(products.id, variants.productId))
     .innerJoin(inventoryBalances, eq(inventoryBalances.variantId, variants.id))
-    .where(where);
-  const items = await tx
-    .select({ variantId: variants.id, sku: variants.sku, nameEn: products.nameEn, nameBn: products.nameBn, onHand: inventoryBalances.onHand, reserved: inventoryBalances.reserved, available })
-    .from(variants)
-    .innerJoin(products, eq(products.id, variants.productId))
-    .innerJoin(inventoryBalances, eq(inventoryBalances.variantId, variants.id))
-    .where(where)
+    .where(and(sellable, sql`${inventoryBalances.onHand} - ${inventoryBalances.reserved} <= ${maxAvailable}`))
     .orderBy(asc(available), asc(variants.sku))
     .limit(STOCK_PREVIEW);
-  return { count: n, items };
+  return { count: rows[0]?.total ?? 0, items: rows.map((r) => ({ variantId: r.variantId, sku: r.sku, nameEn: r.nameEn, nameBn: r.nameBn, size: r.size, colour: r.colour, onHand: r.onHand, reserved: r.reserved, available: r.available })) };
 }
 
-async function quarantineQueue(tx: Db, source: "return" | "rto") {
-  const where = and(eq(quarantineItems.status, "awaiting_inspection"), eq(quarantineItems.source, source));
-  const [totals] = await tx
-    .select({ count: sql<number>`count(*)`.mapWith(Number), units: sql<number>`coalesce(sum(${quarantineItems.quantity}), 0)`.mapWith(Number) })
-    .from(quarantineItems)
-    .where(where);
-  const oldest = await tx
-    .select({ id: quarantineItems.id, orderId: quarantineItems.orderId, orderNumber: orders.number, sku: variants.sku, quantity: quarantineItems.quantity, receivedAt: quarantineItems.receivedAt })
+/** Runs one or more bounded selects as a single UNION ALL statement: one round trip whatever their number. */
+// The selects all have the same columns; the casts only bridge drizzle's set-operator generics.
+async function together<T>(selects: Promise<T[]>[]): Promise<T[]> {
+  if (selects.length === 0) return [];
+  if (selects.length === 1) return selects[0];
+  const [a, b, ...rest] = selects;
+  return unionAll(a as never, b as never, ...(rest as never[])) as unknown as Promise<T[]>;
+}
+
+const quarantineOldest = (tx: Db, source: "return" | "rto") =>
+  tx
+    .select({
+      source: sql<"return" | "rto">`${source}::text`.as("source"),
+      id: quarantineItems.id,
+      orderId: quarantineItems.orderId,
+      orderNumber: orders.number,
+      sku: variants.sku,
+      quantity: quarantineItems.quantity,
+      receivedAt: quarantineItems.receivedAt,
+    })
     .from(quarantineItems)
     .innerJoin(orders, eq(orders.id, quarantineItems.orderId))
     .innerJoin(variants, eq(variants.id, quarantineItems.variantId))
-    .where(where)
+    .where(and(eq(quarantineItems.status, "awaiting_inspection"), eq(quarantineItems.source, source)))
     .orderBy(asc(quarantineItems.receivedAt), asc(quarantineItems.id))
     .limit(PREVIEW);
-  return { ...totals, oldest };
-}
 
+/**
+ * Three to five statements whatever the number of queues: every count in one, the previews of the non-empty queues in
+ * one UNION ALL, the quarantine previews in one, and each stock list with its count. Each round trip to a hosted
+ * database costs tens of milliseconds, so the page's wait is the number of statements, not their size.
+ */
 export async function getDashboard(db: Db, options: { lowStockThreshold?: number | null } = {}): Promise<Dashboard> {
   const threshold = options.lowStockThreshold ?? null;
   return db.transaction(
     async (tx) => {
       const queueNames = Object.keys(ORDER_QUEUES) as OrderQueue[];
-      const counted = await tx.execute<Record<string, string>>(
-        sql`select now() as generated_at, ${sql.join(
-          queueNames.map((q) => sql`count(*) filter (where ${queueCondition(q)}) as ${sql.identifier(q)}`),
-          sql`, `,
-        )} from ${orders}`,
+      const waiting = (source: "return" | "rto", value: SQL) =>
+        sql`(select ${value} from ${quarantineItems} where ${quarantineItems.status} = 'awaiting_inspection' and ${quarantineItems.source} = ${source})`;
+      const returnCount = (status: string) => sql`(select count(*) from ${returns} where ${returns.status} = ${status})`;
+      const counted = await tx.execute<Record<string, string | null>>(
+        sql`select now() as generated_at,
+          ${sql.join(
+            queueNames.map((q) => sql`count(*) filter (where ${queueCondition(q)}) as ${sql.identifier(q)}`),
+            sql`, `,
+          )},
+          ${returnCount("requested")} as ret_requested, ${returnCount("received")} as ret_received, ${returnCount("approved")} as ret_approved,
+          ${waiting("return", sql`count(*)`)} as q_return_count, ${waiting("return", sql`coalesce(sum(${quarantineItems.quantity}), 0)`)} as q_return_units,
+          ${waiting("rto", sql`count(*)`)} as q_rto_count, ${waiting("rto", sql`coalesce(sum(${quarantineItems.quantity}), 0)`)} as q_rto_units,
+          (select string_agg(${deliveryZones.code}, ',') from ${deliveryZones} where ${deliveryZones.active}) as active_zones
+        from ${orders}`,
       );
       const row = counted.rows[0];
-      const queues = [];
-      for (const queue of queueNames) {
-        const oldest = await tx.select(QUEUE_COLUMNS).from(orders).where(queueCondition(queue)).orderBy(asc(orders.createdAt), asc(orders.id)).limit(PREVIEW);
-        queues.push({ queue, label: ORDER_QUEUES[queue], count: Number(row[queue]), oldest });
-      }
-      const [ret] = await tx
-        .select({
-          awaitingParcel: sql<number>`count(*) filter (where ${returns.status} = 'requested')`.mapWith(Number),
-          awaitingDecision: sql<number>`count(*) filter (where ${returns.status} = 'received')`.mapWith(Number),
-          approvedOpen: sql<number>`count(*) filter (where ${returns.status} = 'approved')`.mapWith(Number),
-        })
-        .from(returns);
-      const zones = await tx.select({ code: deliveryZones.code }).from(deliveryZones).where(eq(deliveryZones.active, true));
-      const active = new Set(zones.map((z) => z.code));
+      const count = (key: string) => Number(row[key] ?? 0);
+      const busy = queueNames.filter((q) => count(q) > 0);
+      const previews = await together(
+        busy.map((q) =>
+          tx
+            .select({ queue: sql<OrderQueue>`${q}::text`.as("queue"), ...QUEUE_COLUMNS })
+            .from(orders)
+            .where(queueCondition(q))
+            .orderBy(asc(orders.createdAt), asc(orders.id))
+            .limit(PREVIEW),
+        ),
+      );
+      const sources = (["return", "rto"] as const).filter((s) => count(`q_${s}_count`) > 0);
+      const held = await together(sources.map((s) => quarantineOldest(tx, s)));
+      const quarantine = (source: "return" | "rto") => ({
+        count: count(`q_${source}_count`),
+        units: count(`q_${source}_units`),
+        oldest: held.filter((h) => h.source === source).map((h) => ({ id: h.id, orderId: h.orderId, orderNumber: h.orderNumber, sku: h.sku, quantity: h.quantity, receivedAt: h.receivedAt })),
+      });
+      const active = new Set((row.active_zones ?? "").split(",").filter(Boolean));
       return {
-        generatedAt: new Date(row.generated_at),
-        queues,
-        quarantine: { return: await quarantineQueue(tx, "return"), rto: await quarantineQueue(tx, "rto") },
-        returns: ret,
+        generatedAt: new Date(row.generated_at as string),
+        queues: queueNames.map((queue) => ({
+          queue,
+          label: ORDER_QUEUES[queue],
+          count: count(queue),
+          oldest: previews.filter((p) => p.queue === queue).map((p) => Object.fromEntries(Object.keys(QUEUE_COLUMNS).map((k) => [k, p[k as keyof typeof QUEUE_COLUMNS]])) as QueueOrder),
+        })),
+        quarantine: { return: quarantine("return"), rto: quarantine("rto") },
+        returns: { awaitingParcel: count("ret_requested"), awaitingDecision: count("ret_received"), approvedOpen: count("ret_approved") },
         stock: {
           zeroAvailable: await stockList(tx, 0),
           low: threshold === null ? null : { threshold, ...(await stockList(tx, threshold)) },

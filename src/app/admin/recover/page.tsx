@@ -15,7 +15,7 @@ export default async function RecoverPage() {
       <div className="of-card w-full max-w-md space-y-5 p-6 shadow-[0_10px_28px_rgb(51_41_35/0.09)] sm:p-8">
         <div>
           <h1 className="text-[1.375rem] font-bold">Forgot password</h1>
-          <p className="text-sm text-gray-700">Use one of your recovery codes · রিকভারি কোড দিয়ে নতুন পাসওয়ার্ড দিন</p>
+          <p className="text-sm text-gray-700">Use one of your recovery codes to choose a new password</p>
         </div>
         <RecoverForm />
       </div>

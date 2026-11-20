@@ -169,3 +169,18 @@ export async function seedStorefrontProduct(options: { featured?: boolean } = {}
     await db.end();
   }
 }
+
+/** Fills the new-product form: Bangla text is on its tab, the web address under "Web address (advanced)". */
+export async function fillNewProduct(page: Page, v: { slug?: string; nameEn?: string; nameBn?: string; descriptionBn?: string }) {
+  if (v.nameEn !== undefined) await page.getByLabel("Name (English)").fill(v.nameEn);
+  if (v.nameBn !== undefined || v.descriptionBn !== undefined) {
+    await page.getByRole("tab", { name: "Bangla" }).click();
+    if (v.nameBn !== undefined) await page.getByLabel("Name (Bangla)").fill(v.nameBn);
+    if (v.descriptionBn !== undefined) await page.getByLabel("Description (Bangla)").fill(v.descriptionBn);
+  }
+  if (v.slug !== undefined) {
+    const advanced = page.locator("details", { hasText: "Web address (advanced)" });
+    if (!(await advanced.evaluate((el) => (el as HTMLDetailsElement).open))) await advanced.locator("summary").click();
+    await page.getByLabel("Slug").fill(v.slug);
+  }
+}

@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { clearSignInLimits, signIn, submitAndWait, testDatabase, uniqueName } from "./support";
+import { clearSignInLimits, fillNewProduct, signIn, submitAndWait, testDatabase, uniqueName } from "./support";
 
 // Draft editing, archive and deactivate confirmations, and product search, in a real browser.
 
@@ -11,9 +11,7 @@ test.beforeEach(async ({ page }) => {
 async function createProductWithVariant(page: Page, prefix: string, names = { en: "Edit Me Romper", bn: "সম্পাদনার রম্পার" }) {
   const { slug, sku } = uniqueName(prefix);
   await page.goto("/admin/products/new");
-  await page.getByLabel("Slug").fill(slug);
-  await page.getByLabel("Name (English)").fill(names.en);
-  await page.getByLabel("Name (Bangla)").fill(names.bn);
+  await fillNewProduct(page, { slug, nameEn: names.en, nameBn: names.bn });
   await page.getByRole("button", { name: "Create draft" }).click();
   await expect(page.getByRole("status")).toHaveText("Draft product created.");
   const productUrl = page.url().split("?")[0];
@@ -31,8 +29,9 @@ test("edit a draft product: values are prefilled, Bangla is kept, and the page s
   await page.getByRole("link", { name: "Edit details" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Edit details" })).toBeVisible();
   await expect(page.getByLabel("Name (English)")).toHaveValue("Edit Me Romper");
-  await expect(page.getByLabel("Name (Bangla)")).toHaveValue("সম্পাদনার রম্পার");
   await page.getByLabel("Name (English)").fill("Edited Romper");
+  await page.getByRole("tab", { name: "Bangla" }).click();
+  await expect(page.getByLabel("Name (Bangla)")).toHaveValue("সম্পাদনার রম্পার");
   await page.getByLabel("Description (Bangla)").fill("নরম সুতি, ০-৩ মাস");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByRole("status")).toHaveText("Product details saved.");
@@ -43,6 +42,7 @@ test("edit a draft product: values are prefilled, Bangla is kept, and the page s
   // Emptying every name is refused, with the typed values kept.
   await page.getByRole("link", { name: "Edit details" }).click();
   await page.getByLabel("Name (English)").fill("");
+  await page.getByRole("tab", { name: "Bangla" }).click();
   await page.getByLabel("Name (Bangla)").fill("");
   await submitAndWait(page, page.getByRole("button", { name: "Save changes" }));
   await expect(page.getByRole("main").getByRole("alert")).toHaveText("A product needs a name in English or Bangla.");
@@ -132,14 +132,14 @@ test("search by English name, Bangla name, slug and SKU, filter by status, and k
 
   await page.getByRole("navigation", { name: "Admin" }).getByRole("link", { name: "Products" }).click();
   const search = page.getByRole("search", { name: "Search products" });
-  const results = page.getByRole("list", { name: "Products" });
+  const results = page.getByRole("table", { name: "Products" });
   for (const term of [`muslin wrap ${tag}`, `মসলিন মোড়ক ${tag}`, one.slug.toUpperCase(), one.sku.toLowerCase()]) {
     await search.getByLabel("Search").fill(term);
     await search.getByRole("button", { name: "Search" }).click();
-    await expect(results.getByRole("listitem")).toHaveCount(1);
+    await expect(results.locator("tbody tr")).toHaveCount(1);
     await expect(results).toContainText(`Muslin Wrap ${tag}`);
   }
-  expect(new URL(page.url()).searchParams.get("q")).toBe(one.sku.toLowerCase());
+  await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(one.sku.toLowerCase());
 
   await search.getByLabel("Search").fill(tag);
   await search.getByLabel("Status").selectOption("archived");
@@ -147,11 +147,11 @@ test("search by English name, Bangla name, slug and SKU, filter by status, and k
   await expect(page.getByRole("main").getByRole("status")).toContainText("No products match");
   await search.getByLabel("Status").selectOption("draft");
   await search.getByRole("button", { name: "Search" }).click();
-  await expect(results.getByRole("listitem")).toHaveCount(2);
+  await expect(results.locator("tbody tr")).toHaveCount(2);
   await page.reload();
   await expect(search.getByLabel("Search")).toHaveValue(tag);
   await expect(search.getByLabel("Status")).toHaveValue("draft");
-  await expect(results.getByRole("listitem")).toHaveCount(2);
+  await expect(results.locator("tbody tr")).toHaveCount(2);
 
   for (const term of ["%", "' or 1=1 --", `no-such-product-${tag}`]) {
     await search.getByLabel("Search").fill(term);
@@ -178,13 +178,44 @@ test("search results page through with Next and First links, keeping the search"
     await db.end();
   }
   await page.goto(`/admin?q=${encodeURIComponent(`paged bib ${tag}`)}`);
-  const results = page.getByRole("list", { name: "Products" });
-  await expect(results.getByRole("listitem")).toHaveCount(25);
-  await expect(results.getByRole("listitem").first()).toContainText(`Paged Bib ${tag} 1`);
+  const results = page.getByRole("table", { name: "Products" });
+  await expect(results.locator("tbody tr")).toHaveCount(25);
+  await expect(results.locator("tbody tr").first()).toContainText(`Paged Bib ${tag} 1`);
   await page.getByRole("navigation", { name: "Pages" }).getByRole("link", { name: "Next page" }).click();
-  await expect(results.getByRole("listitem")).toHaveCount(2);
-  await expect(results.getByRole("listitem").last()).toContainText(`Paged Bib ${tag} 27`);
+  await expect(results.locator("tbody tr")).toHaveCount(2);
+  await expect(results.locator("tbody tr").last()).toContainText(`Paged Bib ${tag} 27`);
   expect(new URL(page.url()).searchParams.get("q")).toBe(`paged bib ${tag}`);
   await page.getByRole("link", { name: "First page" }).click();
-  await expect(results.getByRole("listitem")).toHaveCount(25);
+  await expect(results.locator("tbody tr")).toHaveCount(25);
+});
+
+test("the product list filters as you type and sets a category on several drafts at once", async ({ page }) => {
+  const tag = uniqueName("bulk").slug.slice(5);
+  const names = [`Bulk Bib ${tag} A`, `Bulk Bib ${tag} B`];
+  for (const name of names) await createProductWithVariant(page, "e2e-bulk", { en: name, bn: `ব্যাচ ${name}` });
+  const db = await testDatabase();
+  try {
+    await db.query("insert into product_categories (slug, name_en) values ($1, 'Bulk bibs')", [`bulk-${tag}`]);
+  } finally {
+    await db.end();
+  }
+  await page.goto("/admin");
+  await page.getByLabel("Search", { exact: true }).fill(`bulk bib ${tag}`);
+  await expect(page).toHaveURL(new RegExp(`q=bulk[+]bib[+]${tag}`));
+  const rows = page.getByRole("table", { name: "Products" }).locator("tbody tr");
+  await expect(rows).toHaveCount(2);
+  await page.getByLabel("Select every draft product on this page").check();
+  await page.getByLabel("Category", { exact: true }).last().selectOption({ label: "Bulk bibs" });
+  await page.getByRole("button", { name: "Apply category to 2" }).click();
+  await expect(page.getByRole("region", { name: "Bulk result" })).toContainText("All 2 products updated.");
+  await expect(rows.first()).toContainText("Bulk bibs");
+  await page.getByLabel("Select every draft product on this page").check();
+  // Archiving asks first: declining changes nothing, accepting archives both.
+  page.once("dialog", (dialog) => void dialog.dismiss());
+  await page.getByRole("button", { name: "Archive 2" }).click();
+  await expect(rows.first()).toContainText("Draft");
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "Archive 2" }).click();
+  await expect(rows.first()).toContainText("Archived");
+  await expect(rows.first()).toContainText("Not for sale");
 });

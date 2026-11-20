@@ -1,6 +1,11 @@
 "use server";
 
+import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { readAuthSettings } from "@/modules/auth/settings";
+import { bulkTransition, type BulkResult, isBulkAction } from "@/modules/orders/bulk";
+import { classifyOrderSearch, isOrderQueue, MAX_ORDER_SEARCH } from "@/modules/orders/queries";
 import { getDb } from "@/db/client";
 import { getAuth } from "@/modules/auth/server";
 import { DomainError } from "@/modules/domain-error";
@@ -27,6 +32,7 @@ import {
 import { DELIVERY_ZONES, type DeliveryZone, MAX_ORDER_LINES } from "@/modules/orders/rules";
 import { formError, type FormState, optional, taka, text, wholeNumber } from "../_lib/form";
 import { requireAdmin } from "../_lib/session";
+import { SEARCH_COOKIE, SEARCH_TTL_SECONDS, sealSearch } from "./_lib/search-cookie";
 
 // Admin order actions. Same rules as ../actions.ts: each verifies the session cookie and permission
 // itself, reads only its own fields, calls the shared idempotent operation directly (never /api/v1), and
@@ -92,8 +98,73 @@ export async function orderTransitionAction(_: FormState, form: FormData): Promi
   } catch (error) {
     return formError(error, form);
   }
+  // A quick action from the order list returns to the list (its filters are in `list`, a path built by the list itself).
+  const list = text(form, "returnTo");
+  if (/^\/admin\/orders(\?[A-Za-z0-9=&_%.-]*)?$/.test(list)) redirect(`${list}${list.includes("?") ? "&" : "?"}done=${action}`);
   back(ref.orderId, action);
   return {};
+}
+
+const authSecret = () => readAuthSettings(process.env).secret;
+
+/**
+ * Applies the list's filters. An order number goes in the URL (it is not personal data); a name or phone number is sealed
+ * into the search cookie (_lib/search-cookie.ts) and the URL only says `search=1`. The queue and status chosen on the page are kept.
+ */
+export async function searchOrdersAction(form: FormData): Promise<void> {
+  const principal = await requireAdmin("orders:read");
+  const term = text(form, "q").trim();
+  const status = text(form, "status");
+  const queue = text(form, "queue");
+  const params = new URLSearchParams();
+  if (/^[a-z_]{1,40}$/.test(status)) params.set("status", status);
+  if (isOrderQueue(queue)) params.set("queue", queue);
+  if (text(form, "attention") === "true") params.set("attention", "true");
+  const search = classifyOrderSearch(term);
+  const store = await cookies();
+  const base = { name: SEARCH_COOKIE, path: "/admin/orders" };
+  if (search?.kind === "number") {
+    store.delete(base);
+    params.set("number", String(search.number));
+  } else if (term) {
+    store.set(SEARCH_COOKIE, sealSearch(term.slice(0, MAX_ORDER_SEARCH), principal.userId, authSecret()), {
+      httpOnly: true,
+      sameSite: "strict",
+      path: "/admin/orders",
+      maxAge: SEARCH_TTL_SECONDS,
+      secure: process.env.NODE_ENV === "production",
+    });
+    params.set("search", "1");
+  } else {
+    store.delete(base);
+  }
+  redirect(params.size ? `/admin/orders?${params}` : "/admin/orders");
+}
+
+export async function clearOrderSearchAction(): Promise<void> {
+  await requireAdmin("orders:read");
+  (await cookies()).delete({ name: SEARCH_COOKIE, path: "/admin/orders" });
+  redirect("/admin/orders");
+}
+
+export type BulkState = { results?: BulkResult[]; error?: string };
+
+/** Packs, dispatches or marks delivered the selected orders, each by itself (bulk.ts), and answers with one result per order. */
+export async function bulkOrdersAction(_: BulkState, form: FormData): Promise<BulkState> {
+  const principal = await requireAdmin("orders:write");
+  try {
+    const action = text(form, "bulkAction");
+    if (!isBulkAction(action)) throw new DomainError("INVALID_INPUT", "Choose a step for the selected orders.");
+    const items = form.getAll("order").map((entry) => {
+      const [orderId, version] = String(entry).split(":");
+      return { orderId, expectedVersion: wholeNumber(version ?? "", "Version") };
+    });
+    const results = await bulkTransition(getDb(), principal, text(form, "batch"), action, items);
+    revalidatePath("/admin/orders");
+    return { results };
+  } catch (error) {
+    return { error: formError(error, form).error };
+  }
 }
 
 export async function reviewCancellationAction(_: FormState, form: FormData): Promise<FormState> {

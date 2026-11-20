@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   type Db,
   PG_CHECK_VIOLATION,
@@ -13,7 +13,7 @@ import { DomainError } from "../domain-error";
 import { contentText, type Measurement, MEASUREMENT_POINTS, validateMeasurements } from "./content";
 import { MET } from "./preparation";
 import type { PreparationItem } from "./readiness";
-import { normalizeSearch, normalizeSku, optionalText, validateId, validatePricePaisa, validateSlug, validateVersion } from "./rules";
+import { normalizeSearch, normalizeSku, slugify, optionalText, validateId, validatePricePaisa, validateSlug, validateVersion } from "./rules";
 
 export type Product = typeof products.$inferSelect;
 export type Variant = typeof variants.$inferSelect;
@@ -37,6 +37,21 @@ export type NewVariant = {
   colour?: string | null;
   pricePaisa: number;
 };
+
+/**
+ * A free web address for a new product named `name`: the name's stem, else the stem with -2, -3 … after it. A suggestion
+ * only: the unique index still decides at creation, and the Owner may edit it.
+ */
+export async function suggestUniqueSlug(db: Db, name: string): Promise<string> {
+  const base = slugify(name);
+  // The stem has only a-z, 0-9 and hyphens, so nothing in it needs LIKE escaping.
+  const pattern = `${base}-%`;
+  const rows = await db.select({ slug: products.slug }).from(products).where(sql`${products.slug} = ${base} or ${products.slug} like ${pattern}`).limit(500);
+  const taken = new Set(rows.map((r) => r.slug));
+  if (!taken.has(base)) return base;
+  for (let n = 2; n <= 500; n += 1) if (!taken.has(`${base}-${n}`)) return `${base}-${n}`;
+  return `${base}-${Date.now().toString(36)}`;
+}
 
 /** Creates a draft product. Drafts may be incomplete but need a name in at least one language. */
 export async function createProduct(db: Db, input: NewProduct): Promise<Product> {
@@ -401,6 +416,50 @@ export async function listProducts(
     items: rows.slice(0, limit).map((r) => ({ ...r.product, key: { createdAt: r.key, id: r.product.id } })),
     hasMore: rows.length > limit,
   };
+}
+
+/** What the Admin product list shows beside each product: active-variant prices and stock, the first photo, the category. */
+export type ProductListSummary = {
+  activeVariants: number;
+  minPricePaisa: number | null;
+  maxPricePaisa: number | null;
+  /** Units available to sell: on hand minus reserved, active variants only. */
+  availableUnits: number;
+  /** Units physically held, every variant of the product (an archived product's stock is still in the room). */
+  onHandUnits: number;
+  firstMediaId: string | null;
+  categoryName: string | null;
+};
+
+/**
+ * The list summary of these products (one page of the list), in one query whatever their number. Stock counts only
+ * active variants; available is on hand minus reserved, never below zero per variant.
+ */
+export async function productListSummaries(db: Db, productIds: string[]): Promise<Map<string, ProductListSummary>> {
+  if (productIds.length === 0) return new Map();
+  const ids = productIds.map((id) => validateId(id, "productId"));
+  // Spelled out: in a single-table select drizzle writes a bare "id", which a subquery would bind to its own table.
+  const outerId = sql.raw(`"products"."id"`);
+  const outerCategory = sql.raw(`"products"."category_id"`);
+  const rows = await db
+    .select({
+      id: products.id,
+      activeVariants: sql<number>`(select count(*) from ${variants} v where v.product_id = ${outerId} and v.status = 'active')`.mapWith(Number),
+      minPricePaisa: sql<number | null>`(select min(v.price_paisa) from ${variants} v where v.product_id = ${outerId} and v.status = 'active')`,
+      maxPricePaisa: sql<number | null>`(select max(v.price_paisa) from ${variants} v where v.product_id = ${outerId} and v.status = 'active')`,
+      availableUnits: sql<number>`(select coalesce(sum(greatest(b.on_hand - b.reserved, 0)), 0) from ${variants} v join ${inventoryBalances} b on b.variant_id = v.id where v.product_id = ${outerId} and v.status = 'active')`.mapWith(Number),
+      onHandUnits: sql<number>`(select coalesce(sum(b.on_hand), 0) from ${variants} v join ${inventoryBalances} b on b.variant_id = v.id where v.product_id = ${outerId})`.mapWith(Number),
+      firstMediaId: sql<string | null>`(select m.id from ${productMedia} m where m.product_id = ${outerId} order by m.position, m.created_at limit 1)`,
+      categoryName: sql<string | null>`(select coalesce(c.name_en, c.name_bn, c.slug) from ${productCategories} c where c.id = ${outerCategory})`,
+    })
+    .from(products)
+    .where(inArray(products.id, ids));
+  return new Map(
+    rows.map(({ id, minPricePaisa, maxPricePaisa, ...rest }) => [
+      id,
+      { ...rest, minPricePaisa: minPricePaisa === null ? null : Number(minPricePaisa), maxPricePaisa: maxPricePaisa === null ? null : Number(maxPricePaisa) },
+    ]),
+  );
 }
 
 export async function getVariant(db: Db, variantId: string): Promise<Variant> {

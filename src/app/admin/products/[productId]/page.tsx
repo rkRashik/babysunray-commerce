@@ -9,13 +9,13 @@ import { reviewHistory, reviewStates } from "@/modules/catalogue/review";
 import { getProductWithVariants } from "@/modules/catalogue/service";
 import { DomainError } from "@/modules/domain-error";
 import { getStockLevel } from "@/modules/inventory/service";
-import { formatPaisa } from "@/modules/money";
 import { archiveProductAction, createVariantAction, deactivateVariantAction, publishProductAction, reviewProductAction, withdrawProductAction } from "../../actions";
 import { ActionForm, Field } from "../../_components/action-form";
 import { Bilingual, ReadinessList } from "../../_components/content";
 import { MEASUREMENT_LABELS } from "../../_lib/labels";
 import { AdminShell, Section, formatTime, noticeFor, productTitle } from "../../_components/shell";
 import { requireAdmin } from "../../_lib/session";
+import { bdt } from "../../orders/_components/labels";
 
 export const metadata = { title: "Product · Admin" };
 
@@ -25,7 +25,7 @@ const BUTTON_LINK = "of-btn of-btn-line min-h-10 px-3.5 text-sm";
 
 /** Why a product cannot be published, in the Owner's words (codes from publicationBlockers). */
 function blockerText(code: string): string {
-  if (code === "no_approved_rule") return "No publication rule applies on this database: the founder has not approved one (I-6), and this is not the staging acceptance database.";
+  if (code === "no_approved_rule") return "Publishing is off until you approve your publication requirements (Settings, Publication requirements).";
   if (code === "not_draft") return "Only a draft can be published.";
   if (code === "review_not_current") return "Mark the current content as reviewed first (above).";
   const item = READINESS_ITEMS.find((i) => `item:${i.id}` === code);
@@ -51,12 +51,29 @@ export default async function ProductPage({ params, searchParams }: Props) {
   const { title, lang } = productTitle(product);
 
   return (
-    <AdminShell title={title} titleLang={lang} notice={noticeFor(done)} breadcrumbs={[{ href: "/admin", label: "Products" }]}>
+    <AdminShell
+      title={title}
+      titleLang={lang}
+      notice={noticeFor(done)}
+      breadcrumbs={[{ href: "/admin", label: "Products" }]}
+      actions={
+        <>
+          <Link href={`/admin/storefront-preview/en/products/${product.slug}`} className="of-btn of-btn-line">
+            View in storefront preview
+          </Link>
+          {draft ? (
+            <Link href={`/admin/products/${product.id}/edit`} className="of-btn of-btn-primary">
+              Edit details
+            </Link>
+          ) : null}
+        </>
+      }
+    >
       <Section title="Details">
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-[10rem_1fr]">
           <dt className="text-gray-600">Status</dt>
           <dd>{draft ? "draft (not shown to customers)" : `${product.status} (cannot be edited)`}</dd>
-          <dt className="text-gray-600">Slug</dt>
+          <dt className="text-gray-600">Web address</dt>
           <dd className="break-all">{product.slug}</dd>
           <Bilingual label="Name" en={product.nameEn} bn={product.nameBn} />
           <Bilingual label="Description" en={product.descriptionEn} bn={product.descriptionBn} />
@@ -74,20 +91,10 @@ export default async function ProductPage({ params, searchParams }: Props) {
           <dt className="text-gray-600">Last changed</dt>
           <dd>{formatTime(product.updatedAt)}</dd>
         </dl>
-        <div className="flex flex-wrap gap-2">
-          {draft ? (
-            <Link href={`/admin/products/${product.id}/edit`} className={BUTTON_LINK}>
-              Edit details
-            </Link>
-          ) : null}
-          <Link href={`/admin/storefront-preview/en/products/${product.slug}`} className={BUTTON_LINK}>
-            View in storefront preview
-          </Link>
-        </div>
       </Section>
 
       <Section title="Publishing readiness">
-        <ReadinessList items={evaluateReadiness(product)} />
+        <ReadinessList items={evaluateReadiness(product)} rule={rule} />
       </Section>
 
       <Section title="Internal review">
@@ -128,10 +135,10 @@ export default async function ProductPage({ params, searchParams }: Props) {
         </p>
         <p className="text-xs text-gray-600" data-testid="publication-rule">
           {rule === null
-            ? "No publication rule is approved (requirement I-6), so nothing can be published on this database."
+            ? "Publishing is off until you approve your publication requirements (Settings, Publication requirements)."
             : rule.id === "i6-proposed-acceptance"
-              ? "Founder acceptance (staging database): the PROPOSED rule applies (every readiness item above and a current review). It is not approved for the public shop; each publication records it."
-              : `Approved rule: ${rule.id}.`}
+              ? "Test shop (staging database): a trial set of requirements applies (every checklist item above and a current review). It is not your approved set; each publication records it."
+              : "Your approved publication requirements apply."}
         </p>
         {draft && publication.blockers.length ? (
           <ul className="list-disc space-y-1 pl-5 text-sm" data-testid="publication-blockers">
@@ -260,7 +267,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
                     </th>
                     <td className="py-2 pr-3">{v.size ?? "—"}</td>
                     <td className="py-2 pr-3">{v.colour ?? "—"}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">৳ {formatPaisa(v.pricePaisa)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{bdt(v.pricePaisa)}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{stock[i].onHand}</td>
                     <td className="py-2 pr-3">{v.status}</td>
                     <td className="py-2">

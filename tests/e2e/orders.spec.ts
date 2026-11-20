@@ -67,7 +67,7 @@ test("delivery charges, an assisted order, reservation, verification, packing, d
   const orderUrl = await createOrder(page, sku, 2);
   await expect(dimension(page, "order")).toHaveText("Pending verification");
   await expect(page.getByTestId("verification")).toContainText("Verify with the customer by");
-  await expect(page.getByRole("region", { name: "Items" })).toContainText("৳ 1060.00");
+  await expect(page.getByRole("region", { name: "Items" })).toContainText("৳ 1,060");
   expect(await stock(page, sku)).toEqual({ onHand: "5", reservation: "Reserved for orders: 2 · Available for new orders: 3" });
 
   await page.goto(orderUrl);
@@ -93,7 +93,7 @@ test("delivery charges, an assisted order, reservation, verification, packing, d
   await cod.getByLabel("Settled to me").check();
   await cod.getByLabel("Amount (BDT)").fill("1000");
   await save(page, () => cod.getByRole("button", { name: "Record amount" }).click());
-  await expect(page.getByTestId("cod")).toContainText("৳ 60.00");
+  await expect(page.getByTestId("cod")).toContainText("৳ 60");
   await cod.getByLabel("Settled to me").check();
   await cod.getByLabel("Amount (BDT)").fill("60");
   await save(page, () => cod.getByRole("button", { name: "Record amount" }).click());
@@ -127,7 +127,7 @@ test("an order past its 24-hour deadline shows for review and is confirmed only 
     await db.end();
   }
   await page.goto("/admin/orders?attention=true");
-  await expect(page.getByRole("list", { name: "Orders" })).toContainText("Verification deadline passed");
+  await expect(page.getByRole("table", { name: "Orders" })).toContainText("Overdue by");
   await page.goto(orderUrl);
   await expect(page.getByTestId("verification")).toContainText("Verification expired — Owner review");
   // A second order releases the overdue hold first, then takes the unit.
@@ -298,11 +298,93 @@ test("RTO: the returned parcel goes to inspection, and only a passed inspection 
   const cod = page.getByRole("region", { name: "Cash on delivery" });
   await cod.getByLabel("RTO charge billed by the courier (BDT)").fill("50");
   await save(page, () => cod.getByRole("button", { name: "Save RTO charge" }).click());
-  await expect(page.getByTestId("cod")).toContainText("৳ 50.00");
+  await expect(page.getByTestId("cod")).toContainText("৳ 50");
   const inspection = page.getByRole("region", { name: "Inspection (quarantine)" });
   await inspection.getByLabel("Inspection note").fill("Sealed, tags on");
   await inspection.getByRole("button", { name: "Passed: back to stock" }).click();
   await expect(page.getByTestId("inspection-status")).toHaveText("restocked");
   expect(await stock(page, sku)).toMatchObject({ onHand: "2" });
   await expect(page.getByRole("table")).toContainText("return_restock");
+});
+
+test("the order list finds an order by phone or name without putting either in the URL, and packs it from the row", async ({ page }) => {
+  const sku = await seedSku(2);
+  const orderUrl = await createOrder(page, sku, 1);
+  const orderId = orderUrl.split("/").at(-1)!;
+  const requests: string[] = [];
+  page.on("request", (r) => requests.push(r.url()));
+  await page.goto("/admin/orders");
+  const search = page.getByRole("search", { name: "Find orders" });
+  await search.getByLabel("Search orders").fill("01711 000005");
+  await search.getByRole("button", { name: "Search" }).click();
+  await expect(page).toHaveURL(/\/admin\/orders\?search=1$/);
+  const table = page.getByRole("table", { name: "Orders" });
+  await expect(table.locator(`[data-order="${orderId}"]`)).toBeVisible();
+  await search.getByLabel("Search orders").fill("test custom");
+  await search.getByRole("button", { name: "Search" }).click();
+  await expect(table.locator(`[data-order="${orderId}"]`)).toBeVisible();
+  // Neither the phone number nor the name ever appeared in a requested URL.
+  expect(requests.filter((u) => /01711000005|1711-000005|01711%20000005|test(%20|\+)custom/i.test(u))).toEqual([]);
+  await page.getByRole("button", { name: "Clear search" }).click();
+  await expect(page).toHaveURL(/\/admin\/orders$/);
+  await expect(page.getByLabel("Search orders")).toHaveValue("");
+
+  await page.goto(orderUrl);
+  await step(page, "Confirm order (verified with the customer)");
+  await page.goto("/admin/orders?queue=to_pack");
+  await table.locator(`[data-order="${orderId}"]`).getByRole("button", { name: "Mark packed" }).click();
+  await expect(page).toHaveURL(/\/admin\/orders\?queue=to_pack&done=pack$/);
+  await expect(page.getByRole("status").first()).toHaveText("Order packed.");
+  await expect(table.locator(`[data-order="${orderId}"]`)).toHaveCount(0);
+  await page.goto(orderUrl);
+  await expect(dimension(page, "fulfilment")).toHaveText("Packed");
+  await expectNoAxe(page, "/admin/orders");
+});
+
+async function expectNoAxe(page: Page, path: string) {
+  await page.goto(path);
+  const results = await new AxeBuilder({ page }).include("main").analyze();
+  expect(results.violations.map((v) => v.id)).toEqual([]);
+}
+
+test("the order list packs several orders at once, confirms an overdue order with its warning, and filters as you type", async ({ page }) => {
+  const sku = await seedSku(6);
+  const urls = [await createOrder(page, sku, 1), await createOrder(page, sku, 1), await createOrder(page, sku, 1)];
+  const ids = urls.map((u) => u.split("/").at(-1)!);
+  // The third order passed its 24-hour deadline: it can still be verified, with a clear warning.
+  const db = await testDatabase();
+  try {
+    await db.query("update orders set verification_expires_at = now() - interval '2 hours' where id = $1", [ids[2]]);
+  } finally {
+    await db.end();
+  }
+  const table = page.getByRole("table", { name: "Orders" });
+  await page.goto("/admin/orders?attention=true");
+  await expect(table.locator(`[data-order="${ids[2]}"]`)).toContainText("Overdue by");
+  await table.locator(`[data-order="${ids[2]}"]`).getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByRole("status").first()).toHaveText("Order confirmed.");
+  await page.goto(urls[2]);
+  await expect(dimension(page, "order")).toHaveText("Confirmed");
+
+  for (const url of urls.slice(0, 2)) {
+    await page.goto(url);
+    await step(page, "Confirm order (verified with the customer)");
+  }
+  await page.goto("/admin/orders?queue=to_pack");
+  for (const id of ids) await table.locator(`[data-order="${id}"] input.of-check`).check();
+  await page.getByRole("button", { name: "Mark 3 packed" }).click();
+  await expect(page.getByRole("region", { name: "Bulk result" })).toContainText("All 3 orders updated.");
+  for (const url of urls) {
+    await page.goto(url);
+    await expect(dimension(page, "fulfilment")).toHaveText("Packed");
+  }
+
+  // Filters apply as they change; nothing personal reaches the address.
+  await page.goto("/admin/orders");
+  await page.getByLabel("Order status").selectOption("confirmed");
+  await expect(page).toHaveURL(/\/admin\/orders\?status=confirmed$/);
+  await page.getByLabel("Search orders").fill("test custom");
+  await expect(page).toHaveURL(/\/admin\/orders\?status=confirmed&search=1$/);
+  await expect(table.locator(`[data-order="${ids[0]}"]`)).toBeVisible();
+  await expect(page.getByLabel("Search orders")).toHaveValue("test custom");
 });

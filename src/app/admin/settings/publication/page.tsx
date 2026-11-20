@@ -22,10 +22,10 @@ export default async function PublicationSettingsPage({ searchParams }: { search
       <p className="text-sm text-gray-700" data-testid="rule-state">
         {settings?.publicationRuleApprovedAt
           ? `Approved on ${formatTime(settings.publicationRuleApprovedAt)}. Products must meet the ticked items and have a current review to be published.`
-          : "Not approved yet. Until you approve requirements, products cannot be published (except in founder acceptance on the staging database)."}
+          : "Not approved yet. Until you approve requirements, products cannot be published (except in the test shop on the staging database)."}
       </p>
       {!schemaReady ? <p role="alert">This database needs its latest update (migration 0021) first.</p> : null}
-      <Section title="What every product needs before customers can see it · প্রকাশের শর্ত">
+      <Section title="What every product needs before customers can see it">
         <ActionForm action={approvePublicationRuleAction} idempotencyKey={randomUUID()} hidden={{ version: String(settings?.version ?? 0) }} submitLabel="Approve these requirements">
           <fieldset className="space-y-2">
             <legend className="sr-only">Requirements</legend>

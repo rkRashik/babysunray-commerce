@@ -19,7 +19,8 @@ import {
   setDeliveryZoneOnce,
   submitOrderOnce,
 } from "../../src/modules/orders/operations";
-import { getOrderDetail, listOrders } from "../../src/modules/orders/queries";
+import { productListSummaries } from "../../src/modules/catalogue/service";
+import { classifyOrderSearch, getOrderDetail, listOrders } from "../../src/modules/orders/queries";
 import { dhakaToday } from "../../src/modules/orders/rules";
 import { getDashboard } from "../../src/modules/reports/dashboard";
 import { getPickingList } from "../../src/modules/reports/picking";
@@ -164,10 +165,61 @@ describe("dashboard", () => {
     expect(d.stock.zeroAvailable.items.some((i) => i.sku === s.sku) || d.stock.zeroAvailable.count > d.stock.zeroAvailable.items.length).toBe(true);
     expect(d.stock.low?.threshold).toBe(3);
     expect(d.unconfiguredZones).toEqual([]);
+    // The previews (one UNION ALL) keep each queue's own oldest-first rows, typed as they are in the order list.
+    const preview = toPack?.oldest ?? [];
+    expect(preview.length).toBe(Math.min(10, toPack?.count ?? 0));
+    expect(preview.every((o) => o.createdAt instanceof Date && o.orderStatus === "confirmed" && o.fulfilmentStatus === "unfulfilled")).toBe(true);
+    expect(preview.map((o) => o.createdAt.getTime())).toEqual([...preview.map((o) => o.createdAt.getTime())].sort((a, b) => a - b));
+    for (const q of d.queues) if (q.count === 0) expect(q.oldest).toEqual([]);
+    expect(d.stock.zeroAvailable.count).toBe(
+      await count(pool, "select count(*) from variants v join products p on p.id = v.product_id join inventory_balances b on b.variant_id = v.id where v.status = 'active' and p.status <> 'archived' and b.on_hand - b.reserved <= 0"),
+    );
+    expect(d.returns.awaitingParcel).toBe(await count(pool, "select count(*) from returns where status = 'requested'"));
     const picking = await getPickingList(db);
     expect(picking.orders.some((o) => o.id === order.id)).toBe(true);
     expect(JSON.stringify(picking)).not.toContain(CUSTOMER.customerPhone);
     expect(JSON.stringify(picking)).not.toContain(CUSTOMER.deliveryAddress);
+  });
+});
+
+describe("order search", () => {
+  it("finds an order by its number, its customer's normalized phone or part of the name, newest first and bounded", async () => {
+    const s = await newSku(3);
+    const tag = randomUUID().slice(0, 8);
+    const phone = `017${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`;
+    const place = (name: string) => submitOrderOnce(db, owner, key(), { source: "whatsapp", ...CUSTOMER, customerName: name, customerPhone: phone, items: [{ sku: s.sku, quantity: 1 }] }).then((r) => r.value);
+    const first = await place(`Fictional Parent ${tag}`);
+    const second = await place(`Another Fictional ${tag}`);
+
+    const byPhone = await listOrders(db, { limit: 10, search: classifyOrderSearch(`+88 ${phone.slice(0, 5)}-${phone.slice(5)}`)! });
+    expect(byPhone.items.map((o) => o.id)).toEqual([second.id, first.id]);
+    const byName = await listOrders(db, { limit: 10, search: classifyOrderSearch(`parent ${tag}`)! });
+    expect(byName.items.map((o) => o.id)).toEqual([first.id]);
+    const byNumber = await listOrders(db, { limit: 10, search: classifyOrderSearch(`ORD-${second.number}`)! });
+    expect(byNumber.items.map((o) => o.id)).toEqual([second.id]);
+    // A LIKE wildcard in the term matches itself only.
+    expect((await listOrders(db, { limit: 10, search: classifyOrderSearch(`%${tag}`)! })).items).toEqual([]);
+    const paged = await listOrders(db, { limit: 1, search: classifyOrderSearch(phone)! });
+    expect(paged.hasMore).toBe(true);
+    const rest = await listOrders(db, { limit: 1, search: classifyOrderSearch(phone)!, after: paged.items[0].key });
+    expect(rest.items.map((o) => o.id)).toEqual([first.id]);
+    // openRequest is this order's own open cancellation request, not any order's.
+    await pool.query("insert into cancellation_requests (order_id, status) values ($1, 'open')", [first.id]);
+    const flagged = await listOrders(db, { limit: 10, search: classifyOrderSearch(phone)! });
+    expect(flagged.items.map((o) => [o.id, o.openRequest])).toEqual([
+      [second.id, false],
+      [first.id, true],
+    ]);
+  });
+});
+
+describe("product list summaries", () => {
+  it("summarises prices, available units and the first photo of active variants only, in one query", async () => {
+    const { product, variant } = await createTestVariant(db, "summary");
+    await receiveStock(db, { sku: variant.sku, quantity: 4, actor: TEST_ACTOR });
+    const summaries = await productListSummaries(db, [product.id]);
+    expect(summaries.get(product.id)).toMatchObject({ activeVariants: 1, minPricePaisa: variant.pricePaisa, maxPricePaisa: variant.pricePaisa, availableUnits: 4, firstMediaId: null });
+    expect((await productListSummaries(db, [])).size).toBe(0);
   });
 });
 

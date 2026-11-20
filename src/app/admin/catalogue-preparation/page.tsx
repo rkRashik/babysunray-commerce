@@ -1,60 +1,78 @@
 import Link from "next/link";
 import { getDb } from "@/db/client";
 import { preparationOverview } from "@/modules/catalogue/preparation";
-import { type ReadinessBasis, READINESS_ITEMS } from "@/modules/catalogue/readiness";
+import { publicationRuleFor } from "@/modules/catalogue/publication";
+import { READINESS_ITEMS } from "@/modules/catalogue/readiness";
+import { readinessGroups } from "../_components/content";
 import { AdminShell, Section } from "../_components/shell";
 import { requireAdmin } from "../_lib/session";
 
 export const metadata = { title: "Catalogue preparation · Admin" };
 
-const GROUPS: { basis: ReadinessBasis; title: string; note: string }[] = [
-  { basis: "approved", title: "Approved requirements", note: "Founder-stated or founder-approved (S-1, I-9, I-10)." },
-  { basis: "pending", title: "Publication proposals, not approved", note: "From the proposed rules I-6 and S-6, waiting for your decision. Meeting them does not make a product publishable." },
-  { basis: "recommended", title: "Optional suggestions", note: "Engineering and merchandising suggestions, never rules." },
-];
-
-// How many draft products still need each piece of content, from the database now. Advisory only: no product is
-// eligible for publication under any rule (none is approved) and there is no publish action.
+// How many draft products still need each piece of content, from the database now, grouped the way the product page
+// groups its checklist (what publishing needs under the rule in force, then optional improvements).
 export default async function PreparationPage() {
   const principal = await requireAdmin("catalog:read");
-  const { drafts, unmet } = await preparationOverview(getDb(), principal);
+  const db = getDb();
+  const [{ drafts, unmet }, rule] = await Promise.all([preparationOverview(db, principal), publicationRuleFor(db)]);
+  const groups = readinessGroups([...READINESS_ITEMS], rule);
+
   return (
     <AdminShell title="Catalogue preparation" current="preparation">
+      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="of-stat">
+          <dt>Draft products</dt>
+          <dd>{drafts}</dd>
+        </div>
+        <div className="of-stat">
+          <dt>Publication requirements</dt>
+          <dd>
+            {rule ? (
+              "In force"
+            ) : (
+              <Link href="/admin/settings/publication" className="underline">
+                Not chosen yet
+              </Link>
+            )}
+          </dd>
+        </div>
+      </dl>
       <p className="text-sm text-gray-700">
-        {drafts} draft product{drafts === 1 ? "" : "s"}. Each line counts the drafts that do not have that yet; the link lists them. This is a preparation aid only: nothing here publishes a
-        product, and the delivery and return policy text that every product page needs is not approved yet.
+        Each line counts the draft products that still need it; select a number to see them. Products are published one by one from their own page, after a review.
       </p>
-      {GROUPS.map((g) => (
-        <Section key={g.basis} title={g.title}>
+      {groups.filter((g) => g.items.length).map((g) => (
+        <Section key={g.key} title={g.title}>
           <p className="text-xs text-gray-600">{g.note}</p>
-          <table className="w-full text-left text-sm" data-testid={`preparation-${g.basis}`}>
-            <thead className="border-b border-gray-300 text-gray-600">
-              <tr>
-                <th scope="col" className="py-2 pr-3">Item</th>
-                <th scope="col" className="py-2 pr-3">Basis</th>
-                <th scope="col" className="py-2 text-right">Drafts without it</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {READINESS_ITEMS.filter((i) => i.basis === g.basis).map((i) => (
-                <tr key={i.id} data-testid={`preparation-${i.id}`}>
-                  <th scope="row" className="py-2 pr-3 font-normal">
-                    {i.label}
+          <div className="overflow-hidden rounded-xl border border-gray-200">
+            <table className="of-table" data-testid={`preparation-${g.key}`}>
+              <thead>
+                <tr>
+                  <th scope="col">What the product needs</th>
+                  <th scope="col" className="num">
+                    Drafts without it
                   </th>
-                  <td className="py-2 pr-3 text-xs text-gray-600">{i.source}</td>
-                  <td className="py-2 text-right tabular-nums">
-                    {unmet[i.id] === 0 ? (
-                      "0"
-                    ) : (
-                      <Link href={`/admin?status=draft&missing=${i.id}`} className="underline">
-                        {unmet[i.id]}
-                      </Link>
-                    )}
-                  </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {g.items.map((i) => (
+                  <tr key={i.id} data-testid={`preparation-${i.id}`}>
+                    <th scope="row" className="font-normal">
+                      {i.label}
+                    </th>
+                    <td className="num">
+                      {unmet[i.id] === 0 ? (
+                        <span className="text-gray-500">0</span>
+                      ) : (
+                        <Link href={`/admin?status=draft&missing=${i.id}`} className="font-semibold underline" aria-label={`${unmet[i.id]} drafts without: ${i.label}`}>
+                          {unmet[i.id]}
+                        </Link>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Section>
       ))}
     </AdminShell>

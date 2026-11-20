@@ -29,9 +29,11 @@ type Props = {
   variant?: "primary" | "secondary";
   /** Asked before an irreversible-looking action (archive, deactivate); Cancel sends nothing. */
   confirm?: string;
+  /** A small inline button, for a quick action in a table row. */
+  compact?: boolean;
 };
 
-export function ActionForm({ action, idempotencyKey, hidden = {}, submitLabel, children, variant = "primary", confirm }: Props) {
+export function ActionForm({ action, idempotencyKey, hidden = {}, submitLabel, children, variant = "primary", confirm, compact = false }: Props) {
   const [state, formAction] = useActionState(async (previous: FormState, form: FormData): Promise<FormState> => {
     try {
       return await action(previous, form);
@@ -47,7 +49,7 @@ export function ActionForm({ action, idempotencyKey, hidden = {}, submitLabel, c
   return (
     <form
       action={formAction}
-      className="space-y-3"
+      className={compact ? "flex flex-col items-end gap-1.5" : "space-y-3"}
       aria-describedby={state.error ? errorId : undefined}
       onSubmit={(event) => {
         if (confirm && !window.confirm(confirm)) event.preventDefault();
@@ -61,12 +63,12 @@ export function ActionForm({ action, idempotencyKey, hidden = {}, submitLabel, c
         <Fields>{children}</Fields>
       </Values.Provider>
       {state.error ? (
-        <p id={errorId} role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+        <p id={errorId} role="alert" className={compact ? "max-w-56 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-800" : "rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800"}>
           {state.error}
         </p>
       ) : null}
       {state.link ? <OneTimeLink link={state.link} /> : null}
-      <Submit label={submitLabel} variant={variant} />
+      <Submit label={submitLabel} variant={variant} compact={compact} />
     </form>
   );
 }
@@ -82,10 +84,10 @@ function Fields({ children }: { children?: React.ReactNode }) {
   );
 }
 
-function Submit({ label, variant }: { label: string; variant: "primary" | "secondary" }) {
+function Submit({ label, variant, compact }: { label: string; variant: "primary" | "secondary"; compact: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} aria-disabled={pending} className={`of-btn ${variant === "primary" ? "of-btn-primary" : "of-btn-line"}`}>
+    <button type="submit" disabled={pending} aria-disabled={pending} className={`of-btn ${variant === "primary" ? "of-btn-primary" : "of-btn-line"}${compact ? " of-btn-sm" : ""}`}>
       {pending ? "Saving…" : label}
     </button>
   );

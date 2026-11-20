@@ -54,10 +54,13 @@ describe("publication rules", () => {
     const reachable = [...files("src/app"), ...files("src/api")].filter((f) => /\.(ts|tsx)$/.test(f));
     expect(reachable.length).toBeGreaterThan(50);
     const offenders = reachable.filter((f) => /from "[^"]*catalogue\/publication"/.test(readFileSync(path.join(ROOT, f), "utf8")));
-    expect(offenders.sort()).toEqual(["src/app/admin/actions.ts", "src/app/admin/products/[productId]/page.tsx"]);
+    // The product list and the preparation overview read which rule applies (publicationRuleFor) and nothing else.
+    const readOnly = ["src/app/admin/catalogue-preparation/page.tsx", "src/app/admin/page.tsx"];
+    for (const f of readOnly) expect(readFileSync(path.join(ROOT, f), "utf8")).toMatch(/import \{ publicationRuleFor \} from "@\/modules\/catalogue\/publication";/);
+    expect(offenders.sort()).toEqual(["src/app/admin/actions.ts", ...readOnly, "src/app/admin/products/[productId]/page.tsx"].sort());
     const actions = readFileSync(path.join(ROOT, "src/app/admin/actions.ts"), "utf8");
     expect(actions).toMatch(/requireAdmin\("catalog:publish"\)[\s\S]*publishProductOnce/);
     const importers = files("src").filter((f) => f !== "src/modules/catalogue/publication.ts" && /from "[^"]*catalogue\/publication"/.test(readFileSync(path.join(ROOT, f), "utf8")));
-    expect(importers.sort()).toEqual(["src/app/admin/actions.ts", "src/app/admin/products/[productId]/page.tsx", "src/modules/launch/readiness.ts"]);
+    expect(importers.sort()).toEqual(["src/app/admin/actions.ts", ...readOnly, "src/app/admin/products/[productId]/page.tsx", "src/modules/launch/readiness.ts"].sort());
   });
 });

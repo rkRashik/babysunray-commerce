@@ -12,6 +12,7 @@ import {
   updateVariantOnce,
 } from "@/modules/catalogue/operations";
 import { publishProductOnce, withdrawProductOnce } from "@/modules/catalogue/publication";
+import { suggestUniqueSlug } from "@/modules/catalogue/service";
 import { DomainError } from "@/modules/domain-error";
 import { adjustStockOnce, receiveStockOnce } from "@/modules/inventory/operations";
 import { parseTakaToPaisa } from "@/modules/money";
@@ -32,10 +33,14 @@ export async function createProductAction(_: FormState, form: FormData): Promise
   const principal = await requireAdmin("catalog:write");
   let productId: string;
   try {
+    const nameEn = optional(form, "nameEn");
+    const nameBn = optional(form, "nameBn");
+    // The web address is optional on the form: left empty, it is made from the name and made unique.
+    const slug = text(form, "slug").trim() || (await suggestUniqueSlug(getDb(), nameEn ?? nameBn ?? ""));
     const { value } = await createProductOnce(getDb(), principal, text(form, "idempotencyKey"), {
-      slug: text(form, "slug"),
-      nameEn: optional(form, "nameEn"),
-      nameBn: optional(form, "nameBn"),
+      slug,
+      nameEn,
+      nameBn,
       descriptionEn: optional(form, "descriptionEn"),
       descriptionBn: optional(form, "descriptionBn"),
     });
@@ -44,6 +49,12 @@ export async function createProductAction(_: FormState, form: FormData): Promise
     return formError(error, form);
   }
   redirect(`/admin/products/${productId}?done=created`);
+}
+
+/** A free web address for a product of this name, for the new-product form to suggest (read-only). */
+export async function suggestSlugAction(name: string): Promise<string> {
+  await requireAdmin("catalog:write");
+  return suggestUniqueSlug(getDb(), String(name).slice(0, 200));
 }
 
 export async function createVariantAction(_: FormState, form: FormData): Promise<FormState> {

@@ -516,6 +516,8 @@ export const orders = pgTable(
   (t) => [
     index("orders_status_expiry_idx").on(t.orderStatus, t.verificationExpiresAt),
     index("orders_created_at_idx").on(t.createdAt, t.id),
+    // Admin order search by the normalized phone number, newest first (migration 0022).
+    index("orders_customer_phone_idx").on(t.customerPhone, t.createdAt, t.id),
     check("orders_source_valid", sql`${t.source} in ('website', 'messenger', 'whatsapp', 'other')`),
     check("orders_customer_name_valid", sql`btrim(${t.customerName}) <> '' and length(${t.customerName}) <= 100`),
     check("orders_customer_phone_format", sql`${t.customerPhone} ~ '^01[3-9][0-9]{8}$'`),

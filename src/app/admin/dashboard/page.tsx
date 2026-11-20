@@ -1,56 +1,157 @@
-import { Plus } from "lucide-react";
+import { ArrowRight, Plus } from "lucide-react";
 import Link from "next/link";
 import { getDb } from "@/db/client";
 import { storeSetupProgress } from "@/modules/settings/progress";
 import { DomainError } from "@/modules/domain-error";
 import { formatOrderNumber, ZONE_LABELS } from "@/modules/orders/rules";
-import { getDashboard, MAX_LOW_STOCK_THRESHOLD, parseLowStockThreshold, type StockRow } from "@/modules/reports/dashboard";
+import type { OrderQueue } from "@/modules/orders/queries";
+import { type Dashboard, getDashboard, MAX_LOW_STOCK_THRESHOLD, parseLowStockThreshold, type StockRow } from "@/modules/reports/dashboard";
+import { RefreshButton } from "../_components/refresh-button";
 import { AdminShell, Section, formatTime } from "../_components/shell";
 import { requireAdmin } from "../_lib/session";
 import { bdt, relative } from "../orders/_components/labels";
 
 export const metadata = { title: "Dashboard · Admin" };
 
-const FIELD = "of-input mt-1.5 w-32";
-// Queues where the Owner must act now (a call, a decision): drawn first, with an amber edge.
-const URGENT = new Set(["pending", "overdue", "cancellation_requests"]);
+// Queues where the Owner must act now (a call, a decision), in that order.
+const URGENT: OrderQueue[] = ["overdue", "cancellation_requests", "pending"];
+// The rest of the day's work, in the order it happens.
+const FLOW: OrderQueue[] = ["to_pack", "to_dispatch", "in_transit", "returning", "awaiting_collection", "unsettled"];
+const TITLES: Record<OrderQueue, string> = {
+  overdue: "Verification overdue",
+  cancellation_requests: "Cancellation requests",
+  pending: "To verify",
+  to_pack: "To pack",
+  to_dispatch: "To dispatch",
+  in_transit: "In transit",
+  returning: "Returning (RTO)",
+  awaiting_collection: "COD to collect",
+  unsettled: "Not settled by courier",
+};
 
-function StockTable({ rows, caption }: { rows: StockRow[]; caption: string }) {
+type Queue = Dashboard["queues"][number];
+
+function detail(queue: OrderQueue, o: Queue["oldest"][number], now: Date) {
+  if (queue === "pending" || queue === "overdue") return `deadline ${relative(o.verificationExpiresAt, now)}`;
+  if (queue === "awaiting_collection") return `${bdt(o.totalPaisa - o.codCollectedPaisa)} to collect`;
+  if (queue === "unsettled") return `${bdt(o.codCollectedPaisa - o.codSettledPaisa - o.codDeductedPaisa)} with courier`;
+  return o.createdAt.getTime() >= now.getTime() - 60_000 ? "placed just now" : `placed ${relative(o.createdAt, now)}`;
+}
+
+function QueueCard({ q, now, urgent }: { q: Queue; now: Date; urgent: boolean }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <caption className="sr-only">{caption}</caption>
-        <thead className="border-b border-gray-300 text-gray-600">
-          <tr>
-            <th scope="col" className="py-1 pr-3">SKU</th>
-            <th scope="col" className="py-1 pr-3">Product</th>
-            <th scope="col" className="py-1 pr-3 text-right">On hand</th>
-            <th scope="col" className="py-1 pr-3 text-right">Reserved</th>
-            <th scope="col" className="py-1 text-right">Available</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-200">
-          {rows.map((r) => (
-            <tr key={r.variantId}>
-              <td className="py-1 pr-3">
-                <Link href={`/admin/skus/${encodeURIComponent(r.sku)}`} className="inline-flex min-h-11 items-center underline underline-offset-4">
-                  {r.sku}
+    <li className={`flex flex-col rounded-2xl border bg-white p-4 ${urgent ? "border-amber-300 shadow-[inset_4px_0_0_var(--color-sf-sun)]" : "border-gray-200"}`} data-queue={q.queue}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">{TITLES[q.queue]}</h3>
+          <p className="text-xs text-gray-600">{q.label}</p>
+        </div>
+        <span className="text-[2rem] leading-none font-bold tabular-nums" data-testid={`count-${q.queue}`}>
+          {q.count}
+        </span>
+      </div>
+      <table className="mt-3 w-full border-t border-gray-200 text-sm">
+        <caption className="sr-only">Oldest orders: {q.label}</caption>
+        <tbody>
+          {q.oldest.slice(0, 5).map((o) => (
+            <tr key={o.id}>
+              <th scope="row" className="py-1 text-left font-normal">
+                <Link href={`/admin/orders/${o.id}`} className="inline-flex min-h-11 items-center font-medium underline underline-offset-4 lg:min-h-9">
+                  {formatOrderNumber(o.number)}
                 </Link>
-              </td>
-              <td className="py-1 pr-3">{r.nameEn ?? <span lang="bn">{r.nameBn}</span>}</td>
-              <td className="py-1 pr-3 text-right tabular-nums">{r.onHand}</td>
-              <td className="py-1 pr-3 text-right tabular-nums">{r.reserved}</td>
-              <td className="py-1 text-right font-medium tabular-nums">{r.available}</td>
+              </th>
+              <td className="py-1 text-right text-xs text-gray-600 tabular-nums">{detail(q.queue, o, now)}</td>
             </tr>
           ))}
         </tbody>
       </table>
-    </div>
+      <Link href={`/admin/orders?queue=${q.queue}`} className="mt-auto inline-flex min-h-11 items-center gap-1 pt-2 text-sm font-semibold underline-offset-4 hover:underline lg:min-h-10">
+        Show all {q.count}
+        <span className="sr-only"> ({q.label})</span>
+        <ArrowRight aria-hidden="true" size={16} />
+      </Link>
+    </li>
   );
 }
 
-// The Owner's daily work list. Every number is read from the database at `generatedAt`; nothing is a target or
-// an estimate. Lists show the oldest ten of each queue; "Show all" opens the full, paginated order list.
+const productName = (r: StockRow) => r.nameEn ?? r.nameBn ?? "Product";
+const variantText = (r: StockRow) => [r.size, r.colour].filter(Boolean).join(" · ") || "No size or colour";
+
+/** Stock rows with the product and its variant first and the SKU second: a table from tablet width, plain rows on a phone. */
+function StockTable({ rows, caption }: { rows: StockRow[]; caption: string }) {
+  return (
+    <>
+      <ul aria-label={caption} className="divide-y divide-gray-200 rounded-xl border border-gray-200 md:hidden">
+        {rows.map((r) => (
+          <li key={r.variantId}>
+            <Link href={`/admin/skus/${encodeURIComponent(r.sku)}`} className="of-row-link block space-y-1 px-4 py-3">
+              <span className="of-row-title block font-semibold break-words" lang={r.nameEn ? undefined : "bn"}>
+                {productName(r)}
+              </span>
+              <span className="block text-sm text-gray-700">{variantText(r)}</span>
+              <span className="block text-xs text-gray-600">SKU {r.sku}</span>
+              <span className="flex gap-4 text-sm tabular-nums">
+                <span>
+                  On hand <strong>{r.onHand}</strong>
+                </span>
+                <span>
+                  Reserved <strong>{r.reserved}</strong>
+                </span>
+                <span>
+                  Available <strong>{r.available}</strong>
+                </span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <div className="hidden overflow-hidden rounded-xl border border-gray-200 md:block">
+        <table className="of-table">
+          <caption className="sr-only">{caption}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Product</th>
+              <th scope="col">Variant</th>
+              <th scope="col" className="num">
+                On hand
+              </th>
+              <th scope="col" className="num">
+                Reserved
+              </th>
+              <th scope="col" className="num">
+                Available
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.variantId}>
+                <td className="font-medium" lang={r.nameEn ? undefined : "bn"}>
+                  {productName(r)}
+                </td>
+                <td>
+                  <Link href={`/admin/skus/${encodeURIComponent(r.sku)}`} className="of-row-link block">
+                    <span className="of-row-title block text-sm">{variantText(r)}</span>
+                    <span className="block text-xs text-gray-600">SKU {r.sku}</span>
+                  </Link>
+                </td>
+                <td className="num">{r.onHand}</td>
+                <td className="num">{r.reserved}</td>
+                <td className="num font-semibold">{r.available}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+/** A grid that never leaves one card alone on its last row: 4 cards make two rows of two, 5 or 6 make rows of three. */
+const gridFor = (n: number) => (n <= 1 ? "" : n === 2 || n === 4 ? "sm:grid-cols-2" : "md:grid-cols-3");
+
+// The Owner's daily work list. Every number is read from the database at `generatedAt`; nothing is a target or an
+// estimate. Queues with work come first (the urgent ones on top); empty queues shrink to one line.
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const principal = await requireAdmin("reports:read", "orders:read", "stock:read");
   const query = await searchParams;
@@ -63,11 +164,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     if (!(error instanceof DomainError)) throw error;
     lowError = `Enter a whole number from 1 to ${MAX_LOW_STOCK_THRESHOLD}, or leave it empty.`;
   }
-  const d = await getDashboard(getDb(), { lowStockThreshold });
+  // Two independent reads, side by side (separate pool connections when the pool has them).
+  const [d, setup] = await Promise.all([getDashboard(getDb(), { lowStockThreshold }), storeSetupProgress(getDb(), principal).catch(() => null)]);
   const now = d.generatedAt;
-  // A new store sees what is left to set up; it disappears once every essential step is done.
-  const setup = await storeSetupProgress(getDb(), principal).catch(() => null);
-  const setupLeft = setup ? setup.filter((s) => s.required && !s.done) : [];
+  const essential = setup ? setup.filter((s) => s.required) : [];
+  const setupLeft = essential.filter((s) => !s.done);
+  const byQueue = new Map(d.queues.map((q) => [q.queue, q]));
+  const urgent = URGENT.map((k) => byQueue.get(k)!).filter((q) => q.count > 0);
+  const flow = FLOW.map((k) => byQueue.get(k)!).filter((q) => q.count > 0);
+  const quiet = [...URGENT, ...FLOW].map((k) => byQueue.get(k)!).filter((q) => q.count === 0);
+  const returnsOpen = d.returns.awaitingParcel + d.returns.awaitingDecision + d.returns.approvedOpen + d.quarantine.return.count + d.quarantine.rto.count;
 
   return (
     <AdminShell
@@ -80,149 +186,160 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </Link>
       }
     >
-      <p className="text-sm text-gray-600" data-testid="generated-at">
-        Figures as of {formatTime(d.generatedAt)}. Reload the page for current figures. A pending order is not a sale, and a delivered order is not
-        money received until its collection and settlement are recorded.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-gray-600" data-testid="generated-at">
+          Updated {formatTime(d.generatedAt)}
+        </p>
+        <RefreshButton />
+      </div>
 
       {setupLeft.length ? (
-        <Link href="/admin/onboarding" className="of-card block p-4 hover:bg-gray-50" data-testid="setup-card">
-          <span className="block font-semibold">Finish setting up your store · দোকান সেটআপ শেষ করুন</span>
-          <span className="block text-sm text-gray-700">
-            {setupLeft.length} essential step{setupLeft.length === 1 ? "" : "s"} left. Next: {setupLeft[0].title}.
+        <Link href="/admin/onboarding" className="of-card flex items-center gap-4 px-4 py-3 hover:bg-[#fdfaf5]" data-testid="setup-card">
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">
+              Store setup: {essential.length - setupLeft.length} of {essential.length} essential steps done
+            </span>
+            <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-gray-200" aria-hidden="true">
+              <span className="block h-full rounded-full bg-sf-sun" style={{ width: `${Math.round(((essential.length - setupLeft.length) / essential.length) * 100)}%` }} />
+            </span>
+            <span className="mt-1 block text-xs text-gray-600">Next: {setupLeft[0].title}</span>
           </span>
+          <ArrowRight aria-hidden="true" size={18} className="shrink-0 text-gray-600" />
         </Link>
       ) : null}
 
       {d.unconfiguredZones.length ? (
         <p role="alert" className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-950">
-          No active delivery charge for {d.unconfiguredZones.map((z) => ZONE_LABELS[z]).join(" and ")}: orders for{" "}
-          {d.unconfiguredZones.length > 1 ? "these zones" : "this zone"} cannot be taken.{" "}
+          No active delivery charge for {d.unconfiguredZones.map((z) => ZONE_LABELS[z]).join(" and ")}, so orders there cannot be taken.{" "}
           <Link href="/admin/settings/delivery" className="underline">
             Set delivery charges
           </Link>
-          .
         </p>
       ) : null}
 
       <Section title="Order work queues">
-        <ul className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-3" aria-label="Order work queues">
-          {[...d.queues].sort((a, b) => Number(URGENT.has(b.queue) && b.count > 0) - Number(URGENT.has(a.queue) && a.count > 0)).map((q) => (
-            <li
-              key={q.queue}
-              className={`flex flex-col rounded-2xl border bg-white ${q.count > 0 ? "col-span-2 p-4 sm:col-span-1" : "p-3 sm:p-4"} ${URGENT.has(q.queue) && q.count > 0 ? "border-amber-300 shadow-[inset_4px_0_0_var(--color-sf-sun)]" : "border-gray-200"}`}
-              data-queue={q.queue}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <h3 className={`leading-snug font-semibold text-gray-700 ${q.count === 0 ? "text-[0.8125rem] sm:text-sm" : "text-sm"}`}>{q.label}</h3>
-                <span className={`leading-none font-bold tabular-nums ${q.count === 0 ? "text-2xl text-gray-400 sm:text-[2rem]" : "text-[2rem]"}`} data-testid={`count-${q.queue}`}>
-                  {q.count}
-                </span>
-              </div>
-              {q.count === 0 ? (
-                <p className="mt-2 hidden text-xs text-gray-600 sm:block">None right now.</p>
-              ) : (
-                <>
-                  <ul className="mt-3 space-y-1.5 border-t border-gray-200 pt-3 text-sm">
-                    {q.oldest.map((o) => (
-                      <li key={o.id} className="flex flex-wrap justify-between gap-x-2">
-                        <Link href={`/admin/orders/${o.id}`} className="inline-flex min-h-11 items-center underline underline-offset-4">
-                          {formatOrderNumber(o.number)}
-                        </Link>
-                        <span className="text-xs text-gray-600">
-                          {q.queue === "pending" || q.queue === "overdue"
-                            ? `deadline ${relative(o.verificationExpiresAt, now)}`
-                            : q.queue === "awaiting_collection"
-                              ? `${bdt(o.totalPaisa - o.codCollectedPaisa)} to collect`
-                              : q.queue === "unsettled"
-                                ? `${bdt(o.codCollectedPaisa - o.codSettledPaisa - o.codDeductedPaisa)} held by courier`
-                                : `placed ${formatTime(o.createdAt)}`}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Link href={`/admin/orders?queue=${q.queue}`} className="mt-auto inline-flex min-h-11 items-center pt-2 text-sm font-semibold underline underline-offset-4">
-                    Show all {q.count}
-                    <span className="sr-only"> ({q.label})</span>
-                  </Link>
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
+        {urgent.length || flow.length ? null : <p className="text-sm text-gray-700">No order is waiting for you.</p>}
+        {urgent.length ? (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-amber-900">Needs you now</h3>
+            <ul className={`grid gap-3 ${gridFor(urgent.length)}`} aria-label="Urgent queues">
+              {urgent.map((q) => (
+                <QueueCard key={q.queue} q={q} now={now} urgent />
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {flow.length ? (
+          <div className="space-y-2">
+            {urgent.length ? <h3 className="text-sm font-semibold text-gray-700">In progress</h3> : null}
+            <ul className={`grid gap-3 ${gridFor(flow.length)}`} aria-label="Queues in progress">
+              {flow.map((q) => (
+                <QueueCard key={q.queue} q={q} now={now} urgent={false} />
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {quiet.length ? (
+          <div className="border-t border-gray-200 pt-3">
+            <h3 className="sr-only">Empty queues</h3>
+            <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600" aria-label="Empty queues">
+              {quiet.map((q) => (
+                <li key={q.queue} data-queue={q.queue} title={q.label}>
+                  {TITLES[q.queue]}{" "}
+                  <span className="font-semibold tabular-nums text-gray-500" data-testid={`count-${q.queue}`}>
+                    {q.count}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        <p className="text-xs text-gray-600">
+          Order counts are not sales: money counts once its collection and settlement are recorded (see{" "}
+          <Link href="/admin/reports" className="underline">
+            Reports
+          </Link>
+          ).
+        </p>
       </Section>
 
       <Section title="Returns and inspection">
-        <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
-          <div className="rounded-xl bg-gray-50 px-4 py-3">
-            <dt className="text-gray-600">Return requested, parcel not received</dt>
-            <dd className="mt-1 text-2xl font-bold tabular-nums">{d.returns.awaitingParcel}</dd>
-          </div>
-          <div className="rounded-xl bg-gray-50 px-4 py-3">
-            <dt className="text-gray-600">Return received, decision pending</dt>
-            <dd className="mt-1 text-2xl font-bold tabular-nums">{d.returns.awaitingDecision}</dd>
-          </div>
-          <div className="rounded-xl bg-gray-50 px-4 py-3">
-            <dt className="text-gray-600">Approved, refund or completion pending</dt>
-            <dd className="mt-1 text-2xl font-bold tabular-nums">{d.returns.approvedOpen}</dd>
-          </div>
-        </dl>
-        {(["return", "rto"] as const).map((source) => {
-          const q = d.quarantine[source];
-          return (
-            <div key={source} data-quarantine={source}>
-              <h3 className="text-sm font-medium">
-                {source === "return" ? "Returned goods awaiting inspection" : "RTO goods in quarantine awaiting inspection"}:{" "}
-                <span className="tabular-nums">{q.count}</span> line{q.count === 1 ? "" : "s"}, <span className="tabular-nums">{q.units}</span> unit
-                {q.units === 1 ? "" : "s"} (not sellable until inspected)
-              </h3>
-              {q.count === 0 ? (
-                <p className="text-xs text-gray-600">None right now.</p>
-              ) : (
-                <ul className="mt-1 space-y-1 text-sm">
-                  {q.oldest.map((item) => (
-                    <li key={item.id}>
-                      <Link href={`/admin/orders/${item.orderId}`} className="underline">
-                        {formatOrderNumber(item.orderNumber)}
-                      </Link>{" "}
-                      · {item.sku} × {item.quantity} · received {formatTime(item.receivedAt)}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          );
-        })}
+        {returnsOpen === 0 ? (
+          <p className="text-sm text-gray-700">No open return and nothing awaiting inspection.</p>
+        ) : (
+          <>
+            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="of-stat">
+                <dt>Return requested, parcel not received</dt>
+                <dd>{d.returns.awaitingParcel}</dd>
+              </div>
+              <div className="of-stat">
+                <dt>Received, decision pending</dt>
+                <dd>{d.returns.awaitingDecision}</dd>
+              </div>
+              <div className="of-stat">
+                <dt>Approved, refund or completion pending</dt>
+                <dd>{d.returns.approvedOpen}</dd>
+              </div>
+            </dl>
+            {(["return", "rto"] as const).map((source) => {
+              const q = d.quarantine[source];
+              return (
+                <div key={source} data-quarantine={source}>
+                  <h3 className="text-sm font-medium">
+                    {source === "return" ? "Returned goods awaiting inspection" : "RTO goods awaiting inspection"}: <span className="tabular-nums">{q.units}</span> unit
+                    {q.units === 1 ? "" : "s"} in <span className="tabular-nums">{q.count}</span> line{q.count === 1 ? "" : "s"}
+                    {q.count ? <span className="font-normal text-gray-600"> (not sellable until inspected)</span> : null}
+                  </h3>
+                  {q.count ? (
+                    <ul className="mt-1 space-y-1 text-sm">
+                      {q.oldest.map((item) => (
+                        <li key={item.id}>
+                          <Link href={`/admin/orders/${item.orderId}`} className="underline">
+                            {formatOrderNumber(item.orderNumber)}
+                          </Link>{" "}
+                          · {item.sku} × {item.quantity} · received {formatTime(item.receivedAt)}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              );
+            })}
+          </>
+        )}
       </Section>
 
       <Section title="Stock availability">
-        <p className="text-sm text-gray-700">
-          Active SKUs of products that are not archived. Available = on hand − reserved for orders. Goods awaiting inspection are not counted.
-        </p>
-        <h3 className="text-sm font-medium">
-          No units available: <span className="tabular-nums" data-testid="zero-available">{d.stock.zeroAvailable.count}</span>
-        </h3>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-sm font-semibold">
+            Out of stock: <span className="tabular-nums" data-testid="zero-available">{d.stock.zeroAvailable.count}</span> SKU{d.stock.zeroAvailable.count === 1 ? "" : "s"}
+          </h3>
+          <p className="text-xs text-gray-600">Active SKUs of products not archived. Available = on hand − reserved.</p>
+        </div>
         {d.stock.zeroAvailable.count === 0 ? (
-          <p className="text-xs text-gray-600">Every active SKU has at least one unit available.</p>
+          <p className="text-sm text-gray-700">Every active SKU has at least one unit available.</p>
         ) : (
           <StockTable rows={d.stock.zeroAvailable.items} caption="SKUs with no units available" />
         )}
         {d.stock.zeroAvailable.count > d.stock.zeroAvailable.items.length ? (
-          <p className="text-xs text-gray-600">Showing {d.stock.zeroAvailable.items.length} of {d.stock.zeroAvailable.count}. Use an export for the full list.</p>
+          <p className="text-xs text-gray-600">
+            Showing {d.stock.zeroAvailable.items.length} of {d.stock.zeroAvailable.count}. Use an export for the full list.
+          </p>
         ) : null}
-        <form method="get" action="/admin/dashboard" className="flex flex-wrap items-end gap-3">
-          <div>
-            <label htmlFor="low" className="block text-sm font-semibold">
-              Show SKUs with at most this many available
-            </label>
-            <input id="low" name="low" inputMode="numeric" defaultValue={rawLow ?? ""} className={FIELD} aria-describedby="low-hint" />
-            <p id="low-hint" className="mt-1 text-xs text-gray-600">
-              Your own choice for this view only; no low-stock level is set by the system.
-            </p>
+        <form method="get" action="/admin/dashboard" className="border-t border-gray-200 pt-4">
+          <label htmlFor="low" className="block text-sm font-semibold">
+            Show SKUs with at most this many available
+          </label>
+          <div className="mt-1.5 flex gap-2">
+            <input id="low" name="low" inputMode="numeric" defaultValue={rawLow ?? ""} className="of-input w-32" aria-describedby="low-hint" />
+            <button type="submit" className="of-btn of-btn-line">
+              Show
+            </button>
           </div>
-          <button type="submit" className="of-btn of-btn-line mb-6">
-            Show
-          </button>
+          <p id="low-hint" className="mt-1.5 text-xs text-gray-600">
+            For this view only; the system sets no low-stock level.
+          </p>
         </form>
         {lowError ? (
           <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
@@ -230,14 +347,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </p>
         ) : d.stock.low ? (
           <>
-            <h3 className="text-sm font-medium">
+            <h3 className="text-sm font-semibold">
               At most {d.stock.low.threshold} available: <span className="tabular-nums">{d.stock.low.count}</span>
             </h3>
-            {d.stock.low.count === 0 ? (
-              <p className="text-xs text-gray-600">No SKU matches.</p>
-            ) : (
-              <StockTable rows={d.stock.low.items} caption={`SKUs with at most ${d.stock.low.threshold} available`} />
-            )}
+            {d.stock.low.count === 0 ? <p className="text-sm text-gray-700">No SKU matches.</p> : <StockTable rows={d.stock.low.items} caption={`SKUs with at most ${d.stock.low.threshold} available`} />}
           </>
         ) : null}
       </Section>
@@ -249,7 +362,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <Link href="/admin/print/picking" className="of-btn of-btn-line">
           Picking list and packing summary
         </Link>
-        <span className="text-gray-600">(confirmed orders not dispatched yet)</span>
       </div>
     </AdminShell>
   );

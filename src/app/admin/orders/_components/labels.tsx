@@ -1,5 +1,5 @@
 import type { Order } from "@/modules/orders/internal";
-import { formatPaisa } from "@/modules/money";
+import { formatTaka } from "@/modules/storefront/i18n";
 
 // Plain labels for the four order dimensions, shown side by side and never merged into one status.
 
@@ -55,8 +55,10 @@ const TONE: Record<string, "wait" | "ok" | "move" | "bad" | "quiet"> = {
 };
 export const tone = (value: string) => TONE[value] ?? "quiet";
 
-/** A status as a word in a toned pill. */
-export function StatusPill({ value, testId }: { value: string; testId?: string }) {
+/** A status as a word in a toned pill. `calm` shows a neutral state as plain grey text, so only states that need a look stand out. */
+export function StatusPill({ value, testId, calm = false }: { value: string; testId?: string; calm?: boolean | "hide" }) {
+  if (calm === "hide" && tone(value) === "quiet") return null;
+  if (calm && tone(value) === "quiet") return <span className="text-sm text-gray-600" data-testid={testId}>{label(value)}</span>;
   return (
     <span className="of-pill" data-tone={tone(value)} data-testid={testId}>
       {label(value)}
@@ -64,7 +66,8 @@ export function StatusPill({ value, testId }: { value: string; testId?: string }
   );
 }
 
-export const bdt = (paisa: number) => `৳ ${formatPaisa(paisa)}`;
+/** Admin money: "৳ 12,810" for whole taka, "৳ 12,810.50" otherwise (the same rule as the shop, English digits). */
+export const bdt = (paisa: number) => formatTaka(paisa, "en");
 
 /** "in 3 h 20 min" / "4 h 5 min ago", from the server's clock at render time. */
 export function relative(target: Date, now: Date): string {
@@ -72,6 +75,12 @@ export function relative(target: Date, now: Date): string {
   const abs = Math.abs(minutes);
   const text = abs >= 60 ? `${Math.floor(abs / 60)} h ${abs % 60} min` : `${abs} min`;
   return minutes >= 0 ? `in ${text}` : `${text} ago`;
+}
+
+/** "2 h 5 min" / "35 min" between a passed deadline and now. */
+export function overdueBy(deadline: Date, now: Date): string {
+  const minutes = Math.max(1, Math.round((now.getTime() - deadline.getTime()) / 60_000));
+  return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
 }
 
 export function Dimensions({ order, compact = false }: { order: Pick<Order, "orderStatus" | "fulfilmentStatus" | "paymentStatus" | "returnStatus">; compact?: boolean }) {

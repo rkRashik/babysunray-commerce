@@ -21,7 +21,7 @@ test("bilingual content, a confirmed fabric statement, a category and a size cha
   const sku = await seedSku(2);
   const product = await productOf(sku);
   await page.goto(`/admin/products/${product.id}`);
-  await expect(page.getByTestId("readiness")).toContainText("Advisory only");
+  await expect(page.getByTestId("readiness")).toContainText("only shows what is missing");
   await expect(met(page, "name")).toHaveAttribute("data-met", "false");
   await expect(met(page, "name")).toContainText("Missing: Bangla.");
   await expect(met(page, "policies")).toHaveAttribute("data-met", "false");
@@ -36,15 +36,16 @@ test("bilingual content, a confirmed fabric statement, a category and a size cha
   await expect(page.getByRole("status")).toHaveText("Category created.");
 
   await page.goto(`/admin/products/${product.id}/edit`);
-  await page.getByLabel("Name (Bangla)").fill("কাল্পনিক রম্পার");
   await page.getByLabel("Description (English)").fill("A fictional romper for the browser test.");
-  await page.getByLabel("Description (Bangla)").fill("ব্রাউজার পরীক্ষার জন্য একটি কাল্পনিক রম্পার।");
-  await page.getByLabel("Category").selectOption({ label: "Fictional sets" });
   await page.getByLabel("Fabric (English)").fill("Fictional fabric statement for testing");
-  await page.getByLabel("Fabric (Bangla)").fill("পরীক্ষার জন্য কাল্পনিক কাপড়ের বিবরণ");
-  await page.getByLabel(/I confirm the fabric statement/).check();
   await page.getByLabel("Care instructions (English)").fill("Fictional care text");
+  await page.getByRole("tab", { name: "Bangla" }).click();
+  await page.getByLabel("Name (Bangla)").fill("কাল্পনিক রম্পার");
+  await page.getByLabel("Description (Bangla)").fill("ব্রাউজার পরীক্ষার জন্য একটি কাল্পনিক রম্পার।");
+  await page.getByLabel("Fabric (Bangla)").fill("পরীক্ষার জন্য কাল্পনিক কাপড়ের বিবরণ");
   await page.getByLabel("Care instructions (Bangla)").fill("কাল্পনিক যত্নের নির্দেশনা");
+  await page.getByLabel(/I confirm the fabric statement/).check();
+  await page.getByLabel("Category").selectOption({ label: "Fictional sets" });
   await page.getByLabel(/^Featured/).check();
   await submitAndWait(page, page.getByRole("button", { name: "Save changes" }));
   await expect(page).toHaveURL(new RegExp(`/admin/products/${product.id}\\?done=updated$`));

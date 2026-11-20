@@ -1,37 +1,125 @@
+import { randomUUID } from "node:crypto";
+import { ImageOff, Plus, Search, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { productCursorCodec } from "@/api/v1/schemas";
 import { getDb } from "@/db/client";
+import { roleHasPermission } from "@/modules/auth/permissions";
 import { isPreparationItem, readinessFlags } from "@/modules/catalogue/preparation";
-import { READINESS_ITEMS } from "@/modules/catalogue/readiness";
+import { publicationRuleFor } from "@/modules/catalogue/publication";
+import { type PreparationItem, READINESS_ITEMS } from "@/modules/catalogue/readiness";
 import { MAX_SEARCH_LENGTH, normalizeSearch, validateId } from "@/modules/catalogue/rules";
-import { listCategories, listProducts } from "@/modules/catalogue/service";
+import { listCategories, listProducts, type Product, productListSummaries, type ProductListSummary } from "@/modules/catalogue/service";
 import { DomainError } from "@/modules/domain-error";
-import { AdminShell, formatTime } from "./_components/shell";
+import { bdt } from "./orders/_components/labels";
+import { ProductBulkBar } from "./products/_components/product-bulk-bar";
+import { AutoFilterForm } from "./_components/auto-submit";
+import { ScrollArea } from "./_components/scroll-area";
+import { AdminShell } from "./_components/shell";
 import { requireAdmin } from "./_lib/session";
 
 export const metadata = { title: "Products · Admin" };
 
-const STATUSES = ["draft", "archived"] as const;
+const STATUSES = ["draft", "published", "archived"] as const;
+const STATUS_TEXT: Record<Product["status"], { label: string; tone: string }> = {
+  draft: { label: "Draft", tone: "wait" },
+  published: { label: "Published", tone: "ok" },
+  archived: { label: "Archived", tone: "quiet" },
+};
 const PAGE_SIZE = 25;
-const SELECT = "of-input mt-1.5";
-// Where to fix each item: the product page section or form that changes it.
-const FIX: Record<string, string> = { name: "edit", description: "edit", fabric: "edit", care: "edit", category: "edit", measurements: "measurements", photo: "photos", alt: "photos", variant: "", sizes: "" };
+const FIELD = "of-input mt-1.5";
 
 const href = (params: Record<string, string | undefined>) => {
   const query = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => Boolean(e[1])));
   return query.size ? `/admin?${query}` : "/admin";
 };
 
+const taka = (paisa: number) => bdt(paisa).replace("৳ ", "");
+const price = (s: ProductListSummary | undefined) => {
+  if (!s || s.minPricePaisa === null || s.maxPricePaisa === null) return "—";
+  return s.minPricePaisa === s.maxPricePaisa ? bdt(s.minPricePaisa) : `${bdt(s.minPricePaisa)} – ${taka(s.maxPricePaisa)}`;
+};
+
+/** The product's names: the one that exists first, and the other language's name or a plain note that it is missing (never the slug). */
+function Names({ p }: { p: Product }) {
+  if (p.nameEn) {
+    return (
+      <>
+        <span className="of-row-title block font-semibold break-words">{p.nameEn}</span>
+        {p.nameBn ? (
+          <span lang="bn" className="block text-xs text-gray-600 break-words">
+            {p.nameBn}
+          </span>
+        ) : (
+          <span className="block text-xs text-amber-900">Bangla name missing</span>
+        )}
+      </>
+    );
+  }
+  if (p.nameBn) {
+    return (
+      <>
+        <span lang="bn" className="of-row-title block font-semibold break-words">
+          {p.nameBn}
+        </span>
+        <span className="block text-xs text-amber-900">English name missing</span>
+      </>
+    );
+  }
+  return <span className="of-row-title block font-semibold text-gray-700">Untitled product</span>;
+}
+
+function Thumb({ mediaId }: { mediaId: string | null }) {
+  return mediaId ? (
+    // The Owner-only media route (never a storage URL); Next.js image optimisation would fetch it without the session.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={`/admin/media/${mediaId}?w=320`} alt="" width={48} height={48} loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded-lg border border-gray-200 bg-gray-100 object-cover" />
+  ) : (
+    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-[#fbf8f3] text-gray-400">
+      <ImageOff aria-hidden="true" size={18} />
+      <span className="sr-only">No photo</span>
+    </span>
+  );
+}
+
+/** Stock for sale and stock in the room, told apart: an archived product holds stock but is not for sale. */
+function stockText(p: Product, s: ProductListSummary | undefined): { main: string; tone: "ok" | "bad" | "quiet"; sub: string } {
+  if (!s) return { main: "—", tone: "quiet", sub: "" };
+  const skus = `${s.activeVariants} active ${s.activeVariants === 1 ? "SKU" : "SKUs"}`;
+  const room = `${s.onHandUnits} on hand`;
+  if (p.status === "archived") return { main: "Not for sale", tone: "quiet", sub: s.onHandUnits > 0 ? room : "No stock" };
+  if (s.activeVariants === 0) return { main: "No active SKU", tone: "quiet", sub: s.onHandUnits > 0 ? room : "" };
+  if (s.availableUnits > 0) return { main: `${s.availableUnits} for sale`, tone: "ok", sub: `${room} · ${skus}` };
+  return { main: "Out of stock", tone: "bad", sub: `${room} · ${skus}` };
+}
+
+/** A compact readiness indicator; the details stay on the product and preparation pages. */
+function Readiness({ product, missing }: { product: Product; missing: string[] | null }) {
+  if (product.status !== "draft" || missing === null) return <span className="text-sm text-gray-500">—</span>;
+  if (missing.length === 0)
+    return (
+      <span className="of-pill" data-tone="ok" data-testid="product-readiness">
+        Information complete
+      </span>
+    );
+  return (
+    <Link href={`/admin/products/${product.id}`} className="of-pill no-underline" data-tone="wait" data-testid="product-readiness" title={`Missing: ${missing.join("; ")}`}>
+      {missing.length} missing
+      <span className="sr-only">: {missing.join("; ")}</span>
+    </Link>
+  );
+}
+
 // Product list, oldest first in pages of 25: search (slug, English or Bangla name, SKU), status, category, what is
-// still missing, and stock. Every filter and the page live in the URL. Each product shows how much of the advisory
-// readiness checklist it meets, with links to what is missing.
+// still missing, and stock. Filters apply as they change and, with the page, live in the URL (a product name is not personal
+// data). Two more bounded queries per page (summaries and readiness flags), whatever the page's size.
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  await requireAdmin("catalog:read");
+  const principal = await requireAdmin("catalog:read");
+  const canWrite = roleHasPermission(principal.role, "catalog:write");
   const query = await searchParams;
   const one = (k: string) => (typeof query[k] === "string" ? (query[k] as string) : undefined);
   const status = STATUSES.find((s) => s === query.status);
   const rawQ = one("q") ?? "";
-  const missing = isPreparationItem(one("missing")) ? (one("missing") as (typeof READINESS_ITEMS)[number]["id"]) : undefined;
+  const missing = isPreparationItem(one("missing")) ? (one("missing") as PreparationItem) : undefined;
   const stock = one("stock") === "in" || one("stock") === "out" ? (one("stock") as "in" | "out") : undefined;
   let categoryId: string | undefined;
   try {
@@ -52,45 +140,82 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const db = getDb();
   const categories = await listCategories(db);
   const page = searchError ? { items: [], hasMore: false } : await listProducts(db, { limit: PAGE_SIZE, status, after, q, categoryId, missing, stock });
-  const flags = await readinessFlags(db, page.items.map((p) => p.id));
+  const ids = page.items.map((p) => p.id);
+  const flags = await readinessFlags(db, ids);
+  const summaries = await productListSummaries(db, ids);
+  // What "complete" means: the basic product information plus the publication requirements in force, else the proposed ones.
+  const rule = page.items.some((p) => p.status === "draft") ? await publicationRuleFor(db) : null;
+  const required = new Set<string>(READINESS_ITEMS.filter((i) => i.basis === "approved" || (!rule && i.basis === "pending")).map((i) => i.id));
+  for (const id of rule?.items ?? []) required.add(id);
+  const missingFor = (id: string) => {
+    const f = flags.get(id);
+    return f ? READINESS_ITEMS.filter((i) => required.has(i.id) && !f[i.id]).map((i) => i.label) : null;
+  };
   const filters = { q, status, category: categoryId, missing, stock };
   const last = page.items.at(-1);
   const next = page.hasMore && last ? href({ ...filters, cursor: productCursorCodec.encode(last.key) }) : null;
   const filtered = Boolean(q || status || categoryId || missing || stock);
-  const tally = (id: string, basis: string) => {
-    const items = READINESS_ITEMS.filter((i) => i.basis === basis);
-    const f = flags.get(id);
-    return `${items.filter((i) => f?.[i.id]).length}/${items.length}`;
-  };
+  const bulkable = canWrite && page.items.some((p) => p.status === "draft");
 
   return (
-    <AdminShell title="Products" current="products">
+    <AdminShell
+      title="Products"
+      current="products"
+      wide
+      actions={
+        <>
+          <Link href="/admin/import" className="of-btn of-btn-line">
+            <Upload aria-hidden="true" size={18} />
+            Import products
+          </Link>
+          <Link href="/admin/products/new" className="of-btn of-btn-primary">
+            <Plus aria-hidden="true" size={18} strokeWidth={2} />
+            Add product
+          </Link>
+        </>
+      }
+    >
       <div role="search" aria-label="Search products">
-        <form method="get" action="/admin" className="grid gap-3 of-card p-4 lg:p-5 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="sm:col-span-2 lg:col-span-3">
+        <AutoFilterForm action="/admin" className="grid grid-cols-2 gap-3 lg:grid-cols-[minmax(14rem,1fr)_9rem_11rem_10rem_13rem_auto] lg:items-end">
+          <div className="col-span-2 lg:col-span-1">
             <label htmlFor="product-search" className="block text-sm font-semibold">
               Search
             </label>
-            <input id="product-search" type="search" name="q" defaultValue={rawQ} maxLength={MAX_SEARCH_LENGTH} aria-describedby="product-search-hint" className={SELECT} />
-            <p id="product-search-hint" className="mt-1 text-xs text-gray-600">
-              Name in English or Bangla, slug or SKU. Not case-sensitive.
+            <div className="relative mt-1.5">
+              <Search aria-hidden="true" size={18} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-gray-500" />
+              <input
+                id="product-search"
+                type="search"
+                name="q"
+                defaultValue={rawQ}
+                maxLength={MAX_SEARCH_LENGTH}
+                placeholder="Name, slug or SKU"
+                aria-describedby="product-search-hint"
+                className="of-input pl-10"
+              />
+            </div>
+            <p id="product-search-hint" className="sr-only">
+              Name in English or Bangla, slug or SKU. Not case-sensitive. Results update as you type.
             </p>
           </div>
           <div>
             <label htmlFor="product-status" className="block text-sm font-semibold">
               Status
             </label>
-            <select id="product-status" name="status" defaultValue={status ?? ""} className={SELECT}>
+            <select id="product-status" name="status" defaultValue={status ?? ""} className={FIELD}>
               <option value="">All</option>
-              <option value="draft">Draft</option>
-              <option value="archived">Archived</option>
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_TEXT[s].label}
+                </option>
+              ))}
             </select>
           </div>
           <div>
             <label htmlFor="product-category" className="block text-sm font-semibold">
               Category
             </label>
-            <select id="product-category" name="category" defaultValue={categoryId ?? ""} className={SELECT}>
+            <select id="product-category" name="category" defaultValue={categoryId ?? ""} className={FIELD}>
               <option value="">All</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id} lang={c.nameEn ? undefined : "bn"}>
@@ -103,52 +228,37 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             <label htmlFor="product-stock" className="block text-sm font-semibold">
               Stock
             </label>
-            <select id="product-stock" name="stock" defaultValue={stock ?? ""} className={SELECT}>
-              <option value="">Any</option>
-              <option value="in">Some units available</option>
-              <option value="out">Nothing available</option>
+            <select id="product-stock" name="stock" defaultValue={stock ?? ""} className={FIELD}>
+              <option value="">All</option>
+              <option value="in">In stock</option>
+              <option value="out">Out of stock</option>
             </select>
           </div>
-          <div className="sm:col-span-2 lg:col-span-3">
+          <div>
             <label htmlFor="product-missing" className="block text-sm font-semibold">
               Still missing
             </label>
-            <select id="product-missing" name="missing" defaultValue={missing ?? ""} className={SELECT}>
-              <option value="">Anything or nothing</option>
-              <optgroup label="Approved requirements">
-                {READINESS_ITEMS.filter((i) => i.basis === "approved").map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.label}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="Proposed, waiting for your decision">
-                {READINESS_ITEMS.filter((i) => i.basis === "pending").map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.label}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="Suggestions">
-                {READINESS_ITEMS.filter((i) => i.basis === "recommended").map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.label}
-                  </option>
-                ))}
-              </optgroup>
+            <select id="product-missing" name="missing" defaultValue={missing ?? ""} className={FIELD}>
+              <option value="">All</option>
+              {READINESS_ITEMS.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.label}
+                </option>
+              ))}
             </select>
           </div>
-          <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
-            <button type="submit" className="of-btn of-btn-primary">
+          <div className="col-span-2 flex gap-2 lg:col-span-1">
+            <button type="submit" className="of-btn of-btn-ink">
               Search
             </button>
             {filtered || rawQ ? (
               <Link href="/admin" className="of-btn of-btn-line">
+                <X aria-hidden="true" size={16} />
                 Clear
               </Link>
             ) : null}
           </div>
-        </form>
+        </AutoFilterForm>
       </div>
 
       {searchError ? (
@@ -156,73 +266,152 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
           {searchError}
         </p>
       ) : page.items.length === 0 ? (
-        <p role="status" className="text-sm text-gray-700">
+        <div role="status" className="of-card px-5 py-10 text-center">
           {filtered ? (
             <>
-              No products match {q ? <>“{q}”</> : "these filters"}. <Link href="/admin" className="underline">Show all products</Link>.
+              <p className="font-semibold">No products match {q ? <>“{q}”</> : "these filters"}</p>
+              <p className="mt-1 text-sm text-gray-600">
+                <Link href="/admin" className="underline">
+                  Show all products
+                </Link>
+              </p>
             </>
           ) : after ? (
-            <>
+            <p className="font-semibold">
               No more products. <Link href="/admin" className="underline">Back to the first page</Link>.
-            </>
+            </p>
           ) : (
             <>
-              No products yet. <Link href="/admin/products/new" className="underline">Create a draft product</Link> or <Link href="/admin/import" className="underline">import a file</Link>.
+              <p className="font-semibold">No products yet</p>
+              <p className="mt-1 text-sm text-gray-600">
+                <Link href="/admin/products/new" className="underline">Create a draft product</Link> or <Link href="/admin/import" className="underline">import a file</Link>.
+              </p>
             </>
           )}
-        </p>
+        </div>
       ) : (
-        <ul aria-label="Products" className="of-card divide-y divide-gray-200 overflow-hidden">
-          {page.items.map((p) => {
-            const f = flags.get(p.id);
-            const todo = READINESS_ITEMS.filter((i) => i.basis !== "recommended" && f && !f[i.id]);
-            return (
-              <li key={p.id} className="space-y-1.5 px-4 py-3.5 transition-colors hover:bg-[#fbf8f3] lg:px-5" data-testid={`product-${p.slug}`}>
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <Link href={`/admin/products/${p.id}`} className="inline-flex min-h-11 flex-wrap items-center text-[1.0625rem] font-bold underline-offset-4 hover:underline">
-                    {p.nameEn ?? <span lang="bn">{p.nameBn}</span>}
-                    {p.nameEn && p.nameBn ? <span lang="bn" className="ml-2 font-normal text-gray-700">{p.nameBn}</span> : null}
-                  </Link>
-                  <span className="text-xs text-gray-600">
-                    <span className="of-pill mr-1" data-tone={p.status === "archived" ? "quiet" : "wait"}>
-                      {p.status}
-                    </span>{" "}
-                    · {p.slug} · created {formatTime(p.createdAt)}
-                  </span>
-                </div>
-                {p.status === "draft" ? (
-                  <p className="text-xs text-gray-700" data-testid="readiness-tally">
-                    Readiness (advisory): approved {tally(p.id, "approved")} · proposed {tally(p.id, "pending")} · suggestions {tally(p.id, "recommended")}
-                    {todo.length ? (
-                      <>
-                        {" "}
-                        · missing:{" "}
-                        {todo.map((i, n) => (
-                          <span key={i.id}>
-                            {n ? ", " : ""}
-                            <Link href={FIX[i.id] ? `/admin/products/${p.id}/${FIX[i.id]}` : `/admin/products/${p.id}`} className="underline">
-                              {i.label.toLowerCase()}
-                            </Link>
-                          </span>
-                        ))}
-                      </>
+        <>
+          <div className="of-card hidden overflow-hidden lg:block">
+            <ScrollArea label="Products table" hint="Scroll sideways for more columns. The actions stay in view.">
+              <table className="of-table" aria-label="Products">
+                <thead>
+                  <tr>
+                    {bulkable ? (
+                      <th scope="col" className="w-10">
+                        <input type="checkbox" className="of-check" data-select-all aria-label="Select every draft product on this page" />
+                      </th>
                     ) : null}
-                  </p>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
+                    <th scope="col">Product</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Category</th>
+                    <th scope="col" className="num">
+                      Price
+                    </th>
+                    <th scope="col">Stock</th>
+                    <th scope="col">Information</th>
+                    <th scope="col" className="of-sticky-end">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {page.items.map((p) => {
+                    const s = summaries.get(p.id);
+                    const st = stockText(p, s);
+                    return (
+                      <tr key={p.id} data-testid={`product-${p.slug}`}>
+                        {bulkable ? (
+                          <td>
+                            {p.status === "draft" ? (
+                              <input type="checkbox" className="of-check" form="products-bulk" name="product" value={`${p.id}:${p.version}`} aria-label={`Select ${p.nameEn ?? p.nameBn ?? "product"}`} />
+                            ) : null}
+                          </td>
+                        ) : null}
+                        <td>
+                          <Link href={`/admin/products/${p.id}`} className="of-row-link flex items-center gap-3">
+                            <Thumb mediaId={s?.firstMediaId ?? null} />
+                            <span className="min-w-0 max-w-72">
+                              <Names p={p} />
+                            </span>
+                          </Link>
+                        </td>
+                        <td>
+                          <span className="of-pill" data-tone={STATUS_TEXT[p.status].tone}>
+                            {STATUS_TEXT[p.status].label}
+                          </span>
+                        </td>
+                        <td className="text-sm text-gray-700">{s?.categoryName ?? <span className="text-gray-500">—</span>}</td>
+                        <td className="num">{price(s)}</td>
+                        <td>
+                          <span className={`block text-sm font-semibold ${st.tone === "bad" ? "text-red-800" : st.tone === "quiet" ? "text-gray-700" : ""}`}>{st.main}</span>
+                          {st.sub ? <span className="block text-xs text-gray-600">{st.sub}</span> : null}
+                        </td>
+                        <td>
+                          <Readiness product={p} missing={missingFor(p.id)} />
+                        </td>
+                        <td className="of-sticky-end">
+                          <div className="flex justify-end">
+                            <Link
+                              href={p.status === "draft" ? `/admin/products/${p.id}/edit` : `/admin/products/${p.id}`}
+                              className="of-btn of-btn-line of-btn-sm"
+                              aria-label={`${p.status === "draft" ? "Edit" : "View"}: ${p.nameEn ?? p.nameBn ?? "product"}`}
+                            >
+                              {p.status === "draft" ? "Edit" : "View"}
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </ScrollArea>
+          </div>
+          <ul aria-label="Products" className="of-card divide-y divide-gray-200 overflow-hidden lg:hidden">
+            {page.items.map((p) => {
+              const s = summaries.get(p.id);
+              const st = stockText(p, s);
+              const missingItems = missingFor(p.id);
+              return (
+                <li key={p.id}>
+                  {/* On a phone the whole row is one large link; the details are on the product page. */}
+                  <Link href={`/admin/products/${p.id}`} className="of-row-link flex gap-3 px-4 py-3 hover:bg-[#fdfaf5] focus-visible:bg-[#fdfaf5]">
+                    <Thumb mediaId={s?.firstMediaId ?? null} />
+                    <span className="min-w-0 flex-1 space-y-1">
+                      <Names p={p} />
+                      <span className="block text-sm font-semibold tabular-nums">{price(s)}</span>
+                      <span className="flex flex-wrap items-center gap-1.5 text-xs">
+                        <span className="of-pill" data-tone={STATUS_TEXT[p.status].tone}>
+                          {STATUS_TEXT[p.status].label}
+                        </span>
+                        {p.status === "draft" && missingItems ? (
+                          <span className="of-pill" data-tone={missingItems.length ? "wait" : "ok"}>
+                            {missingItems.length ? `${missingItems.length} missing` : "Information complete"}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className={`block text-xs ${st.tone === "bad" ? "font-semibold text-red-800" : "text-gray-700"}`}>
+                        {st.main}
+                        {st.sub ? <span className="text-gray-600"> · {st.sub}</span> : null}
+                      </span>
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+          {bulkable ? <ProductBulkBar batch={randomUUID()} categories={categories.map((c) => ({ id: c.id, name: c.nameEn ?? c.nameBn ?? c.slug, bn: !c.nameEn }))} /> : null}
+        </>
       )}
       {next || after ? (
         <nav aria-label="Pages" className="flex gap-2 text-sm">
           {after ? (
-            <Link href={href(filters)} className="of-btn of-btn-line">
+            <Link href={href(filters)} className="of-btn of-btn-line of-btn-sm">
               First page
             </Link>
           ) : null}
           {next ? (
-            <Link href={next} className="of-btn of-btn-line">
+            <Link href={next} className="of-btn of-btn-line of-btn-sm">
               Next page
             </Link>
           ) : null}

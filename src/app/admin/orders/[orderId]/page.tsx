@@ -233,7 +233,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
                 ...(allowed.has("record_deduction") ? [{ value: "deducted", label: "Kept by the courier (fee or deduction on its statement)" }] : []),
               ]}
             />
-            <Field name="amountTaka" label="Amount (BDT)" required inputMode="decimal" hint={`Up to ${formatPaisa(receivable)} to collect, and up to ${formatPaisa(unsettled)} collected and not yet settled or recorded as kept by the courier; partial amounts are fine.`} />
+            <Field name="amountTaka" label="Amount (BDT)" required inputMode="decimal" hint={`Up to ${bdt(receivable)} to collect, and up to ${bdt(unsettled)} collected and not yet settled or recorded as kept by the courier; partial amounts are fine.`} />
             <Field name="occurredOn" label="Date" required defaultValue={today} hint="YYYY-MM-DD, not in the future." />
             <Field name="reference" label="Reference" maxLength={100} hint="Optional, for example the courier's statement number." />
           </ActionForm>

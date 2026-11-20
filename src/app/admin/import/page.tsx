@@ -11,7 +11,7 @@ export default async function ImportPage() {
   await requireAdmin("catalog:read", "catalog:write");
   const recent = await listImports(getDb());
   return (
-    <AdminShell title="Import products" current="import">
+    <AdminShell title="Import products" current="products">
       <Section title="1. Get the template">
         <p className="text-sm text-gray-700">
           One row per SKU. Rows with the same product_slug make one product; its name and other product columns are read from its first row. Prices are in Taka (850 or 850.50),

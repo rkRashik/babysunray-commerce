@@ -64,8 +64,8 @@ test("the dashboard shows real queues and links to the matching order list; repo
 
   await page.locator('[data-queue="to_pack"]').getByRole("link", { name: /^Show all/ }).click();
   await expect(page.getByRole("status").first()).toContainText("Confirmed, to pack");
-  await expect(page.getByRole("list", { name: "Orders" }).getByRole("link").first()).toBeVisible();
-  const ids = await page.getByRole("list", { name: "Orders" }).getByRole("link").evaluateAll((links) => links.map((a) => (a as HTMLAnchorElement).href));
+  await expect(page.getByRole("table", { name: "Orders" }).getByRole("link").first()).toBeVisible();
+  const ids = await page.getByRole("table", { name: "Orders" }).getByRole("link").evaluateAll((links) => links.map((a) => (a as HTMLAnchorElement).href));
   expect(ids).toContain(orderUrl);
 
   // An Owner-chosen low-stock view, and a rejected value.

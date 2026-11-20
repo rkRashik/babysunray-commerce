@@ -40,7 +40,7 @@ test("founder acceptance: publish, shop as a separate customer, place a real COD
   await page.goto(`/admin/products/${product.productId}`);
   await page.getByRole("button", { name: "Mark the current content as reviewed" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Review recorded" })).toBeVisible();
-  await expect(page.getByTestId("publication-rule")).toContainText("PROPOSED rule");
+  await expect(page.getByTestId("publication-rule")).toContainText("trial set of requirements");
   await page.getByRole("button", { name: "Publish to the shop" }).click();
   await expect(page.getByTestId("publication-state")).toContainText("Published");
   // Publishing opens nothing to the public.

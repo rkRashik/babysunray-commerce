@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { clearSignInLimits, signIn, submitAndWait, testDatabase, uniqueName } from "./support";
+import { clearSignInLimits, fillNewProduct, signIn, submitAndWait, testDatabase, uniqueName } from "./support";
 
 // The Owner's catalogue and stock work in a real browser: every step goes through the Server Actions, the
 // shared operations and PostgreSQL. Fictional products only.
@@ -13,12 +13,9 @@ const BANGLA_NAME = "সুতির রম্পার";
 const BANGLA_DESCRIPTION = "নরম সুতি, শিশুর ত্বকের জন্য।";
 
 async function createProduct(page: Page, slug: string, nameEn = "E2E Cotton Romper"): Promise<string> {
-  await page.getByRole("link", { name: "New product" }).click();
+  await page.getByRole("link", { name: "Add product" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "New draft product" })).toBeVisible();
-  await page.getByLabel("Slug").fill(slug);
-  await page.getByLabel("Name (English)").fill(nameEn);
-  await page.getByLabel("Name (Bangla)").fill(BANGLA_NAME);
-  await page.getByLabel("Description (Bangla)").fill(BANGLA_DESCRIPTION);
+  await fillNewProduct(page, { slug, nameEn, nameBn: BANGLA_NAME, descriptionBn: BANGLA_DESCRIPTION });
   await page.getByRole("button", { name: "Create draft" }).click();
   await expect(page.getByRole("status")).toHaveText("Draft product created.");
   const match = /\/admin\/products\/([0-9a-f-]{36})/.exec(page.url());
@@ -151,9 +148,8 @@ test("a retry after a lost response does not record the movement twice", async (
 
 test("wrong inputs get understandable errors and keep what was typed", async ({ page }) => {
   const { slug, sku } = uniqueName("e2e-err");
-  await page.getByRole("link", { name: "New product" }).click();
-  await page.getByLabel("Slug").fill("Not A Valid Slug!");
-  await page.getByLabel("Name (Bangla)").fill(BANGLA_NAME);
+  await page.getByRole("link", { name: "Add product" }).click();
+  await fillNewProduct(page, { slug: "Not A Valid Slug!", nameBn: BANGLA_NAME });
   await page.getByRole("button", { name: "Create draft" }).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText("Slug");
   await expect(page.getByLabel("Slug")).toHaveValue("Not A Valid Slug!");

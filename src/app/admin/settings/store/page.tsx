@@ -41,7 +41,7 @@ export default async function StoreSettingsPage({ searchParams }: { searchParams
           {message}
         </p>
       ) : null}
-      <Section title="Name, description and contact · নাম ও যোগাযোগ">
+      <Section title="Name, description and contact">
         <p className="text-sm text-gray-700">What customers see in the shop and in emails. Leave a field empty to show nothing (or the installation default).</p>
         <ActionForm action={updateStoreIdentityAction} idempotencyKey={randomUUID()} hidden={{ version }} submitLabel="Save">
           <Field name="storeName" label="Store name" maxLength={60} defaultValue={settings?.storeName ?? ""} hint={`Shown now: ${identity.storeName}`} />
@@ -53,7 +53,7 @@ export default async function StoreSettingsPage({ searchParams }: { searchParams
           <Field name="contactMessenger" label="Messenger link" maxLength={200} defaultValue={settings?.contactMessenger ?? ""} hint="For example https://m.me/yourpage" />
         </ActionForm>
       </Section>
-      <Section title="Logo · লোগো">
+      <Section title="Logo">
         <div className="rounded-xl bg-gray-50 p-4">
           <BrandLogo name={identity.storeName} logo={identity.logo} height={48} textClassName="text-[1.75rem]" />
         </div>
@@ -79,7 +79,7 @@ export default async function StoreSettingsPage({ searchParams }: { searchParams
           </form>
         ) : null}
       </Section>
-      <Section title="Email · ইমেইল">
+      <Section title="Email">
         <p className="text-sm" data-testid="email-state">
           {emailAvailable()
             ? "Email is set up: customers can create accounts with email and reset their passwords."

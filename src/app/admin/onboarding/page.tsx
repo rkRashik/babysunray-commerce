@@ -17,7 +17,7 @@ export default async function OnboardingPage() {
   return (
     <AdminShell title="Store setup" current="onboarding">
       <p className="text-sm text-gray-700" data-testid="setup-progress">
-        {done} of {required.length} essential steps done · প্রয়োজনীয় ধাপ {done}/{required.length}। You can do them in any order, and change everything later.
+        {done} of {required.length} essential steps done. You can do them in any order, and change everything later.
       </p>
       <ol className="space-y-2">
         {steps.map((s, i) => (
@@ -26,7 +26,7 @@ export default async function OnboardingPage() {
               {s.done ? <CheckCircle2 aria-hidden="true" className="mt-0.5 shrink-0 text-green-700" size={22} /> : <Circle aria-hidden="true" className="mt-0.5 shrink-0 text-gray-400" size={22} />}
               <span className="min-w-0">
                 <span className="block font-semibold">
-                  {i + 1}. {s.title} <span lang="bn" className="font-normal text-gray-600">· {s.titleBn}</span>
+                  {i + 1}. {s.title}
                 </span>
                 <span className="block text-sm text-gray-700">{s.detail}</span>
                 <span className="mt-1 block text-xs font-semibold">{s.done ? "Done" : s.required ? "To do" : "Optional"}</span>

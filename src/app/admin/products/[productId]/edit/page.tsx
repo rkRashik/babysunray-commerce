@@ -6,10 +6,13 @@ import { getProductWithVariants, listCategories } from "@/modules/catalogue/serv
 import { DomainError } from "@/modules/domain-error";
 import { updateProductAction } from "../../../actions";
 import { ActionForm, Checkbox, Field, SelectField } from "../../../_components/action-form";
+import { LanguageTabs } from "../../../_components/language-tabs";
 import { AdminShell, Section, productTitle } from "../../../_components/shell";
 import { requireAdmin } from "../../../_lib/session";
 
 export const metadata = { title: "Edit product · Admin" };
+
+const empty = (values: (string | null)[]) => values.filter((v) => !v || v.trim() === "").length;
 
 // Edits a draft product's content in both languages. The form carries the version it was rendered from, so a
 // save after someone else's change is refused instead of silently overwriting it. Nothing is translated or
@@ -44,14 +47,44 @@ export default async function EditProductPage({ params }: { params: Promise<{ pr
     <AdminShell title="Edit details" breadcrumbs={crumbs}>
       <Section title="Product details">
         <p className="text-sm text-gray-700">
-          Slug: <span className="font-mono">{product.slug}</span> (cannot be changed). Empty a field to remove it; at least one name must remain. Write each language yourself:
+          Web address: <span className="font-mono">{product.slug}</span> (cannot be changed). Empty a field to remove it; at least one name must remain. Write each language yourself:
           nothing is translated automatically.
         </p>
         <ActionForm action={updateProductAction} idempotencyKey={randomUUID()} hidden={{ productId: product.id, version: String(product.version) }} submitLabel="Save changes">
-          <Field name="nameEn" label="Name (English)" maxLength={200} defaultValue={product.nameEn ?? ""} hint="A name in English or Bangla is required." />
-          <Field name="nameBn" label="Name (Bangla)" maxLength={200} lang="bn" defaultValue={product.nameBn ?? ""} />
-          <Field name="descriptionEn" label="Description (English)" multiline maxLength={5000} defaultValue={product.descriptionEn ?? ""} />
-          <Field name="descriptionBn" label="Description (Bangla)" multiline maxLength={5000} lang="bn" defaultValue={product.descriptionBn ?? ""} />
+          <LanguageTabs
+            emptyEn={empty([product.nameEn, product.descriptionEn, product.fabricEn, product.careEn])}
+            emptyBn={empty([product.nameBn, product.descriptionBn, product.fabricBn, product.careBn])}
+            english={
+              <>
+                <Field name="nameEn" label="Name (English)" maxLength={200} defaultValue={product.nameEn ?? ""} hint="A name in English or Bangla is required." />
+                <Field name="descriptionEn" label="Description (English)" multiline maxLength={5000} defaultValue={product.descriptionEn ?? ""} />
+                <Field
+                  name="fabricEn"
+                  label="Fabric (English)"
+                  multiline
+                  maxLength={1000}
+                  defaultValue={product.fabricEn ?? ""}
+                  hint="Only what you can show: the care label or the supplier's document. No claims such as organic, hypoallergenic or certified without evidence."
+                />
+                <Field name="careEn" label="Care instructions (English)" multiline maxLength={1000} defaultValue={product.careEn ?? ""} />
+                <Field name="sizeGuidanceEn" label="Size or age guidance, optional (English)" multiline maxLength={1000} defaultValue={product.sizeGuidanceEn ?? ""} />
+              </>
+            }
+            bangla={
+              <>
+                <Field name="nameBn" label="Name (Bangla)" maxLength={200} lang="bn" defaultValue={product.nameBn ?? ""} />
+                <Field name="descriptionBn" label="Description (Bangla)" multiline maxLength={5000} lang="bn" defaultValue={product.descriptionBn ?? ""} />
+                <Field name="fabricBn" label="Fabric (Bangla)" multiline maxLength={1000} lang="bn" defaultValue={product.fabricBn ?? ""} />
+                <Field name="careBn" label="Care instructions (Bangla)" multiline maxLength={1000} lang="bn" defaultValue={product.careBn ?? ""} />
+                <Field name="sizeGuidanceBn" label="Size or age guidance, optional (Bangla)" multiline maxLength={1000} lang="bn" defaultValue={product.sizeGuidanceBn ?? ""} />
+              </>
+            }
+          />
+          <Checkbox
+            name="fabricConfirmed"
+            label="I confirm the fabric statement above is accurate and backed by evidence. Changing the text needs a new confirmation."
+            defaultChecked={product.fabricConfirmedAt !== null}
+          />
           <SelectField
             name="categoryId"
             label="Category"
@@ -60,24 +93,6 @@ export default async function EditProductPage({ params }: { params: Promise<{ pr
             hint="Categories are created under Categories."
           />
           <Checkbox name="featured" label="Featured (shown first in the storefront preview)" defaultChecked={product.featured} />
-          <Field
-            name="fabricEn"
-            label="Fabric (English)"
-            multiline
-            maxLength={1000}
-            defaultValue={product.fabricEn ?? ""}
-            hint="Only what you can show: the care label or the supplier's document. No claims such as organic, hypoallergenic or certified without evidence."
-          />
-          <Field name="fabricBn" label="Fabric (Bangla)" multiline maxLength={1000} lang="bn" defaultValue={product.fabricBn ?? ""} />
-          <Checkbox
-            name="fabricConfirmed"
-            label="I confirm the fabric statement above is accurate and backed by evidence. Changing the text needs a new confirmation."
-            defaultChecked={product.fabricConfirmedAt !== null}
-          />
-          <Field name="careEn" label="Care instructions (English)" multiline maxLength={1000} defaultValue={product.careEn ?? ""} />
-          <Field name="careBn" label="Care instructions (Bangla)" multiline maxLength={1000} lang="bn" defaultValue={product.careBn ?? ""} />
-          <Field name="sizeGuidanceEn" label="Size or age guidance, optional (English)" multiline maxLength={1000} defaultValue={product.sizeGuidanceEn ?? ""} />
-          <Field name="sizeGuidanceBn" label="Size or age guidance, optional (Bangla)" multiline maxLength={1000} lang="bn" defaultValue={product.sizeGuidanceBn ?? ""} />
         </ActionForm>
         <Link href={back} className="inline-block text-sm underline">
           Cancel

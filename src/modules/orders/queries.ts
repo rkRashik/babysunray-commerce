@@ -16,7 +16,7 @@ import {
 import { validateId } from "../catalogue/rules";
 import { DomainError, invalidInput } from "../domain-error";
 import type { Order } from "./internal";
-import { type OrderStatus, parseOrderNumber } from "./rules";
+import { normalizeBdPhone, type OrderStatus, parseOrderNumber } from "./rules";
 
 // Read models for the Owner (Admin and API). The guest view is in tracking.ts and shows far less.
 
@@ -116,18 +116,71 @@ export function queueCondition(queue: OrderQueue): SQL {
   }
 }
 
+/** Needs the Owner now: past its verification deadline, expired, or with an open cancellation request. */
+const attentionCondition = sql`(${orders.orderStatus} = 'verification_expired'
+  or (${orders.orderStatus} = 'pending_verification' and ${orders.verificationExpiresAt} <= now())
+  or ${openRequest})`;
+
+/**
+ * How many orders each work queue (and "needs attention") holds now: one statement, one pass over the orders, using
+ * the same conditions as the list a chip opens, so a count and its list always agree.
+ */
+export async function orderQueueCounts(db: Db): Promise<{ attention: number; queues: Record<OrderQueue, number> }> {
+  const names = Object.keys(ORDER_QUEUES) as OrderQueue[];
+  const { rows } = await db.execute<Record<string, string>>(
+    sql`select count(*) filter (where ${attentionCondition}) as attention, ${sql.join(
+      names.map((q) => sql`count(*) filter (where ${queueCondition(q)}) as ${sql.identifier(q)}`),
+      sql`, `,
+    )} from ${orders}`,
+  );
+  const row = rows[0];
+  return { attention: Number(row.attention), queues: Object.fromEntries(names.map((q) => [q, Number(row[q])])) as Record<OrderQueue, number> };
+}
+
 export type OrderKey = { createdAt: string; id: string };
 const createdAtKey = sql<string>`to_char(${orders.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
+/** What a free-text order search is: an order number, a Bangladesh mobile number, or part of a customer's name. */
+export type OrderSearch = { kind: "number"; number: number } | { kind: "phone"; phone: string } | { kind: "name"; name: string };
+export const MIN_NAME_SEARCH = 2;
+export const MAX_ORDER_SEARCH = 100;
+
+/**
+ * Reads a search box: a Bangladesh mobile number in any common form (+880, 880, 0, spaces, hyphens, Bangla digits) is a
+ * phone search on the normalized number; "ORD-000042", "#42" or a short number is an order number; anything else of 2 to
+ * 100 characters is part of a name. Null for an empty or unusable term.
+ */
+export function classifyOrderSearch(raw: unknown): OrderSearch | null {
+  if (typeof raw !== "string") return null;
+  const term = raw.normalize("NFC").trim();
+  if (term === "" || term.length > MAX_ORDER_SEARCH || /[\u0000-\u001f\u007f]/.test(term)) return null;
+  try {
+    return { kind: "phone", phone: normalizeBdPhone(term) };
+  } catch {
+    // not a phone number
+  }
+  // Order numbers are short; a long run of digits is neither an order number nor a name. Bare digits starting 01 are an
+  // incomplete mobile number (only whole numbers are searched), not an order number.
+  if (/^(ORD-?|#)?\s*[0-9]{1,9}$/i.test(term) && !/^01[0-9]{2,}$/.test(term)) {
+    const number = parseOrderNumber(term.replace(/\s/g, ""));
+    if (number !== null) return { kind: "number", number };
+  }
+  if (/^[0-9+\s-]+$/.test(term)) return null;
+  return term.length >= MIN_NAME_SEARCH ? { kind: "name", name: term } : null;
+}
+
+const escapeLike = (term: string) => `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
 /**
  * Orders newest first, in keyset pages. Filters: commercial status, "needs attention" (pending past its
- * deadline, expired, or with an open cancellation request), and the order number. Contact details are not
- * searchable here, so they never travel in a URL.
+ * deadline, expired, or with an open cancellation request), a work queue, the order number, and a search (number, exact
+ * normalized phone, or part of the customer's name). Each page is bounded (at most 100 rows) and ordered by the
+ * (created_at, id) index; the caller keeps contact details out of URLs.
  */
 export async function listOrders(
   db: Db,
-  options: { limit: number; status?: OrderStatus; attention?: boolean; queue?: OrderQueue; number?: string; after?: OrderKey },
-): Promise<{ items: (Order & { key: OrderKey })[]; hasMore: boolean }> {
+  options: { limit: number; status?: OrderStatus; attention?: boolean; queue?: OrderQueue; number?: string; search?: OrderSearch; after?: OrderKey },
+): Promise<{ items: (Order & { key: OrderKey; openRequest: boolean })[]; hasMore: boolean }> {
   const { limit, status, attention, queue, after } = options;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw invalidInput("limit", "must be 1 to 100");
   let number: number | undefined;
@@ -136,26 +189,26 @@ export async function listOrders(
     if (parsed === null) throw invalidInput("number", "must be an order number such as ORD-000042");
     number = parsed;
   }
+  const search = options.search;
   const rows = await db
-    .select({ order: orders, key: createdAtKey })
+    .select({ order: orders, key: createdAtKey, openRequest: sql<boolean>`${openRequest}` })
     .from(orders)
     .where(
       and(
         status ? eq(orders.orderStatus, status) : undefined,
         number !== undefined ? eq(orders.number, number) : undefined,
+        search?.kind === "number" ? eq(orders.number, search.number) : undefined,
+        search?.kind === "phone" ? eq(orders.customerPhone, search.phone) : undefined,
+        search?.kind === "name" ? sql`normalize(${orders.customerName}, NFC) ilike ${escapeLike(search.name)}` : undefined,
         queue ? queueCondition(queue) : undefined,
-        attention
-          ? sql`(${orders.orderStatus} = 'verification_expired'
-              or (${orders.orderStatus} = 'pending_verification' and ${orders.verificationExpiresAt} <= now())
-              or exists (select 1 from ${cancellationRequests} where ${cancellationRequests.orderId} = ${orders.id} and ${cancellationRequests.status} = 'open'))`
-          : undefined,
+        attention ? attentionCondition : undefined,
         after ? sql`(${orders.createdAt}, ${orders.id}) < (${after.createdAt}::timestamptz, ${validateId(after.id, "cursor")}::uuid)` : undefined,
       ),
     )
     .orderBy(desc(orders.createdAt), desc(orders.id))
     .limit(limit + 1);
   return {
-    items: rows.slice(0, limit).map((r) => ({ ...r.order, key: { createdAt: r.key, id: r.order.id } })),
+    items: rows.slice(0, limit).map((r) => ({ ...r.order, key: { createdAt: r.key, id: r.order.id }, openRequest: r.openRequest })),
     hasMore: rows.length > limit,
   };
 }

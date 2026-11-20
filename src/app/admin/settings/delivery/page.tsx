@@ -7,6 +7,7 @@ import { ActionForm, Checkbox, Field } from "../../_components/action-form";
 import { AdminShell, Section, formatTime, noticeFor } from "../../_components/shell";
 import { requireAdmin } from "../../_lib/session";
 import { setDeliveryZoneAction } from "../../orders/actions";
+import { bdt } from "../../orders/_components/labels";
 
 export const metadata = { title: "Delivery charges · Admin" };
 
@@ -27,7 +28,7 @@ export default async function DeliverySettingsPage({ searchParams }: { searchPar
           return (
             <Section key={code} title={ZONE_LABELS[code]}>
               <p className="text-sm text-gray-700" data-testid={`zone-${code}`}>
-                {zone ? `${zone.active ? "Active" : "Not taking orders"} · ৳ ${formatPaisa(zone.chargePaisa)} · last changed ${formatTime(zone.updatedAt)}` : "Not configured yet: orders to this zone are refused."}
+                {zone ? `${zone.active ? "Active" : "Not taking orders"} · ${bdt(zone.chargePaisa)} · last changed ${formatTime(zone.updatedAt)}` : "Not configured yet: orders to this zone are refused."}
               </p>
               <ActionForm action={setDeliveryZoneAction} idempotencyKey={randomUUID()} hidden={{ code, version: zone ? String(zone.version) : "" }} submitLabel="Save">
                 <Field name="chargeTaka" label="Charge (BDT)" required inputMode="decimal" defaultValue={zone ? formatPaisa(zone.chargePaisa) : ""} hint="0 to 10000, up to two decimals." />

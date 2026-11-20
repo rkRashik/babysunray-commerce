@@ -22,6 +22,22 @@ export function normalizeSku(raw: string): string {
   return sku;
 }
 
+/**
+ * A web-address stem from a product name: lowercase ASCII letters and digits joined by single hyphens, at most 60 characters.
+ * Accents are dropped; a name with no Latin letters or digits (for example a Bangla-only name) gives "product".
+ */
+export function slugify(name: string): string {
+  const stem = name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/g, "");
+  return stem || "product";
+}
+
 /** URL slug: lowercase ASCII letters and digits separated by single hyphens. */
 export function validateSlug(raw: string): string {
   if (typeof raw !== "string") throw invalidInput("slug", "must be text");

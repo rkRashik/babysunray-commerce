@@ -6,11 +6,11 @@ import { getDb } from "@/db/client";
 import { getProductWithVariants, getVariant } from "@/modules/catalogue/service";
 import { DomainError } from "@/modules/domain-error";
 import { getStockLevel, listStockMovementsPage } from "@/modules/inventory/service";
-import { formatPaisa } from "@/modules/money";
 import { adjustStockAction, receiveStockAction } from "../../actions";
 import { ActionForm, Choice, Field } from "../../_components/action-form";
 import { AdminShell, Section, formatTime, noticeFor, productTitle } from "../../_components/shell";
 import { requireAdmin } from "../../_lib/session";
+import { bdt } from "../../orders/_components/labels";
 
 export const metadata = { title: "Stock · Admin" };
 
@@ -59,7 +59,7 @@ export default async function SkuPage({ params, searchParams }: Props) {
           <span className="font-semibold tabular-nums">{level.available}</span>
         </p>
         <p className="text-sm text-gray-700">
-          Units on hand. {[variant.size, variant.colour].filter(Boolean).join(", ") || "No size or colour"} · ৳ {formatPaisa(variant.pricePaisa)} · variant{" "}
+          Units on hand. {[variant.size, variant.colour].filter(Boolean).join(", ") || "No size or colour"} · {bdt(variant.pricePaisa)} · variant{" "}
           {variant.status}.
         </p>
       </Section>

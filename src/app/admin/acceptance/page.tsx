@@ -14,7 +14,7 @@ import { formatTime, noticeFor, AdminShell, Section } from "../_components/shell
 import { requireAdmin } from "../_lib/session";
 import { endAcceptanceAction, startAcceptanceAction } from "./actions";
 
-export const metadata = { title: "Founder acceptance · Admin" };
+export const metadata = { title: "Shop acceptance · Admin" };
 
 // Founder acceptance (ADR-0011): the real shop, real orders and real stock, for the founder only and on the staging
 // database only. This page says whether it can run here, starts or ends it in this browser, and links to the shop.
@@ -39,7 +39,7 @@ export default async function AcceptancePage({ searchParams }: { searchParams: P
   const mine = pass?.userId === principal.userId;
   const cdn = cdnConfig(process.env);
   return (
-    <AdminShell title="Founder acceptance" current="acceptance" notice={noticeFor(done)}>
+    <AdminShell title="Shop acceptance" current="acceptance" notice={noticeFor(done)}>
       <div role="note" className="rounded border border-gray-400 bg-white p-4 text-sm">
         <p className="font-semibold">The real shop, for you only, on the staging database only.</p>
         <p className="mt-1">
@@ -52,7 +52,7 @@ export default async function AcceptancePage({ searchParams }: { searchParams: P
         <dl className="divide-y divide-gray-200">
           <div className={ROW}>
             <dt className="text-gray-600">Public launch gate</dt>
-            <dd data-testid="gate-state">{publicShopGate().open ? "Open" : "Closed (opening it is a separate founder decision)"}</dd>
+            <dd data-testid="gate-state">{publicShopGate().open ? "Open" : "Closed (opening it is a separate decision)"}</dd>
           </div>
           <div className={ROW}>
             <dt className="text-gray-600">Database</dt>
@@ -114,7 +114,7 @@ export default async function AcceptancePage({ searchParams }: { searchParams: P
               Open the shop in English
             </Link>
             <Link href="/bn" className="of-btn of-btn-line" data-testid="open-shop-bn">
-              <span lang="bn">বাংলায় দোকান খুলুন</span>
+              Open the shop in Bangla
             </Link>
           </div>
         ) : null}

@@ -57,14 +57,6 @@ export function exactInteger(value: unknown): number {
 
 const bucket = (row: { count?: unknown; amount?: unknown } | undefined): Bucket => ({ count: exactInteger(row?.count), amountPaisa: exactInteger(row?.amount) });
 
-async function grouped(tx: Db, column: "source" | "order_status" | "fulfilment_status" | "payment_status", start: Date, end: Date) {
-  const { rows } = await tx.execute<{ key: string; count: string; amount: string }>(
-    sql`select ${sql.identifier(column)} as key, count(*) as count, coalesce(sum(total_paisa), 0) as amount
-          from orders where created_at >= ${start} and created_at < ${end} group by 1 order by 1`,
-  );
-  return Object.fromEntries(rows.map((r) => [r.key, bucket(r)]));
-}
-
 export async function getOutstanding(tx: Db): Promise<Outstanding> {
   const { rows } = await tx.execute<Record<string, string>>(sql`
     select
@@ -103,52 +95,69 @@ export async function getOutstanding(tx: Db): Promise<Outstanding> {
 
 const SNAPSHOT = { isolationLevel: "repeatable read", accessMode: "read only" } as const;
 
+/**
+ * Three statements, whatever the range: the orders received (total and the four breakdowns, one UNION ALL), the money,
+ * costs and stock movements (one UNION ALL), and the outstanding state. A hosted database costs a round trip per
+ * statement, so fewer statements is what makes the page fast.
+ */
 export async function getPeriodReport(db: Db, range: DateRange): Promise<PeriodReport> {
   const { start, end } = rangeInstants(range);
   return db.transaction(async (tx) => {
-    const { rows: now } = await tx.execute<{ now: string }>(sql`select now() as now`);
-    const { rows: total } = await tx.execute<{ count: string; amount: string }>(
-      sql`select count(*) as count, coalesce(sum(total_paisa), 0) as amount from orders where created_at >= ${start} and created_at < ${end}`,
-    );
-    const { rows: money } = await tx.execute<{ kind: string; count: string; amount: string }>(
-      sql`select kind, count(*) as count, sum(amount_paisa) as amount from payment_entries
-           where occurred_on between ${range.from}::date and ${range.to}::date group by kind`,
-    );
-    const byKind = (kind: string) => bucket(money.find((m) => m.kind === kind));
+    const inRange = sql`created_at >= ${start} and created_at < ${end}`;
+    const by = (dim: string, column: string) =>
+      sql`select ${dim}::text as dim, ${sql.identifier(column)}::text as key, count(*) as count, coalesce(sum(total_paisa), 0) as amount, null::timestamptz as now from orders where ${inRange} group by 2`;
+    const { rows: received } = await tx.execute<{ dim: string; key: string | null; count: string; amount: string; now: string | null }>(sql`
+      select 'total'::text as dim, null::text as key, count(*) as count, coalesce(sum(total_paisa), 0) as amount, now() as now from orders where ${inRange}
+      union all ${by("source", "source")}
+      union all ${by("order_status", "order_status")}
+      union all ${by("fulfilment_status", "fulfilment_status")}
+      union all ${by("payment_status", "payment_status")}
+      order by 1, 2`);
+    const breakdown = (dim: string) => Object.fromEntries(received.filter((r) => r.dim === dim).map((r) => [r.key as string, bucket(r)]));
+    const totalRow = received.find((r) => r.dim === "total");
     // An RTO charge can be corrected; the order's current charge counts in the range of its latest recording.
-    const { rows: rto } = await tx.execute<{ count: string; amount: string }>(sql`
-      select count(*) as count, coalesce(sum(o.rto_charge_paisa), 0) as amount from orders o
+    const { rows: recorded } = await tx.execute<{ section: string; kind: string; count: string; amount: string }>(sql`
+      select 'money'::text as section, kind::text as kind, count(*) as count, coalesce(sum(amount_paisa), 0) as amount from payment_entries
+       where occurred_on between ${range.from}::date and ${range.to}::date group by kind
+      union all
+      select 'rto', 'rto', count(*), coalesce(sum(o.rto_charge_paisa), 0) from orders o
        where o.rto_charge_paisa is not null
          and (select max(e.created_at) from order_events e where e.order_id = o.id and e.event = 'rto_charge_recorded') >= ${start}
-         and (select max(e.created_at) from order_events e where e.order_id = o.id and e.event = 'rto_charge_recorded') < ${end}`);
-    const { rows: shipping } = await tx.execute<{ paid_by: string; count: string; amount: string }>(sql`
-      select shipping_paid_by as paid_by, count(*) as count, coalesce(sum(return_shipping_cost_paisa), 0) as amount from returns
-       where return_shipping_cost_paisa is not null and received_at >= ${start} and received_at < ${end} group by 1`);
-    const { rows: stock } = await tx.execute<{ kind: string; count: string; amount: string }>(sql`
-      select case when movement_type = 'adjustment' then (case when quantity_delta > 0 then 'adjustment_in' else 'adjustment_out' end) else movement_type end as kind,
-             count(*) as count, coalesce(sum(quantity_delta), 0) as amount
-        from stock_movements where created_at >= ${start} and created_at < ${end} group by 1`);
-    const units = (kind: string) => bucket(stock.find((s) => s.kind === kind));
+         and (select max(e.created_at) from order_events e where e.order_id = o.id and e.event = 'rto_charge_recorded') < ${end}
+      union all
+      select 'shipping', shipping_paid_by::text, count(*), coalesce(sum(return_shipping_cost_paisa), 0) from returns
+       where return_shipping_cost_paisa is not null and received_at >= ${start} and received_at < ${end} group by shipping_paid_by
+      union all
+      select 'stock', case when movement_type = 'adjustment' then (case when quantity_delta > 0 then 'adjustment_in' else 'adjustment_out' end) else movement_type::text end,
+             count(*), coalesce(sum(quantity_delta), 0)
+        from stock_movements where created_at >= ${start} and created_at < ${end} group by 2`);
+    const pick = (section: string, kind: string) => bucket(recorded.find((r) => r.section === section && r.kind === kind));
     return {
       range,
       start,
       end,
-      generatedAt: new Date(now[0].now),
+      generatedAt: new Date(totalRow?.now as string),
       received: {
-        total: bucket(total[0]),
-        bySource: await grouped(tx, "source", start, end),
-        byOrderStatus: await grouped(tx, "order_status", start, end),
-        byFulfilmentStatus: await grouped(tx, "fulfilment_status", start, end),
-        byPaymentStatus: await grouped(tx, "payment_status", start, end),
+        total: bucket(totalRow),
+        bySource: breakdown("source"),
+        byOrderStatus: breakdown("order_status"),
+        byFulfilmentStatus: breakdown("fulfilment_status"),
+        byPaymentStatus: breakdown("payment_status"),
       },
-      money: { collected: byKind("collected"), settled: byKind("settled"), deducted: byKind("deducted"), refunded: byKind("refunded") },
+      money: { collected: pick("money", "collected"), settled: pick("money", "settled"), deducted: pick("money", "deducted"), refunded: pick("money", "refunded") },
       costs: {
-        rtoCharges: bucket(rto[0]),
-        returnShippingBusiness: bucket(shipping.find((s) => s.paid_by === "business")),
-        returnShippingCustomer: bucket(shipping.find((s) => s.paid_by === "customer")),
+        rtoCharges: pick("rto", "rto"),
+        returnShippingBusiness: pick("shipping", "business"),
+        returnShippingCustomer: pick("shipping", "customer"),
       },
       // amountPaisa here is units, not money (the Bucket shape is shared).
-      stock: { receipts: units("receipt"), dispatches: units("dispatch"), adjustmentsIn: units("adjustment_in"), adjustmentsOut: units("adjustment_out"), returnRestocks: units("return_restock") },
+      stock: {
+        receipts: pick("stock", "receipt"),
+        dispatches: pick("stock", "dispatch"),
+        adjustmentsIn: pick("stock", "adjustment_in"),
+        adjustmentsOut: pick("stock", "adjustment_out"),
+        returnRestocks: pick("stock", "return_restock"),
+      },
       outstanding: await getOutstanding(tx),
     };
   }, SNAPSHOT);

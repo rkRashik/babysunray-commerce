@@ -45,7 +45,7 @@ export default async function SetupPage() {
       <div className={card}>
         <div>
           <h1 className="text-[1.375rem] font-bold">Set up Admin</h1>
-          <p className="text-sm text-gray-700">Create the first Owner account · প্রথম ওনার অ্যাকাউন্ট তৈরি করুন</p>
+          <p className="text-sm text-gray-700">Create the first Owner account</p>
         </div>
         {body}
       </div>

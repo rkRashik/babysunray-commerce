@@ -13,22 +13,21 @@ import {
   ListChecks,
   type LucideIcon,
   PackageCheck,
-  PackagePlus,
   Rocket,
   Shirt,
   Store,
   Truck,
-  Upload,
 } from "lucide-react";
 import Link from "next/link";
 import { BrandMark } from "@/app/_design/brand";
 import { flFontVariables } from "@/app/_design/fonts";
 import { currentStoreIdentity } from "@/app/_design/identity";
+import { DEFAULT_STORE_NAME } from "@/config/installation";
 import { SignOutButton } from "./auth-forms";
 import { AdminMenu } from "./admin-menu";
 
 type Crumb = { href: string; label: string; lang?: string };
-type Current = "dashboard" | "products" | "new" | "import" | "preparation" | "reviews" | "categories" | "orders" | "delivery" | "reports" | "counts" | "exports" | "media" | "preview" | "policies" | "launch" | "acceptance" | "onboarding" | "store" | "publication" | "security";
+type Current = "dashboard" | "products" | "preparation" | "reviews" | "categories" | "orders" | "delivery" | "reports" | "counts" | "exports" | "media" | "preview" | "policies" | "launch" | "acceptance" | "onboarding" | "store" | "publication" | "security";
 
 // Admin's navigation, grouped by the work it serves. Every Admin screen is reachable from here.
 const NAV: { group: string; items: { key: Current; href: string; label: string; icon: LucideIcon }[] }[] = [
@@ -44,9 +43,7 @@ const NAV: { group: string; items: { key: Current; href: string; label: string; 
     group: "Catalogue",
     items: [
       { key: "products", href: "/admin", label: "Products", icon: Shirt },
-      { key: "new", href: "/admin/products/new", label: "New product", icon: PackagePlus },
-      { key: "import", href: "/admin/import", label: "Import", icon: Upload },
-      { key: "preparation", href: "/admin/catalogue-preparation", label: "Preparation", icon: ListChecks },
+      { key: "preparation", href: "/admin/catalogue-preparation", label: "Catalogue checklist", icon: ListChecks },
       { key: "reviews", href: "/admin/product-reviews", label: "Product reviews", icon: ClipboardCheck },
       { key: "categories", href: "/admin/categories", label: "Categories", icon: FolderTree },
       { key: "media", href: "/admin/media-health", label: "Photo storage", icon: ImageIcon },
@@ -74,7 +71,7 @@ const NAV: { group: string; items: { key: Current; href: string; label: string; 
     items: [
       { key: "preview", href: "/admin/storefront-preview", label: "Storefront preview", icon: Eye },
       { key: "policies", href: "/admin/policies", label: "Policies", icon: FileText },
-      { key: "acceptance", href: "/admin/acceptance", label: "Founder acceptance", icon: Store },
+      { key: "acceptance", href: "/admin/acceptance", label: "Shop acceptance", icon: Store },
       { key: "launch", href: "/admin/launch-readiness", label: "Launch readiness", icon: Rocket },
     ],
   },
@@ -97,8 +94,11 @@ export async function AdminShell({
   breadcrumbs = [],
   current,
   actions,
+  wide = false,
 }: {
   title: string;
+  /** A wider page for data tables (Orders, Products, Reports). */
+  wide?: boolean;
   /** "bn" when the title is a Bangla product name. */
   titleLang?: string;
   children: React.ReactNode;
@@ -109,7 +109,11 @@ export async function AdminShell({
   /** Buttons or links beside the title (the page's main actions). */
   actions?: React.ReactNode;
 }) {
-  const { storeName } = await currentStoreIdentity();
+  const identity = await currentStoreIdentity();
+  // The installation's own name (Store settings, else STORE_NAME). Only a store with no name at all shows a neutral
+  // placeholder and a link to set it, never a made-up brand.
+  const named = identity.storeName !== DEFAULT_STORE_NAME;
+  const storeName = named ? identity.storeName : "Your store";
   return (
     <div className={`${adminSurface} min-h-screen lg:flex`}>
       <a
@@ -125,11 +129,17 @@ export async function AdminShell({
           </span>
           <div className="min-w-0 flex-1 leading-tight">
             <p className="truncate font-bold text-white">{storeName}</p>
-            <p className="text-[0.8125rem] text-[#bfae9b]">Admin</p>
+            {named ? (
+              <p className="text-[0.8125rem] text-[#bfae9b]">Admin</p>
+            ) : (
+              <Link href="/admin/settings/store" className="text-[0.8125rem] whitespace-nowrap text-[#e3c77e] underline underline-offset-2">
+                Set store name
+              </Link>
+            )}
           </div>
           <SignOutButton dark />
         </div>
-        <nav aria-label="Admin" className="hidden lg:block lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:px-3 lg:pb-5">
+        <nav aria-label="Admin" className="of-scroll hidden lg:block lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:px-3 lg:pb-5">
           <ul className="space-y-4">
             {NAV.map(({ group, items }) => (
               <li key={group}>
@@ -186,7 +196,7 @@ export async function AdminShell({
         </ul>
       </nav>
       <main id="main" tabIndex={-1} className="min-w-0 flex-1 focus:outline-none">
-        <div className="mx-auto max-w-5xl space-y-6 px-4 pt-6 pb-[calc(var(--of-bar-h)+2.5rem)] lg:px-10 lg:pt-10 lg:pb-16">
+        <div className={`mx-auto ${wide ? "max-w-[78rem]" : "max-w-5xl"} space-y-6 px-4 pt-6 pb-[calc(var(--of-bar-h)+2.5rem)] lg:px-10 lg:pt-10 lg:pb-16`}>
           <div className="space-y-2">
             {breadcrumbs.length ? (
               <nav aria-label="Breadcrumb" className="text-sm text-gray-600">

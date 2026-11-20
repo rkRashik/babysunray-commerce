@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { clearSignInLimits, ensureZones, seedSku, seedStorefrontProduct, signIn, testDatabase, uniqueName } from "./support";
+import { clearSignInLimits, fillNewProduct, ensureZones, seedSku, seedStorefrontProduct, signIn, testDatabase, uniqueName } from "./support";
 
 // The Admin on a phone-sized screen (Pixel 7 profile: touch, 412 px wide).
 
@@ -49,7 +49,7 @@ test("navigation and the main screens work without sideways scrolling", async ({
   await bar.getByRole("button", { name: "Menu" }).tap();
   const menu = page.getByRole("dialog", { name: "All pages" });
   await expect(menu).toBeVisible();
-  for (const name of ["Dashboard", "Orders", "Stock counts", "Products", "New product", "Import", "Categories", "Reports", "Exports", "Delivery charges", "Storefront preview", "Launch readiness"]) {
+  for (const name of ["Dashboard", "Orders", "Stock counts", "Products", "Categories", "Reports", "Exports", "Delivery charges", "Storefront preview", "Launch readiness"]) {
     await expect(menu.getByRole("link", { name, exact: true })).toBeVisible();
   }
   await noSideScroll(page);
@@ -57,15 +57,13 @@ test("navigation and the main screens work without sideways scrolling", async ({
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
   await expect(bar.getByRole("button", { name: "Menu" })).toBeFocused();
-  await bar.getByRole("button", { name: "Menu" }).tap();
-  await page.getByRole("dialog", { name: "All pages" }).getByRole("link", { name: "New product", exact: true }).tap();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await bar.getByRole("link", { name: "Products" }).tap();
+  await page.getByRole("link", { name: "Add product" }).tap();
   await expect(page.getByRole("heading", { level: 1, name: "New draft product" })).toBeVisible();
   await noSideScroll(page);
 
   const { slug, sku } = uniqueName("e2e-mob");
-  await page.getByLabel("Slug").fill(slug);
-  await page.getByLabel("Name (English)").fill("Mobile Romper");
+  await fillNewProduct(page, { slug, nameEn: "Mobile Romper" });
   await page.getByRole("button", { name: "Create draft" }).tap();
   await expect(page.getByRole("status")).toHaveText("Draft product created.");
   await noSideScroll(page);

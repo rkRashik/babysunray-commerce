@@ -96,9 +96,10 @@ test("templates, a file with problems, the corrected import, a lost answer retri
   await page.goto(`/admin?q=${tag}&missing=photo`);
   const romper = page.getByTestId(`product-${tag}-romper`);
   await expect(romper).toContainText("Fictional Romper");
-  await expect(romper.getByTestId("readiness-tally")).toContainText("approved 2/3");
-  await romper.getByRole("link", { name: /fabric statement/ }).click();
-  await expect(page).toHaveURL(/\/edit$/);
+  await expect(romper.getByTestId("product-readiness")).toContainText("missing");
+  await expect(romper.getByTestId("product-readiness")).toContainText(/fabric statement/i);
+  await romper.getByTestId("product-readiness").click();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Fictional Romper");
   await page.goto("/admin/catalogue-preparation");
   await expect(page.getByTestId("preparation-fabric")).toBeVisible();
   await expect(page.getByRole("button", { name: /publish/i })).toHaveCount(0);
