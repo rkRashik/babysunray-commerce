@@ -125,7 +125,7 @@ function QuickAction({ order, step, returnTo, idempotencyKey }: { order: Row; st
   const url = `/admin/orders/${order.id}`;
   if (step.kind === "link")
     return (
-      <Link href={url} className={`of-btn of-btn-sm ${step.label === "Open" ? "of-btn-line" : "of-btn-ink"}`} aria-label={`${step.label}: ${formatOrderNumber(order.number)}`}>
+      <Link prefetch={false} href={url} className={`of-btn of-btn-sm ${step.label === "Open" ? "of-btn-line" : "of-btn-ink"}`} aria-label={`${step.label}: ${formatOrderNumber(order.number)}`}>
         {step.label}
       </Link>
     );
@@ -329,7 +329,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                       ) : null}
                       <td>
                         <div className="flex items-center gap-1">
-                          <Link href={`/admin/orders/${o.id}`} className="font-bold whitespace-nowrap underline-offset-4 hover:underline">
+                          <Link prefetch={false} href={`/admin/orders/${o.id}`} className="font-bold whitespace-nowrap underline-offset-4 hover:underline">
                             {formatOrderNumber(o.number)}
                           </Link>
                           <button type="button" data-quickview={o.id} className="of-iconbtn" aria-label={`Quick view ${formatOrderNumber(o.number)}`} title="Quick view">
@@ -376,7 +376,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               <li key={o.id} className="space-y-2 px-4 py-3">
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="flex items-center gap-1">
-                    <Link href={`/admin/orders/${o.id}`} className="inline-flex min-h-11 items-center font-bold underline-offset-4 hover:underline">
+                    <Link prefetch={false} href={`/admin/orders/${o.id}`} className="inline-flex min-h-11 items-center font-bold underline-offset-4 hover:underline">
                       {formatOrderNumber(o.number)}
                     </Link>
                     <button type="button" data-quickview={o.id} className="of-iconbtn" aria-label={`Quick view ${formatOrderNumber(o.number)}`}>

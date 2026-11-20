@@ -333,7 +333,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                           </td>
                         ) : null}
                         <td>
-                          <Link href={`/admin/products/${p.id}`} className="of-row-link flex items-center gap-3">
+                          <Link prefetch={false} href={`/admin/products/${p.id}`} className="of-row-link flex items-center gap-3">
                             <Thumb mediaId={s?.firstMediaId ?? null} />
                             <span className="min-w-0 max-w-72">
                               <Names p={p} />
@@ -357,6 +357,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                         <td className="of-sticky-end">
                           <div className="flex justify-end">
                             <Link
+                              prefetch={false}
                               href={p.status === "draft" ? `/admin/products/${p.id}/edit` : `/admin/products/${p.id}`}
                               className="of-btn of-btn-line of-btn-sm"
                               aria-label={`${p.status === "draft" ? "Edit" : "View"}: ${p.nameEn ?? p.nameBn ?? "product"}`}
@@ -380,7 +381,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
               return (
                 <li key={p.id}>
                   {/* On a phone the whole row is one large link; the details are on the product page. */}
-                  <Link href={`/admin/products/${p.id}`} className="of-row-link flex gap-3 px-4 py-3 hover:bg-[#fdfaf5] focus-visible:bg-[#fdfaf5]">
+                  <Link prefetch={false} href={`/admin/products/${p.id}`} className="of-row-link flex gap-3 px-4 py-3 hover:bg-[#fdfaf5] focus-visible:bg-[#fdfaf5]">
                     <Thumb mediaId={s?.firstMediaId ?? null} />
                     <span className="min-w-0 flex-1 space-y-1">
                       <Names p={p} />

@@ -59,7 +59,7 @@ function QueueCard({ q, now, urgent }: { q: Queue; now: Date; urgent: boolean })
           {q.oldest.slice(0, 5).map((o) => (
             <tr key={o.id}>
               <th scope="row" className="py-1 text-left font-normal">
-                <Link href={`/admin/orders/${o.id}`} className="inline-flex min-h-11 items-center font-medium underline underline-offset-4 lg:min-h-9">
+                <Link prefetch={false} href={`/admin/orders/${o.id}`} className="inline-flex min-h-11 items-center font-medium underline underline-offset-4 lg:min-h-9">
                   {formatOrderNumber(o.number)}
                 </Link>
               </th>

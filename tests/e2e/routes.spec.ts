@@ -19,6 +19,8 @@ function watch(page: Page): { problems: Problem[]; seen: Set<string> } {
     // The bag's read-only price check (a Server Action) starts after hydration and is cancelled by this test's own next
     // navigation; that abort is the test leaving, not a failure of the page. Any other failure counts.
     if (r.headers()["next-action"] && r.failure()?.errorText === "net::ERR_ABORTED") return;
+    // A link prefetch (an RSC request) is cancelled when the test moves to the next page: the browser, not a failure.
+    if (/[?&]_rsc=/.test(r.url()) && r.method() === "GET" && r.failure()?.errorText === "net::ERR_ABORTED") return;
     problems.push(`request failed: ${r.method()} ${r.url().slice(0, 160)} (${r.failure()?.errorText ?? "?"})`);
   });
   page.on("response", (r) => {

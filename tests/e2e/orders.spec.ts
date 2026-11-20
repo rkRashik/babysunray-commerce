@@ -416,6 +416,6 @@ test("a customer search does not survive signing out, and the quick view opens, 
   await clearSignInLimits();
   await signIn(page);
   await page.goto("/admin/orders?search=1");
-  await expect(page.getByRole("alert")).toContainText("expired");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("expired");
   await expect(page.getByLabel("Search orders")).toHaveValue("");
 });

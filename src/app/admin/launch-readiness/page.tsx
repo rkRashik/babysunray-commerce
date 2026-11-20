@@ -25,7 +25,7 @@ export default async function LaunchReadinessPage() {
       <div role="note" className="rounded border border-gray-400 bg-white p-4 text-sm">
         <p className="font-semibold">The public shop is closed.</p>
         <p className="mt-1">
-          Nothing on this page can open it. Public checkout stays disabled until you approve and publish the delivery, return and privacy policies (S-17, G-7) and the decisions below are made. A passing check
+          Nothing on this page can open it. Public checkout stays disabled until you approve and publish the delivery, return and privacy policies and the decisions below are made. A passing check
           here is evidence about this system only: it is not legal approval, and it does not make a host or a policy safe.
         </p>
       </div>
@@ -34,7 +34,7 @@ export default async function LaunchReadinessPage() {
         <ol className="list-decimal space-y-2 pl-5 text-sm" data-testid="gate-blockers">
           {readiness.gate.blockers.map((b) => (
             <li key={b.id}>
-              <span className="font-medium">{b.reason}</span> <span className="text-gray-700">({b.requirement})</span>
+              <span className="font-medium">{b.reason}</span>
               <br />
               <span className="text-gray-700">Next: {b.next}</span>
             </li>
@@ -61,7 +61,6 @@ export default async function LaunchReadinessPage() {
                 </div>
                 <p className="mt-1 text-sm">{check.evidence}</p>
                 {check.next ? <p className="mt-1 text-sm text-gray-700">Next: {check.next}</p> : null}
-                <p className="mt-1 text-xs text-gray-600">Rests on: {check.source}</p>
               </li>
             ))}
           </ul>

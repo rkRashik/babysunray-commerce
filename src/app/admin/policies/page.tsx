@@ -35,7 +35,7 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
         <p className="font-semibold">Drafts are private. Customers see a policy only after you publish it here.</p>
         <p className="mt-1">
           Write the real wording yourself, in English and Bangla. &quot;Reviewed&quot; records that you checked this version; it is not legal approval. Publishing is your approval of that exact wording for
-          customers: it is copied, dated and shown in the shop footer and checkout. Public checkout stays disabled until the delivery, return and privacy policies are published (S-17, G-7) and the launch gate
+          customers: it is copied, dated and shown in the shop footer and checkout. Public checkout stays disabled until the delivery, return and privacy policies are published and the launch gate
           is opened. For external review, copy the text or export the &quot;Customer policy drafts&quot; dataset.
         </p>
       </div>

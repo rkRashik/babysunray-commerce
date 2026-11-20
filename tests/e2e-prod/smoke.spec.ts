@@ -82,5 +82,5 @@ test("the tracking page and the storefront preview send their private headers in
   expect(headers["x-frame-options"]).toBe("DENY");
   expect(headers["x-robots-tag"]).toContain("noindex");
   expect(headers["cache-control"]).toContain("no-store");
-  await expect(page.getByTestId("preview-banner")).toHaveText("Storefront Preview — Not Live");
+  await expect(page.getByTestId("preview-banner")).toHaveText("Preview only, not live");
 });

@@ -6,7 +6,7 @@ import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 import { loadEnv } from "vite";
-import { resetAndMigrate } from "../support/global-setup";
+import { markTestDatabaseAsStaging, resetAndMigrate } from "../support/global-setup";
 import { assertSafeTestDatabaseUrl, lockTestDatabase } from "../support/test-database";
 import { freePort, proveServerUsesTestDatabase, seedOwner, stop, waitForServer } from "./global-setup";
 
@@ -79,6 +79,8 @@ export default async function prodSetup(): Promise<() => Promise<void>> {
   };
   try {
     await resetAndMigrate(url);
+    // The same browser tests rehearse founder acceptance, which runs only on a staging-marked database (as in global-setup.ts).
+    await markTestDatabaseAsStaging(lock);
     const password = randomBytes(24).toString("base64url");
     await seedOwner(lock, password);
     try {

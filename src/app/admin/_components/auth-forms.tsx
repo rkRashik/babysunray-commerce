@@ -79,10 +79,10 @@ export function SignOutButton({ dark = false }: { dark?: boolean }) {
   async function signOut() {
     setPending(true);
     try {
-      // Forget this browser's order search first (a customer name or phone number), while the session is still valid.
-      await forgetOrderSearchAction().catch(() => undefined);
       // Better Auth accepts POST bodies only as JSON (415 otherwise), even when it ignores the body.
       await fetch("/api/auth/sign-out", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      // Then forget this browser's order search (a customer name or phone number); it needs no session.
+      await forgetOrderSearchAction().catch(() => undefined);
     } finally {
       router.replace("/admin/login");
       router.refresh();

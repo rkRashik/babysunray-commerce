@@ -56,7 +56,7 @@ test("founder acceptance: publish, shop as a separate customer, place a real COD
   await expect(shopper.getByTestId("gate-state")).toContainText("Closed");
   await shopper.getByRole("button", { name: "Start acceptance in this browser" }).click();
   await expect(shopper.getByTestId("pass-state")).toContainText("Holds an acceptance pass");
-  await shopperContext.clearCookies({ name: "better-auth.session_token" });
+  await shopperContext.clearCookies({ name: /session_token/ });
   await shopper.goto("/admin");
   await expect(shopper).toHaveURL(/\/admin\/login$/);
 
