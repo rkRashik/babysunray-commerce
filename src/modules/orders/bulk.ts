@@ -5,18 +5,18 @@ import { orders } from "@/db/schema";
 import { assertPermission, type Principal } from "../auth/principal";
 import { DomainError, invalidInput } from "../domain-error";
 import { validateId } from "../catalogue/rules";
-import { deliverOrderOnce, dispatchOrderOnce, packOrderOnce } from "./operations";
+import { dispatchOrderOnce, packOrderOnce } from "./operations";
 
 // Bulk order steps for the Owner's list: the same single-order operations, one order at a time, each in its own
 // transaction with its own idempotency key and the version the Owner saw. One order failing (a stale version, not
 // enough stock, a step that is no longer allowed) never stops or undoes the others, and nothing is "undone" in bulk:
 // every result is reported per order. Only the steps that are routine and one-way-safe are allowed in bulk (never
-// confirming, cancelling, money or returns, which need a decision about one order).
+// confirming, cancelling, money or returns, which need a decision about one order). Recording a delivery is deliberately
+// one order at a time: it is the Owner's own record, not courier evidence, and it starts the return window.
 
 export const BULK_ACTIONS = {
   pack: { run: packOrderOnce, done: "Packed." },
   dispatch: { run: dispatchOrderOnce, done: "Dispatched. Its stock was deducted." },
-  deliver: { run: deliverOrderOnce, done: "Marked delivered." },
 } as const;
 export type BulkAction = keyof typeof BULK_ACTIONS;
 export const isBulkAction = (value: unknown): value is BulkAction => typeof value === "string" && Object.hasOwn(BULK_ACTIONS, value);

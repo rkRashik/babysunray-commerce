@@ -16,10 +16,6 @@ const STEPS = {
     button: (n: number) => `Dispatch ${n} order${n === 1 ? "" : "s"}`,
     ask: (n: number) => `Dispatch ${n} order${n === 1 ? "" : "s"}? Their stock is deducted and they can no longer be cancelled. This is not undone in bulk.`,
   },
-  deliver: {
-    button: (n: number) => `Mark ${n} delivered`,
-    ask: (n: number) => `Mark ${n} order${n === 1 ? "" : "s"} as delivered? This is your own record: no courier system confirms it.`,
-  },
 } as const;
 type Step = keyof typeof STEPS;
 export function BulkBar({ batch }: { batch: string }) {

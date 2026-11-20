@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { type InstallationIdentity, installationIdentity } from "@/config/installation";
+import { DEFAULT_STORE_NAME, type InstallationIdentity, installationIdentity } from "@/config/installation";
 import { getDb } from "@/db/client";
 import { storeIdentity } from "@/modules/settings/store";
 
@@ -18,3 +18,6 @@ export const currentStoreIdentity = cache(async (): Promise<InstallationIdentity
     return installationIdentity();
   }
 });
+
+/** The name to show in Admin: the configured one, or a neutral placeholder (never the installation default as if it were a brand). */
+export const adminStoreName = (identity: InstallationIdentity) => (identity.storeName === DEFAULT_STORE_NAME ? "Your store" : identity.storeName);

@@ -128,7 +128,7 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   for (const n of [2, 3, 4, 5, 6]) await step(page, orders[n], "Confirm order (verified with the customer)");
   for (const n of [3, 4, 5]) await step(page, orders[n], "Mark packed");
   for (const n of [4, 5]) await step(page, orders[n], "Dispatch");
-  await step(page, orders[5], "Mark delivered");
+  await step(page, orders[5], "Record delivery");
   await step(page, orders[7], "Cancel order");
   const db = await testDatabase();
   try {
@@ -181,6 +181,16 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   await capture(page, "desktop-30-reports.png", "Reports: quick ranges, period summary, aligned tables, COD reconciliation", "Reports · desktop");
   await page.goto("/admin/reports?from=2026-11-20&to=2026-11-01");
   await capture(page, "desktop-31-reports-error.png", "Reports: an invalid date range", "Reports · desktop");
+  await page.goto("/admin/reports?tab=cod");
+  await capture(page, "desktop-32-reports-cod.png", "Reports: COD and reconciliation tab", "Reports · desktop");
+  await page.goto("/admin/reports?tab=inventory");
+  await capture(page, "desktop-33-reports-inventory.png", "Reports: inventory and costs tab", "Reports · desktop");
+  await page.goto("/admin/orders");
+  await page.locator("[data-quickview]").nth(3).click();
+  await page.getByRole("region", { name: "Items" }).waitFor();
+  await page.waitForTimeout(400);
+  await capture(page, "desktop-09-quick-view.png", "Orders: quick view drawer", "Orders · desktop");
+  await page.keyboard.press("Escape");
   await page.goto("/admin/catalogue-preparation");
   await capture(page, "desktop-40-preparation.png", "Catalogue preparation: business language, no requirement codes", "Catalogue preparation · desktop");
   await page.goto("/admin/products/new");
@@ -212,6 +222,14 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   await capture(mobile, "phone-10-products.png", "Products on a phone: one large row per product", "Phone");
   await mobile.goto("/admin/dashboard");
   await capture(mobile, "phone-20-dashboard.png", "Dashboard on a phone", "Phone");
+  await mobile.goto("/admin/orders");
+  await mobile.locator("ul[aria-label=Orders] [data-quickview]").nth(3).tap();
+  await mobile.getByRole("region", { name: "Items" }).waitFor();
+  await mobile.waitForTimeout(400);
+  await capture(mobile, "phone-03-quick-view.png", "Quick view on a phone", "Phone");
+  await mobile.keyboard.press("Escape");
+  await mobile.goto("/admin/reports?tab=cod");
+  await capture(mobile, "phone-31-reports-cod.png", "Reports COD tab on a phone", "Phone");
   await mobile.goto("/admin/reports");
   await capture(mobile, "phone-30-reports.png", "Reports on a phone", "Phone");
   await phone.close();

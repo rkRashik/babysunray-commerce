@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Plus, X } from "lucide-react";
+import { Eye, Plus, X } from "lucide-react";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { productCursorCodec } from "@/api/v1/schemas";
@@ -19,6 +19,7 @@ import { openSearch, SEARCH_COOKIE } from "./_lib/search-cookie";
 import { BulkBar } from "./_components/bulk-bar";
 import { bdt, label, overdueBy, relative, StatusPill } from "./_components/labels";
 import { OrderFilters } from "./_components/order-filters";
+import { OrderQuickView } from "./_components/quick-view";
 
 export const metadata = { title: "Orders · Admin" };
 
@@ -72,11 +73,14 @@ const clock = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Dhaka", hour: "
 const phoneText = (phone: string) => `${phone.slice(0, 5)} ${phone.slice(5)}`;
 
 type Row = Order & { openRequest: boolean };
+const isBulk = (step: Step) => step.kind === "action" && (step.action === "pack" || step.action === "dispatch");
 type Step =
   | { kind: "action"; action: "confirm" | "pack" | "dispatch" | "deliver"; label: string; confirm?: string }
   | { kind: "link"; label: string };
 
 const CONFIRM_TEXT = "Confirm this order? Only do this after you have verified it with the customer.";
+const DELIVERY_TEXT =
+  "Record this order as delivered? This is your own record: no courier system has confirmed it. It starts the 7-day return window. COD collection and settlement are recorded separately.";
 const OVERDUE_TEXT =
   "The 24-hour verification window has passed. You can still confirm: stock is checked again and the confirmation is refused if there is not enough. Confirm only after you have verified this order with the customer.";
 
@@ -89,7 +93,7 @@ function nextStep(o: Row, now: Date): Step {
   if (o.orderStatus === "confirmed" && o.fulfilmentStatus === "unfulfilled") return { kind: "action", action: "pack", label: "Mark packed" };
   if (o.orderStatus === "confirmed" && o.fulfilmentStatus === "packed")
     return { kind: "action", action: "dispatch", label: "Dispatch", confirm: "Dispatch this order? Its stock is deducted and it can no longer be cancelled." };
-  if (o.orderStatus === "confirmed" && o.fulfilmentStatus === "dispatched") return { kind: "action", action: "deliver", label: "Mark delivered" };
+  if (o.orderStatus === "confirmed" && o.fulfilmentStatus === "dispatched") return { kind: "action", action: "deliver", label: "Record delivery", confirm: DELIVERY_TEXT };
   return { kind: "link", label: "Open" };
 }
 
@@ -177,7 +181,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const filtered = Boolean(status || attention || queue || number || term);
   const searchLabel = number ? formatOrderNumber(Number(number.replace(/\D/g, "")) || 0) : term;
   const rows = page.items.map((o) => ({ o, step: nextStep(o, now), key: randomUUID() }));
-  const bulkable = canWrite && rows.some((r) => r.step.kind === "action" && r.step.action !== "confirm");
+  const bulkable = canWrite && rows.some((r) => isBulk(r.step));
   const countOf = (c: (typeof CHIPS)[number]) => (c.attention ? counts.attention : c.queue ? counts.queues[c.queue] : null);
 
   return (
@@ -310,23 +314,28 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                     <tr key={o.id} data-order={o.id}>
                       {bulkable ? (
                         <td>
-                          {step.kind === "action" && step.action !== "confirm" ? (
+                          {isBulk(step) ? (
                             <input
                               type="checkbox"
                               className="of-check"
                               form="orders-bulk"
                               name="order"
                               value={`${o.id}:${o.version}`}
-                              data-step={step.action}
+                              data-step={step.kind === "action" ? step.action : ""}
                               aria-label={`Select ${formatOrderNumber(o.number)}: ${step.label}`}
                             />
                           ) : null}
                         </td>
                       ) : null}
                       <td>
-                        <Link href={`/admin/orders/${o.id}`} className="font-bold whitespace-nowrap underline-offset-4 hover:underline">
-                          {formatOrderNumber(o.number)}
-                        </Link>
+                        <div className="flex items-center gap-1">
+                          <Link href={`/admin/orders/${o.id}`} className="font-bold whitespace-nowrap underline-offset-4 hover:underline">
+                            {formatOrderNumber(o.number)}
+                          </Link>
+                          <button type="button" data-quickview={o.id} className="of-iconbtn" aria-label={`Quick view ${formatOrderNumber(o.number)}`} title="Quick view">
+                            <Eye aria-hidden="true" size={16} />
+                          </button>
+                        </div>
                         <p className="text-xs text-gray-600">{label(o.source)}</p>
                       </td>
                       <td className="max-w-48">
@@ -366,9 +375,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             {rows.map(({ o, step, key }) => (
               <li key={o.id} className="space-y-2 px-4 py-3">
                 <div className="flex items-baseline justify-between gap-3">
-                  <Link href={`/admin/orders/${o.id}`} className="inline-flex min-h-11 items-center font-bold underline-offset-4 hover:underline">
-                    {formatOrderNumber(o.number)}
-                  </Link>
+                  <span className="flex items-center gap-1">
+                    <Link href={`/admin/orders/${o.id}`} className="inline-flex min-h-11 items-center font-bold underline-offset-4 hover:underline">
+                      {formatOrderNumber(o.number)}
+                    </Link>
+                    <button type="button" data-quickview={o.id} className="of-iconbtn" aria-label={`Quick view ${formatOrderNumber(o.number)}`}>
+                      <Eye aria-hidden="true" size={18} />
+                    </button>
+                  </span>
                   <span className="font-bold tabular-nums">{bdt(o.totalPaisa)}</span>
                 </div>
                 <div className="flex items-baseline justify-between gap-3 text-sm">
@@ -395,6 +409,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             ))}
           </ul>
           {bulkable ? <BulkBar batch={randomUUID()} /> : null}
+          <OrderQuickView />
         </>
       )}
       {next || after ? (

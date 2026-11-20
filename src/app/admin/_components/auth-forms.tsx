@@ -3,6 +3,7 @@
 import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
+import { forgetOrderSearchAction } from "../orders/actions";
 
 // Sign-in and sign-out go through Better Auth's own HTTP endpoints (/api/auth), so its origin check and
 // its PostgreSQL sign-in rate limit apply, and the session arrives as an HttpOnly cookie. The response
@@ -78,6 +79,8 @@ export function SignOutButton({ dark = false }: { dark?: boolean }) {
   async function signOut() {
     setPending(true);
     try {
+      // Forget this browser's order search first (a customer name or phone number), while the session is still valid.
+      await forgetOrderSearchAction().catch(() => undefined);
       // Better Auth accepts POST bodies only as JSON (415 otherwise), even when it ignores the body.
       await fetch("/api/auth/sign-out", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     } finally {

@@ -1,4 +1,5 @@
 import { ArrowRight, Plus } from "lucide-react";
+import { Suspense } from "react";
 import Link from "next/link";
 import { getDb } from "@/db/client";
 import { storeSetupProgress } from "@/modules/settings/progress";
@@ -6,7 +7,9 @@ import { DomainError } from "@/modules/domain-error";
 import { formatOrderNumber, ZONE_LABELS } from "@/modules/orders/rules";
 import type { OrderQueue } from "@/modules/orders/queries";
 import { type Dashboard, getDashboard, MAX_LOW_STOCK_THRESHOLD, parseLowStockThreshold, type StockRow } from "@/modules/reports/dashboard";
+import type { Principal } from "@/modules/auth/principal";
 import { RefreshButton } from "../_components/refresh-button";
+import { PageSkeleton } from "../_components/skeleton";
 import { AdminShell, Section, formatTime } from "../_components/shell";
 import { requireAdmin } from "../_lib/session";
 import { bdt, relative } from "../orders/_components/labels";
@@ -153,9 +156,29 @@ const gridFor = (n: number) => (n <= 1 ? "" : n === 2 || n === 4 ? "sm:grid-cols
 // The Owner's daily work list. Every number is read from the database at `generatedAt`; nothing is a target or an
 // estimate. Queues with work come first (the urgent ones on top); empty queues shrink to one line.
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  // Access is checked before anything is sent; only then the figures stream in behind a placeholder.
   const principal = await requireAdmin("reports:read", "orders:read", "stock:read");
   const query = await searchParams;
   const rawLow = typeof query.low === "string" ? query.low : undefined;
+  return (
+    <AdminShell
+      title="Dashboard"
+      current="dashboard"
+      actions={
+        <Link href="/admin/orders/new" className="of-btn of-btn-primary">
+          <Plus aria-hidden="true" size={18} strokeWidth={2} />
+          New order
+        </Link>
+      }
+    >
+      <Suspense fallback={<PageSkeleton />}>
+        <DashboardBody principal={principal} rawLow={rawLow} />
+      </Suspense>
+    </AdminShell>
+  );
+}
+
+async function DashboardBody({ principal, rawLow }: { principal: Principal; rawLow: string | undefined }) {
   let lowStockThreshold: number | null = null;
   let lowError: string | undefined;
   try {
@@ -176,16 +199,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const returnsOpen = d.returns.awaitingParcel + d.returns.awaitingDecision + d.returns.approvedOpen + d.quarantine.return.count + d.quarantine.rto.count;
 
   return (
-    <AdminShell
-      title="Dashboard"
-      current="dashboard"
-      actions={
-        <Link href="/admin/orders/new" className="of-btn of-btn-primary">
-          <Plus aria-hidden="true" size={18} strokeWidth={2} />
-          New order
-        </Link>
-      }
-    >
+    <>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-gray-600" data-testid="generated-at">
           Updated {formatTime(d.generatedAt)}
@@ -363,6 +377,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           Picking list and packing summary
         </Link>
       </div>
-    </AdminShell>
+    </>
   );
 }

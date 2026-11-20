@@ -117,7 +117,7 @@ test("founder acceptance: publish, shop as a separate customer, place a real COD
   await page.reload();
   await expect(dimension(page, "fulfilment")).toHaveText("Dispatched");
   await expect(page.getByTestId("deliver-note")).toContainText("No courier system is connected");
-  await step(page, "Mark delivered");
+  await step(page, "Record delivery");
   const cod = page.getByRole("region", { name: "Cash on delivery" });
   await cod.getByLabel("Courier collected").check();
   await cod.getByLabel("Amount (BDT)").fill("1760");

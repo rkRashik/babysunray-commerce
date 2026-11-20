@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { BrandLogo } from "@/app/_design/brand";
-import { currentStoreIdentity } from "@/app/_design/identity";
+import { adminStoreName, currentStoreIdentity } from "@/app/_design/identity";
 import { getDb } from "@/db/client";
 import { setupGrantConfigured, setupState } from "@/modules/auth/setup";
 import { emailAvailable } from "@/modules/email/service";
@@ -41,7 +41,7 @@ export default async function SetupPage() {
   else body = <SetupForm emailOn={emailAvailable()} />;
   return (
     <main className={`${adminSurface} flex min-h-screen flex-col items-center justify-center gap-8 px-4 py-10`}>
-      <BrandLogo name={identity.storeName} logo={identity.logo} height={52} textClassName="text-[2.25rem]" />
+      <BrandLogo name={adminStoreName(identity)} logo={identity.logo} height={52} textClassName="text-[2.25rem]" />
       <div className={card}>
         <div>
           <h1 className="text-[1.375rem] font-bold">Set up Admin</h1>

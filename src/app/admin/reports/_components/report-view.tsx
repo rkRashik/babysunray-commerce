@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { formatOrderNumber } from "@/modules/orders/rules";
 import type { Bucket, CodRow, Outstanding, PeriodReport } from "@/modules/reports/summary";
-import { bdt, label } from "../../orders/_components/labels";
+import { bdt, label, tone } from "../../orders/_components/labels";
+import { ScrollArea } from "../../_components/scroll-area";
+import { StackBar } from "./stack-bar";
 
 // Report sections shared by the Reports page and its printed version. Each heading says what the figures are
 // based on; amounts are BDT from integer paisa.
@@ -40,10 +42,10 @@ function Table({ caption, rows, amount = "Amount", money = true }: { caption: st
           <th scope="col">
             <span className="sr-only">Item</span>
           </th>
-          <th scope="col" className="num w-20">
+          <th scope="col" className="num w-14 sm:w-20">
             Count
           </th>
-          <th scope="col" className="num w-36">
+          <th scope="col" className="num w-24 sm:w-36">
             {amount}
           </th>
         </tr>
@@ -55,7 +57,7 @@ function Table({ caption, rows, amount = "Amount", money = true }: { caption: st
 
 const byKey = (record: Record<string, Bucket>) => Object.entries(record).map(([k, b]) => [label(k), b] as [string, Bucket]);
 
-export function OutstandingView({ o }: { o: Outstanding }) {
+export function OutstandingView({ o, charts = false }: { o: Outstanding; charts?: boolean }) {
   return (
     <div className="space-y-2" data-testid="outstanding">
       <Table
@@ -66,6 +68,17 @@ export function OutstandingView({ o }: { o: Outstanding }) {
           ["Collected by the courier, not settled to you or recorded as kept by it", o.heldByCourier],
         ]}
       />
+      {charts ? (
+        <StackBar
+          title="Where the COD money collected so far is (every date)"
+          segments={[
+            { label: "Settled to you", value: o.ledger.settledPaisa, tone: "ok" },
+            { label: "Kept by the courier", value: o.ledger.deductedPaisa, tone: "bad" },
+            { label: "Still with the courier", value: Math.max(0, o.ledger.collectedPaisa - o.ledger.settledPaisa - o.ledger.deductedPaisa), tone: "wait" },
+          ]}
+          format={bdt}
+        />
+      ) : null}
       <table className="of-table">
         <caption className={CAPTION}>All recorded COD entries (every date)</caption>
         <thead>
@@ -73,7 +86,7 @@ export function OutstandingView({ o }: { o: Outstanding }) {
             <th scope="col">
               <span className="sr-only">Entry</span>
             </th>
-            <th scope="col" className="num w-36">
+            <th scope="col" className="num w-24 sm:w-36">
               Amount
             </th>
           </tr>
@@ -117,53 +130,78 @@ export function OutstandingView({ o }: { o: Outstanding }) {
   );
 }
 
-export function PeriodReportView({ r }: { r: PeriodReport }) {
+/** The headline figures of the period. */
+export function KpiTiles({ r }: { r: PeriodReport }) {
   return (
-    <div className="space-y-6">
-      <dl className="grid grid-cols-2 gap-3 lg:grid-cols-5" data-testid="report-kpis">
-        <div className="of-stat">
-          <dt>Orders placed</dt>
-          <dd>{r.received.total.count}</dd>
-        </div>
-        <div className="of-stat">
-          <dt>Order value placed</dt>
-          <dd>{bdt(r.received.total.amountPaisa)}</dd>
-        </div>
-        <div className="of-stat">
-          <dt>COD collected by courier</dt>
-          <dd>{bdt(r.money.collected.amountPaisa)}</dd>
-        </div>
-        <div className="of-stat">
-          <dt>Settled to you</dt>
-          <dd>{bdt(r.money.settled.amountPaisa)}</dd>
-        </div>
-        <div className="of-stat">
-          <dt>Refunded</dt>
-          <dd>{bdt(r.money.refunded.amountPaisa)}</dd>
-        </div>
-      </dl>
-      <div className="space-y-3">
-        <p className="text-xs text-gray-600">Orders by the time they were placed, with their status now. Order value includes cancelled and unverified orders; it is not sales, revenue or profit.</p>
-        <div className="grid items-start gap-x-6 gap-y-5 md:grid-cols-2">
-          <Table caption="By source" rows={byKey(r.received.bySource)} amount="Order value" />
-          <Table caption="By order status (now)" rows={byKey(r.received.byOrderStatus)} amount="Order value" />
-          <Table caption="By fulfilment status (now)" rows={byKey(r.received.byFulfilmentStatus)} amount="Order value" />
-          <Table caption="By payment status (now)" rows={byKey(r.received.byPaymentStatus)} amount="Order value" />
-        </div>
+    <dl className="grid grid-cols-2 gap-3 lg:grid-cols-5 [&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1" data-testid="report-kpis">
+      <div className="of-stat">
+        <dt>Orders placed</dt>
+        <dd>{r.received.total.count}</dd>
       </div>
-      <div className="space-y-2">
-        <Table
-          caption="COD money recorded (by the date entered for each payment)"
-          rows={[
-            ["Collected by the courier", r.money.collected],
-            ["Settled to you", r.money.settled],
-            ["Kept by the courier (recorded deductions)", r.money.deducted],
-            ["Refunded to customers", r.money.refunded],
-          ]}
+      <div className="of-stat">
+        <dt>Order value placed</dt>
+        <dd>{bdt(r.received.total.amountPaisa)}</dd>
+      </div>
+      <div className="of-stat">
+        <dt>COD collected by courier</dt>
+        <dd>{bdt(r.money.collected.amountPaisa)}</dd>
+      </div>
+      <div className="of-stat">
+        <dt>Settled to you</dt>
+        <dd>{bdt(r.money.settled.amountPaisa)}</dd>
+      </div>
+      <div className="of-stat">
+        <dt>Refunded</dt>
+        <dd>{bdt(r.money.refunded.amountPaisa)}</dd>
+      </div>
+    </dl>
+  );
+}
+
+/** Orders placed in the period, by source and by their status now. `charts` adds the status bar (not in the printed copy). */
+export function OrdersSection({ r, charts = false }: { r: PeriodReport; charts?: boolean }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-gray-600">Orders by the time they were placed, with their status now. Order value includes cancelled and unverified orders; it is not sales, revenue or profit.</p>
+      {charts ? (
+        <StackBar
+          title="Orders by status now"
+          segments={Object.entries(r.received.byOrderStatus).map(([k, b]) => ({ label: label(k), value: b.count, tone: tone(k) }))}
+          format={(n) => `${n} order${n === 1 ? "" : "s"}`}
         />
-        <p className="text-xs text-gray-600">Courier fees appear only as the deductions you record from the courier&apos;s statements.</p>
-      </div>
+      ) : null}
       <div className="grid items-start gap-x-6 gap-y-5 md:grid-cols-2">
+        <Table caption="By source" rows={byKey(r.received.bySource)} amount="Order value" />
+        <Table caption="By order status (now)" rows={byKey(r.received.byOrderStatus)} amount="Order value" />
+        <Table caption="By fulfilment status (now)" rows={byKey(r.received.byFulfilmentStatus)} amount="Order value" />
+        <Table caption="By payment status (now)" rows={byKey(r.received.byPaymentStatus)} amount="Order value" />
+      </div>
+    </div>
+  );
+}
+
+/** COD money entered in the period. */
+export function CodMoneySection({ r }: { r: PeriodReport }) {
+  return (
+    <div className="space-y-2">
+      <Table
+        caption="COD money recorded (by the date entered for each payment)"
+        rows={[
+          ["Collected by the courier", r.money.collected],
+          ["Settled to you", r.money.settled],
+          ["Kept by the courier (recorded deductions)", r.money.deducted],
+          ["Refunded to customers", r.money.refunded],
+        ]}
+      />
+      <p className="text-xs text-gray-600">Courier fees appear only as the deductions you record from the courier&apos;s statements.</p>
+    </div>
+  );
+}
+
+/** Costs and stock movements recorded in the period. */
+export function CostsStockSection({ r }: { r: PeriodReport }) {
+  return (
+    <div className="grid items-start gap-x-6 gap-y-5 md:grid-cols-2">
       <Table
         caption="Costs recorded"
         rows={[
@@ -184,14 +222,25 @@ export function PeriodReportView({ r }: { r: PeriodReport }) {
           ["Restocked after inspection", r.stock.returnRestocks],
         ]}
       />
-      </div>
+    </div>
+  );
+}
+
+/** Everything in the period, one after another: the printed copy. */
+export function PeriodReportView({ r }: { r: PeriodReport }) {
+  return (
+    <div className="space-y-6">
+      <KpiTiles r={r} />
+      <OrdersSection r={r} />
+      <CodMoneySection r={r} />
+      <CostsStockSection r={r} />
     </div>
   );
 }
 
 export function CodTable({ rows, links = true }: { rows: CodRow[]; links?: boolean }) {
   return (
-    <div className="overflow-x-auto">
+    <ScrollArea label="Orders with COD still open" hint="Scroll sideways for more columns.">
       <table className="of-table" data-testid="cod-table">
         <caption className={CAPTION}>Orders with COD still open (oldest first)</caption>
         <thead>
@@ -233,6 +282,6 @@ export function CodTable({ rows, links = true }: { rows: CodRow[]; links?: boole
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollArea>
   );
 }

@@ -16,6 +16,7 @@ import { MEASUREMENT_LABELS } from "../../_lib/labels";
 import { AdminShell, Section, formatTime, noticeFor, productTitle } from "../../_components/shell";
 import { requireAdmin } from "../../_lib/session";
 import { bdt } from "../../orders/_components/labels";
+import { ScrollArea } from "../../_components/scroll-area";
 
 export const metadata = { title: "Product · Admin" };
 
@@ -244,65 +245,82 @@ export default async function ProductPage({ params, searchParams }: Props) {
         {product.variants.length === 0 ? (
           <p className="text-sm text-gray-700">No variants yet. Add one below; each variant is a SKU with its own price and stock.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-gray-300 text-gray-600">
-                <tr>
-                  <th scope="col" className="py-2 pr-3">SKU</th>
-                  <th scope="col" className="py-2 pr-3">Size</th>
-                  <th scope="col" className="py-2 pr-3">Colour</th>
-                  <th scope="col" className="py-2 pr-3 text-right">Price (BDT)</th>
-                  <th scope="col" className="py-2 pr-3 text-right">On hand</th>
-                  <th scope="col" className="py-2 pr-3">Status</th>
-                  <th scope="col" className="py-2"><span className="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {product.variants.map((v, i) => (
-                  <tr key={v.id}>
-                    <th scope="row" className="py-2 pr-3 font-normal">
-                      <Link href={`/admin/skus/${encodeURIComponent(v.sku)}`} className="font-medium underline">
-                        {v.sku}
-                      </Link>
+          <div className="overflow-hidden rounded-xl border border-gray-200">
+            <ScrollArea label="Variants table" hint="Scroll sideways for more columns. The actions stay in view.">
+              <table className="of-table">
+                <thead>
+                  <tr>
+                    <th scope="col">SKU</th>
+                    <th scope="col">Size</th>
+                    <th scope="col">Colour</th>
+                    <th scope="col" className="num">
+                      Price
                     </th>
-                    <td className="py-2 pr-3">{v.size ?? "—"}</td>
-                    <td className="py-2 pr-3">{v.colour ?? "—"}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{bdt(v.pricePaisa)}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{stock[i].onHand}</td>
-                    <td className="py-2 pr-3">{v.status}</td>
-                    <td className="py-2">
-                      {v.status === "active" ? (
-                        <div className="flex flex-wrap items-start gap-2">
-                          {draft ? (
-                            <Link href={`/admin/variants/${v.id}/edit`} className={BUTTON_LINK} aria-label={`Edit ${v.sku}`}>
-                              Edit
-                            </Link>
-                          ) : null}
-                          <ActionForm
-                            action={deactivateVariantAction}
-                            idempotencyKey={randomUUID()}
-                            hidden={{ variantId: v.id }}
-                            submitLabel="Deactivate"
-                            variant="secondary"
-                            confirm={`Deactivate ${v.sku}? It keeps its stock and history, but there is no way to reactivate it here.`}
-                          />
-                        </div>
-                      ) : null}
-                    </td>
+                    <th scope="col" className="num">
+                      On hand
+                    </th>
+                    <th scope="col">Status</th>
+                    <th scope="col" className="of-sticky-end">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {product.variants.map((v, i) => (
+                    <tr key={v.id}>
+                      <th scope="row" className="font-normal">
+                        <Link href={`/admin/skus/${encodeURIComponent(v.sku)}`} className="font-medium underline underline-offset-4">
+                          {v.sku}
+                        </Link>
+                      </th>
+                      <td>{v.size ?? "—"}</td>
+                      <td>{v.colour ?? "—"}</td>
+                      <td className="num">{bdt(v.pricePaisa)}</td>
+                      <td className="num">{stock[i].onHand}</td>
+                      <td>
+                        <span className="of-pill first-letter:uppercase" data-tone={v.status === "active" ? "ok" : "quiet"}>
+                          {v.status}
+                        </span>
+                      </td>
+                      <td className="of-sticky-end">
+                        {v.status === "active" ? (
+                          <div className="flex items-start justify-end gap-2">
+                            {draft ? (
+                              <Link href={`/admin/variants/${v.id}/edit`} className="of-btn of-btn-line of-btn-sm" aria-label={`Edit ${v.sku}`}>
+                                Edit
+                              </Link>
+                            ) : null}
+                            <ActionForm
+                              action={deactivateVariantAction}
+                              idempotencyKey={randomUUID()}
+                              hidden={{ variantId: v.id }}
+                              submitLabel="Deactivate"
+                              variant="secondary"
+                              compact
+                              confirm={`Deactivate ${v.sku}? It keeps its stock and history, but there is no way to reactivate it here.`}
+                            />
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollArea>
           </div>
         )}
       </Section>
 
       <Section title="Add a variant">
         <ActionForm action={createVariantAction} idempotencyKey={randomUUID()} hidden={{ productId: product.id }} submitLabel="Add variant">
-          <Field name="sku" label="SKU" required maxLength={64} hint="Letters A-Z, digits, hyphen and underscore; stored in capitals; must be unique. Cannot be changed later." />
-          <Field name="size" label="Size" maxLength={64} />
-          <Field name="colour" label="Colour" maxLength={64} />
-          <Field name="priceTaka" label="Price (BDT)" required inputMode="decimal" hint="In Taka, for example 850 or 850.50. Stored exactly in paisa." />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Field name="sku" label="SKU" required maxLength={64} hint="Letters A-Z, digits, hyphen and underscore; stored in capitals; must be unique. Cannot be changed later." />
+            </div>
+            <Field name="size" label="Size" maxLength={64} />
+            <Field name="colour" label="Colour" maxLength={64} />
+            <Field name="priceTaka" label="Price (BDT)" required inputMode="decimal" hint="In Taka, for example 850 or 850.50. Stored exactly in paisa." />
+          </div>
         </ActionForm>
       </Section>
 

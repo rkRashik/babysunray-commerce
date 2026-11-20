@@ -99,7 +99,9 @@ describe("bulk order steps", () => {
     await expect(bulkTransition(db, owner, "batch-twice-1", "pack", [item(orders[0]), item(orders[0])])).rejects.toMatchObject({ code: "INVALID_INPUT" });
     const many = Array.from({ length: MAX_BULK_ORDERS + 1 }, () => ({ orderId: randomUUID(), expectedVersion: 1 }));
     await expect(bulkTransition(db, owner, "batch-many-1", "pack", many)).rejects.toMatchObject({ code: "INVALID_INPUT" });
-    await expect(bulkTransition(db, owner, "batch-cancel-1", "cancel" as never, [item(orders[0])])).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    for (const other of ["cancel", "deliver", "confirm"]) {
+      await expect(bulkTransition(db, owner, "batch-other-1", other as never, [item(orders[0])])).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    }
     const fake = Object.freeze({ userId: "00000000-0000-0000-0000-000000000000", role: "owner" as const });
     await expect(bulkTransition(db, fake, "batch-fake-1", "pack", [item(orders[0])])).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
     expect((await getOrderDetail(db, orders[0].id)).fulfilmentStatus).toBe("unfulfilled");

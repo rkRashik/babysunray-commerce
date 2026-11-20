@@ -82,7 +82,7 @@ test("delivery charges, an assisted order, reservation, verification, packing, d
   expect(await stock(page, sku)).toEqual({ onHand: "3", reservation: "Reserved for orders: 0 · Available for new orders: 3" });
 
   await page.goto(orderUrl);
-  await step(page, "Mark delivered");
+  await step(page, "Record delivery");
   await expect(dimension(page, "payment")).toHaveText("Nothing collected");
   const cod = page.getByRole("region", { name: "Cash on delivery" });
   await cod.getByLabel("Courier collected").check();
@@ -387,4 +387,35 @@ test("the order list packs several orders at once, confirms an overdue order wit
   await expect(page).toHaveURL(/\/admin\/orders\?status=confirmed&search=1$/);
   await expect(table.locator(`[data-order="${ids[0]}"]`)).toBeVisible();
   await expect(page.getByLabel("Search orders")).toHaveValue("test custom");
+});
+
+test("a customer search does not survive signing out, and the quick view opens, closes and returns focus", async ({ page }) => {
+  const sku = await seedSku(2);
+  const orderUrl = await createOrder(page, sku, 1);
+  const id = orderUrl.split("/").at(-1)!;
+  await page.goto("/admin/orders");
+  await page.getByLabel("Search orders").fill("test custom");
+  await expect(page).toHaveURL(/\?search=1$/);
+  expect((await page.context().cookies()).filter((c) => c.name === "bsr_order_search")).toHaveLength(1);
+
+  // Quick view: the order's details without leaving the list; Escape closes it and focus returns to its button.
+  const trigger = page.locator(`[data-order="${id}"] [data-quickview]`);
+  await trigger.click();
+  const drawer = page.getByRole("dialog", { name: "Order quick view" });
+  await expect(drawer.getByRole("region", { name: "Items" })).toBeVisible();
+  await expect(drawer.getByRole("region", { name: "Customer" })).toContainText("Test Customer");
+  await expect(drawer.getByRole("link", { name: "Open full order" })).toHaveAttribute("href", `/admin/orders/${id}`);
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  // Signing out forgets the search; signing in again does not bring it back.
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/admin\/login$/);
+  expect((await page.context().cookies()).filter((c) => c.name === "bsr_order_search")).toHaveLength(0);
+  await clearSignInLimits();
+  await signIn(page);
+  await page.goto("/admin/orders?search=1");
+  await expect(page.getByRole("alert")).toContainText("expired");
+  await expect(page.getByLabel("Search orders")).toHaveValue("");
 });

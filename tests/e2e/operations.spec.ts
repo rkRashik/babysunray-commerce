@@ -75,6 +75,10 @@ test("the dashboard shows real queues and links to the matching order list; repo
   await nav(page).getByRole("link", { name: "Reports" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Reports" })).toBeVisible();
   await expect(page.getByTestId("report-scope")).toContainText("up to, not including");
+  // The orders section draws its status bar from the real counts and lists every part in words.
+  await expect(page.getByRole("img", { name: /^Orders by status now:/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Inventory & costs" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Report sections" }).getByRole("link", { name: "COD & reconciliation" }).click();
   await expect(page.getByTestId("reconciled").first()).toContainText("Check passed");
   await expectNoAxeViolations(page);
   await page.goto("/admin/reports?from=2026-11-20&to=2026-11-01");

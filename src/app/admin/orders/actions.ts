@@ -29,7 +29,8 @@ import {
   setDeliveryZoneOnce,
   submitOrderOnce,
 } from "@/modules/orders/operations";
-import { DELIVERY_ZONES, type DeliveryZone, MAX_ORDER_LINES } from "@/modules/orders/rules";
+import { getOrderDetail } from "@/modules/orders/queries";
+import { DELIVERY_ZONES, type DeliveryZone, MAX_ORDER_LINES, verificationOverdue, ZONE_LABELS } from "@/modules/orders/rules";
 import { formError, type FormState, optional, taka, text, wholeNumber } from "../_lib/form";
 import { requireAdmin } from "../_lib/session";
 import { SEARCH_COOKIE, SEARCH_TTL_SECONDS, sealSearch } from "./_lib/search-cookie";
@@ -145,6 +146,75 @@ export async function clearOrderSearchAction(): Promise<void> {
   await requireAdmin("orders:read");
   (await cookies()).delete({ name: SEARCH_COOKIE, path: "/admin/orders" });
   redirect("/admin/orders");
+}
+
+/** Called when someone signs out: forgets the order search of this browser at once (it would also expire by itself). */
+export async function forgetOrderSearchAction(): Promise<void> {
+  (await cookies()).delete({ name: SEARCH_COOKIE, path: "/admin/orders" });
+}
+
+export type QuickView = {
+  id: string;
+  number: number;
+  createdAt: string;
+  source: string;
+  orderStatus: string;
+  fulfilmentStatus: string;
+  paymentStatus: string;
+  returnStatus: string;
+  overdue: boolean;
+  verificationExpiresAt: string;
+  openRequest: boolean;
+  customerName: string;
+  customerPhone: string;
+  deliveryAddress: string;
+  zone: string;
+  note: string | null;
+  items: { sku: string; name: string; size: string | null; colour: string | null; quantity: number; lineTotalPaisa: number }[];
+  subtotalPaisa: number;
+  deliveryChargePaisa: number;
+  totalPaisa: number;
+  codCollectedPaisa: number;
+  codSettledPaisa: number;
+  codDeductedPaisa: number;
+  events: { event: string; at: string }[];
+};
+
+/** One order's summary for the list's quick-view drawer. The same data as the order page, to the same signed-in Owner, in this response only. */
+export async function orderQuickViewAction(orderId: string): Promise<QuickView | { error: string }> {
+  await requireAdmin("orders:read");
+  try {
+    const o = await getOrderDetail(getDb(), orderId);
+    return {
+      id: o.id,
+      number: o.number,
+      createdAt: o.createdAt.toISOString(),
+      source: o.source,
+      orderStatus: o.orderStatus,
+      fulfilmentStatus: o.fulfilmentStatus,
+      paymentStatus: o.paymentStatus,
+      returnStatus: o.returnStatus,
+      overdue: verificationOverdue(o, new Date()),
+      verificationExpiresAt: o.verificationExpiresAt.toISOString(),
+      openRequest: o.cancellationRequests.some((r) => r.status === "open"),
+      customerName: o.customerName,
+      customerPhone: o.customerPhone,
+      deliveryAddress: o.deliveryAddress,
+      zone: ZONE_LABELS[o.deliveryZone] ?? o.deliveryZone,
+      note: o.note,
+      items: o.items.map((i) => ({ sku: i.sku, name: i.productNameEn ?? i.productNameBn ?? i.sku, size: i.size, colour: i.colour, quantity: i.quantity, lineTotalPaisa: i.lineTotalPaisa })),
+      subtotalPaisa: o.subtotalPaisa,
+      deliveryChargePaisa: o.deliveryChargePaisa,
+      totalPaisa: o.totalPaisa,
+      codCollectedPaisa: o.codCollectedPaisa,
+      codSettledPaisa: o.codSettledPaisa,
+      codDeductedPaisa: o.codDeductedPaisa,
+      events: o.events.slice(-5).map((e) => ({ event: e.event, at: e.createdAt.toISOString() })),
+    };
+  } catch (error) {
+    if (error instanceof DomainError) return { error: "This order could not be found." };
+    throw error;
+  }
 }
 
 export type BulkState = { results?: BulkResult[]; error?: string };

@@ -1,6 +1,5 @@
 import {
   BarChart3,
-  CheckCircle2,
   ClipboardCheck,
   ClipboardList,
   Eye,
@@ -24,6 +23,7 @@ import { flFontVariables } from "@/app/_design/fonts";
 import { currentStoreIdentity } from "@/app/_design/identity";
 import { DEFAULT_STORE_NAME } from "@/config/installation";
 import { SignOutButton } from "./auth-forms";
+import { Toast } from "./toast";
 import { AdminMenu } from "./admin-menu";
 
 type Crumb = { href: string; label: string; lang?: string };
@@ -219,12 +219,7 @@ export async function AdminShell({
               {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
             </div>
           </div>
-          {notice ? (
-            <p role="status" className="flex items-center gap-2.5 rounded-xl bg-green-50 px-4 py-3 text-sm font-semibold text-green-800">
-              <CheckCircle2 aria-hidden="true" size={18} strokeWidth={2} className="shrink-0" />
-              {notice}
-            </p>
-          ) : null}
+          {notice ? <Toast message={notice} /> : null}
           {children}
         </div>
       </main>

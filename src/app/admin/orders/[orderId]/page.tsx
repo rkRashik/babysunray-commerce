@@ -31,7 +31,7 @@ const BUTTONS: { action: OrderAction & ("confirm" | "pack" | "dispatch" | "deliv
   { action: "confirm", label: "Confirm order (verified with the customer)" },
   { action: "pack", label: "Mark packed" },
   { action: "dispatch", label: "Dispatch", confirm: "Dispatch this order? Its stock is deducted and it can no longer be cancelled." },
-  { action: "deliver", label: "Mark delivered" },
+  { action: "deliver", label: "Record delivery", confirm: "Record this order as delivered? This is your own record, not courier evidence, and it starts the 7-day return window." },
   { action: "mark_rto", label: "Mark returned to sender (refused or undelivered)", secondary: true },
   { action: "receive_rto", label: "Receive returned parcel into inspection" },
   { action: "close", label: "Close order", confirm: "Close this order? The tracking link stops working 30 days from now." },
@@ -120,7 +120,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
         {order.fulfilmentStatus === "packed" && request ? <p className="text-sm text-gray-700">Dispatch is blocked until the cancellation request is decided.</p> : null}
         {allowed.has("deliver") ? (
           <p className="text-xs text-gray-600" data-testid="deliver-note">
-            &quot;Mark delivered&quot; is your own record, made when you know the parcel arrived (for example from the courier or the customer). No courier system is connected, so nothing
+            &quot;Record delivery&quot; is your own record, made when you know the parcel arrived (for example from the courier or the customer). No courier system is connected, so nothing
             here confirms a delivery by itself.
           </p>
         ) : null}
