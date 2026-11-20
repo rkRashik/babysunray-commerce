@@ -5,6 +5,12 @@
 
 Each document starts with a status line. Most are **Draft — Founder Review**: they describe what was built and tested, but the decisions behind them are not all final.
 
+## For store owners and everyday users
+
+**[BabySunRay — Complete Store Owner's Guide](USER-GUIDE.md)** is the plain-English manual for running the business. It covers first-time store setup, products, photos, sizes, stock, orders, delivery, COD, returns, reports, customer shopping, privacy and common problems.
+
+**Start there if you're using the website rather than developing it.** No coding knowledge is needed. The remaining documents on this page are primarily technical or historical project references; some record decisions made before features were implemented.
+
 ## Getting started
 
 | Document | What it covers |
