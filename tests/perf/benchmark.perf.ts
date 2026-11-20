@@ -16,7 +16,7 @@ import { launchReadiness } from "../../src/modules/launch/readiness";
 import { normalizeImage, renderWidth } from "../../src/modules/media/images";
 import { placeGuestOrder } from "../../src/modules/orders/guest-checkout";
 import { setDeliveryZoneOnce } from "../../src/modules/orders/operations";
-import { listOrders } from "../../src/modules/orders/queries";
+import { listOrders, orderQueueCounts } from "../../src/modules/orders/queries";
 import { getDashboard } from "../../src/modules/reports/dashboard";
 import { parseDateRange } from "../../src/modules/reports/dates";
 import { getPeriodReport } from "../../src/modules/reports/summary";
@@ -175,6 +175,13 @@ it("orders: list pages, attention filter, dashboard, a year's report, guest subm
   await measure("orders.list.page4000", () => listOrders(db, { limit: 25, after: cursor }));
   await measure("orders.list.attention", () => listOrders(db, { limit: 25, attention: true }));
   await measure("orders.list.byNumber", () => listOrders(db, { limit: 25, number: "ORD-012345" }));
+  // Admin order search (Phase 1): an exact phone (index orders_customer_phone_idx), part of a name (no index: bounded by the page
+  // limit, but a term nobody matches reads every order) and the queue counts shown on the chips.
+  const [{ phone }] = (await pool.query<{ phone: string }>("select customer_phone as phone from orders order by id limit 1 offset 777")).rows;
+  await measure("orders.list.byPhone", () => listOrders(db, { limit: 25, search: { kind: "phone", phone } }));
+  await measure("orders.list.byNameNoMatch", () => listOrders(db, { limit: 25, search: { kind: "name", name: "zzz-nobody" } }), "no match: reads every order");
+  await measure("orders.queueCounts", () => orderQueueCounts(db), "one pass over the orders");
+  await explain("orders.byPhone", sql`select id from orders where customer_phone = ${phone} order by created_at desc, id desc limit 26`);
   await measure("reports.dashboard", () => getDashboard(db));
   const today = new Date().toISOString().slice(0, 10);
   const yearAgo = new Date(Date.now() - 364 * 86_400_000).toISOString().slice(0, 10);
