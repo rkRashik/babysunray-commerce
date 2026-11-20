@@ -20,7 +20,7 @@ Founder acceptance can never run on this database: it is not marked staging.
 npm run db:migrate:production -- --first-time --report D:\BabySunray-production\install.json
 ```
 
-It refuses unless the database is hosted, uses TLS, carries the production marker and is empty; you type the host name back; every migration applies in one transaction; then the privilege script runs and the boundary is audited. Later production migrations need a production backup command first (not built yet; see ADR-0012).
+It refuses unless the database is hosted, uses TLS, carries the production marker and is empty; you type the host name back; every migration applies in one transaction; then the privilege script runs and the boundary is audited. Later production migrations: `npm run backup:create:production -- --out <folder>` (encrypted, passphrase asked twice, only a database marked production), then `npm run db:migrate:production -- --backup <that file> --report <new file>`. The command refuses without a production backup of this same host and database from the last 24 hours.
 
 ## 3. Settings on the host (Netlify)
 

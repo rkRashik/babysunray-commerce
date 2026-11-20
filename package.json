@@ -37,6 +37,7 @@
     "migrations:review": "node scripts/migration-review.mts",
     "backup:restore": "node scripts/backup-restore.mts",
     "backup:create:staging": "node scripts/backup-staging.mts",
+    "backup:create:production": "node scripts/backup-staging.mts --target production",
     "backup:drill": "vitest run --config vitest.drill.config.mts tests/drill/restore-drill.drill.ts",
     "media:drill": "vitest run --config vitest.drill.config.mts tests/drill/media-drill.drill.ts",
     "perf:bench": "vitest run --config vitest.perf.config.mts",

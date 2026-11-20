@@ -55,9 +55,7 @@ async function main(): Promise<void> {
   const reportFile = outsideRepository(arg("--report"), "report file", ROOT);
   if (existsSync(reportFile)) throw new Error("The report file already exists. Choose a new name; nothing was changed.");
   const firstTime = process.argv.includes("--first-time");
-  // No production backup command exists yet, so production supports only a first installation into an empty database.
-  if (PRODUCTION && !firstTime) throw new Error("For production, only --first-time on a new, empty database is supported. Nothing was changed.");
-  const backupFile = firstTime ? undefined : outsideRepository(arg("--backup"), "backup file (from npm run backup:create:staging)", ROOT);
+  const backupFile = firstTime ? undefined : outsideRepository(arg("--backup"), `backup file (from npm run backup:create:${TARGET.kind})`, ROOT);
   const conn = parseStagingUrl(env, `${TARGET.prefix}_MIGRATION_DATABASE_URL`, { pooled: false, prefix: TARGET.prefix });
   assertNotLocalDatabase(conn, env);
 

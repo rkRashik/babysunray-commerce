@@ -36,8 +36,8 @@ Resend's HTTPS API (`RESEND_API_KEY`, `EMAIL_FROM` on a domain verified in Resen
 
 ## 5. Production installation
 
-`npm run db:migrate:production -- --first-time --report <file>` installs the schema into a new, empty production database marked `babysunray:production` (the staging command's guards, typed host confirmation, privileges and audit). The founder then sets the host's settings, opens `/admin/setup` and creates the Owner. Steps: [installation-production.md](../operations/installation-production.md).
+`npm run db:migrate:production -- --first-time --report <file>` installs the schema into a new, empty production database marked `babysunray:production` (the staging command's guards, typed host confirmation, privileges and audit). `npm run backup:create:production` and `db:migrate:production --backup` cover later migrations. The founder then sets the host's settings, opens `/admin/setup` and creates the Owner. Steps: [installation-production.md](../operations/installation-production.md).
 
 ## Not decided or not built
 
-A production backup command (needed before any later production migration); 2FA (ADR-0008); staff roles; data export or deletion for customer accounts (no retention rule is approved).
+2FA (ADR-0008); staff roles; data export or deletion for customer accounts (no retention rule is approved).

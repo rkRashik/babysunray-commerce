@@ -4,16 +4,20 @@
 // For the founder to run in an interactive terminal; it asks for a passphrase twice without echo. Only a database
 // marked staging is accepted (src/db/hosted-target.mts), over a direct or session connection with TLS. Session tokens,
 // verification tokens and rate-limit windows are left out, as in local backups. Gate H.45; Node 22.18 or newer.
+// `npm run backup:create:production -- --out <directory>` is the same command for the PRODUCTION database (ADR-0012): it reads
+// .env.production.local (PRODUCTION_* settings) and accepts only a database marked babysunray:production.
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import path from "node:path";
 import pg from "pg";
 import { assertToolsMatch, backupDirectory, createBackupFile, MIN_PASSPHRASE, verifyBackupFile } from "../src/db/backup.mts";
-import { assertNotLocalDatabase, assertStagingTarget, parseStagingUrl } from "../src/db/hosted-target.mts";
-import { readStagingEnv } from "./staging-env.mts";
+import { assertMarkedTarget, assertNotLocalDatabase, PRODUCTION_MARKER, parseStagingUrl, STAGING_MARKER } from "../src/db/hosted-target.mts";
+import { readHostedEnv } from "./staging-env.mts";
 import { askHidden, assertInteractiveTerminal } from "./prompt.mts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
+const PRODUCTION = process.argv.includes("--target") && process.argv[process.argv.indexOf("--target") + 1] === "production";
+const TARGET = PRODUCTION ? { kind: "production" as const, prefix: "PRODUCTION" as const, marker: PRODUCTION_MARKER } : { kind: "staging" as const, prefix: "STAGING" as const, marker: STAGING_MARKER };
 
 async function sha256(file: string): Promise<string> {
   const hash = createHash("sha256");
@@ -22,29 +26,29 @@ async function sha256(file: string): Promise<string> {
 }
 
 async function main(): Promise<void> {
-  const env = readStagingEnv();
+  const env = readHostedEnv(TARGET.kind);
   const outIndex = process.argv.indexOf("--out");
   const dir = await backupDirectory(outIndex > 0 ? process.argv[outIndex + 1] : undefined, ROOT);
-  const conn = parseStagingUrl(env, "STAGING_MIGRATION_DATABASE_URL", { pooled: false });
+  const conn = parseStagingUrl(env, `${TARGET.prefix}_MIGRATION_DATABASE_URL`, { pooled: false, prefix: TARGET.prefix });
   assertNotLocalDatabase(conn, env);
   const client = new pg.Client({ host: conn.host, port: conn.port, database: conn.database, user: conn.user, password: conn.password, ssl: conn.ssl, connectionTimeoutMillis: 10_000 });
   let serverMajor: number;
   try {
     await client.connect();
-    serverMajor = Math.floor((await assertStagingTarget(client)).serverVersion / 10000);
+    serverMajor = Math.floor((await assertMarkedTarget(client, TARGET.marker)).serverVersion / 10000);
   } finally {
     await client.end().catch(() => undefined);
   }
   const pgDumpVersion = await assertToolsMatch(serverMajor);
 
   assertInteractiveTerminal();
-  console.log(`Backing up the staging database ${conn.database} on ${conn.host} (schemas public and drizzle) to ${dir}.`);
+  console.log(`Backing up the ${TARGET.kind} database ${conn.database} on ${conn.host} (schemas public and drizzle) to ${dir}.`);
   console.log(`Choose a passphrase of at least ${MIN_PASSPHRASE} characters and keep it apart from the backup.`);
   const passphrase = await askHidden("Backup passphrase (not shown): ");
   if ((await askHidden("Repeat the passphrase: ")) !== passphrase) throw new Error("The passphrases do not match. Nothing was written.");
 
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
-  const file = path.join(dir, `staging-${conn.database.replace(/[^\w.-]/g, "_")}-${stamp}.bsbackup`);
+  const file = path.join(dir, `${TARGET.kind}-${conn.database.replace(/[^\w.-]/g, "_")}-${stamp}.bsbackup`);
   const { bytes } = await createBackupFile({ host: conn.host, port: conn.port, database: conn.database, user: conn.user, password: conn.password, sslMode: conn.sslMode, sslRootCert: conn.sslRootCert, schemas: ["public", "drizzle"] }, passphrase, file, { pgDumpVersion });
   const verified = await verifyBackupFile(file, passphrase);
   console.log(`Backup written and verified: ${file}`);
