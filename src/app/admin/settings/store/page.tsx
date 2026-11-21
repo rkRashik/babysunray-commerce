@@ -117,7 +117,7 @@ export default async function StoreSettingsPage({ searchParams }: { searchParams
         version={version}
         uploadKey={randomUUID()}
         removeKey={randomUUID()}
-        error={typeof error === "string" ? (LOGO_ERRORS[error] ?? LOGO_ERRORS.failed) : undefined}
+        error={typeof error === "string" && error in LOGO_ERRORS ? LOGO_ERRORS[error] : undefined}
         disabled={!schemaReady}
       />
 

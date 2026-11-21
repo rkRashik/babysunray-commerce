@@ -143,6 +143,20 @@ Each row has one button for the next step:
 
 Important questions are asked before anything happens. Press **Cancel** if you're not sure.
 
+### The full order page
+
+Open an order by its number. On a computer the page has two columns: the work on the left, the customer on the right. On a phone everything is in one column, with the customer right after the next step.
+
+| Card | What it shows |
+|---|---|
+| **Status** | The four separate statuses: order, fulfilment (packing and delivery), payment and return. They are never merged into one. |
+| **Next step** | The steps possible now, as buttons. **Cancel order** and **Mark returned to sender** sit apart, under *If the order cannot go ahead*. |
+| **Customer and delivery** | Name, phone, address and delivery zone. **Copy** puts the phone or address on your clipboard (for the courier's form). The print button makes the packing and shipping document. |
+| **Items** | What was ordered, at the price it was ordered at, and the expected COD. |
+| **Cash on delivery** | The money for this order (see section 7). **Record a payment** opens the form; it opens by itself when a delivered order has nothing collected yet. |
+| **Returns and exchanges** | Open requests and their next step. **Record a return or exchange** opens the form while the return window is open. |
+| **History** | Everything that happened, oldest first; the latest step is marked. |
+
 ### Late orders (past 24 hours)
 
 Every new order should be confirmed within **24 hours**. If it's late, you'll see **"Overdue by …"** in red.
@@ -190,14 +204,17 @@ A new product is a **draft** — customers can't see it yet.
 
 ### Finishing the product
 
-On the product's page:
+The product's page starts with an **overview**: the first photo, whether customers can see the product, how many variants it has, the units on hand and available, and **the one thing to do next** (for example *2 things to finish before you can publish*, with a button that takes you to them). The row of buttons under it jumps to each part of the page.
 
-| Section | What to do |
+| Part | What to do |
 |---|---|
-| **Edit details** | Description, fabric, care instructions, size guidance, category — in both languages |
+| **Variants and stock** | Each size/colour is a *variant* with its own code (SKU) and price. **Add a variant** opens the form (it is already open for a product with no variants). Click a SKU to receive or adjust its stock. |
+| **Publishing** | Three steps: complete the information, mark it reviewed, publish. A finished step shows a tick. |
+| **Details** | Description, fabric, care instructions, size guidance, category — change them with **Edit details** at the top. If you type something and try to leave without saving, you are asked first. |
 | **Size chart** | Measurements in centimetres for each size |
 | **Photos** | Upload photos and describe each one in English and Bangla |
-| **Add a variant** | Each size/colour is a *variant* with its own code (SKU) and price |
+
+**Archive this product** is at the bottom, behind its own button, because it cannot be undone here.
 
 > **Fabric:** only write what you can prove (the care label or the supplier's paper). Avoid words like "organic" or "100% safe" without proof. Tick the confirmation box once it's correct.
 
@@ -209,8 +226,11 @@ On the product list, each draft shows either **Information complete** or **N mis
 
 ### Publishing
 
-1. Open the product and press **Mark the current content as reviewed**.
-2. Then press **Publish to the shop**.
+Follow the three steps in the product's **Publishing** card:
+
+1. Complete what the checklist asks for.
+2. Press **Mark the current content as reviewed**.
+3. Press **Publish to the shop**. Until it is possible, the card lists exactly what is still needed.
 
 Publishing only works when everything your **Publication requirements** ask for is filled in. You can **Withdraw from the shop** a published product at any time — it becomes a draft again.
 
@@ -236,11 +256,13 @@ Every variant has its own stock page (click its code, the SKU).
 | **Receive stock** | New goods arrived from the supplier |
 | **Adjust stock** | Something was damaged, lost or miscounted (a reason is required) |
 
-Words you'll see:
+The stock page shows three numbers, each with its meaning under it:
 
-- **On hand** — what's physically in your room
-- **Reserved** — held for orders not yet dispatched
-- **For sale / Available** — on hand minus reserved
+- **On hand** — what you have, by your records
+- **Reserved for orders** — held for orders not yet dispatched
+- **Available for new orders** — on hand minus reserved
+
+The **movement history** lists every change with who made it, in plain words (*Received*, *Adjusted by hand*, *Sent with an order*, *Returned to stock*). Entries cannot be edited or deleted; a mistake is corrected with a new adjustment.
 
 ### Counting your stock
 
@@ -258,7 +280,7 @@ Customer pays courier  ──►  Courier sends money to you
                                    (minus any courier charges: "Kept by courier")
 ```
 
-On the full order page, use **Record amount** to add:
+On the full order page, the **Cash on delivery** card shows four figures, each with what it means: **Expected** (the order total, not money yet), **Collected by courier**, **Settled to you** (green once something is settled) and **Still to collect** (amber while something is outstanding). Press **Record a payment**, then **Record amount**, to add:
 
 - **Collected** — the courier collected cash from the customer
 - **Settled** — the courier paid that money to you
@@ -292,6 +314,13 @@ On the full order page, use **Record amount** to add:
 ![Reports](images/reports.png)
 
 Go to **Reports**. Pick a quick range (**Today**, **Last 7 days**, **This month** …) or your own dates.
+
+The figures at the top are in two groups, so order activity is never mistaken for money:
+
+- **Orders placed (activity, not money)** — how many orders came in and what they are worth.
+- **Money recorded** — what the courier collected, what was settled to you and what you refunded, by the date you entered each payment.
+
+**What these words mean**, under the figures, explains each money word in one line.
 
 The report has three tabs:
 

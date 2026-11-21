@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
+import AxeBuilder from "@axe-core/playwright";
 import { expect, type Locator, type Page } from "@playwright/test";
 import sharp from "sharp";
 import type { Client } from "pg";
@@ -183,4 +184,36 @@ export async function fillNewProduct(page: Page, v: { slug?: string; nameEn?: st
     if (!(await advanced.evaluate((el) => (el as HTMLDetailsElement).open))) await advanced.locator("summary").click();
     await page.getByLabel("Slug").fill(v.slug);
   }
+}
+
+/** Opens an Admin action panel (a details element with this summary) unless it is already open. */
+export async function openPanel(page: Page, label: string): Promise<void> {
+  const panel = page.locator("details.of-panel").filter({ has: page.locator("summary", { hasText: label }) });
+  // `next dev` can reload a page while it compiles, closing a panel just opened; retry until it stays open.
+  await expect(async () => {
+    if ((await panel.getAttribute("open")) === null) await panel.locator("summary").click();
+    await expect(panel).toHaveAttribute("open", "", { timeout: 2_000 });
+  }).toPass();
+}
+
+/** No WCAG 2.1 A or AA violation that axe can detect on the page as it is now. */
+export async function expectNoAxeViolations(page: Page) {
+  const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+  expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+}
+
+/** Controls smaller than 44 px (the phone rule of mobile.spec.ts; a link inline in a sentence is exempt). */
+export async function smallTargets(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const small: string[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>("main a, main button, main input:not([type=hidden]), main select, main textarea, main summary, nav a, nav button")) {
+      const choice = el.matches("input[type=radio], input[type=checkbox]");
+      const target = choice ? (el.closest("label") ?? el.parentElement ?? el) : el;
+      const r = target.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      if (el.tagName === "A" && getComputedStyle(el).display === "inline" && el.closest("p")) continue;
+      if (r.height < 43.5 || r.width < 24) small.push(`${el.tagName.toLowerCase()} "${(el.getAttribute("aria-label") ?? el.textContent ?? "").trim().slice(0, 30)}" ${Math.round(r.width)}×${Math.round(r.height)}`);
+    }
+    return small;
+  });
 }

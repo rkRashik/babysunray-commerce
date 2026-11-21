@@ -1,7 +1,6 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import sharp from "sharp";
-import { clearSignInLimits, ensureZones, expectLabelledFields, productOf, seedSku, signIn } from "./support";
+import { clearSignInLimits, ensureZones, expectLabelledFields, expectNoAxeViolations, productOf, seedSku, signIn, smallTargets } from "./support";
 
 // Store settings and Delivery charges in a real browser: saved values shown as text until "Edit", Cancel and the
 // unsaved-changes questions, a validation error that keeps what was typed, the logo replacement (choose, preview,
@@ -12,11 +11,6 @@ test.beforeEach(async ({ page }) => {
   await clearSignInLimits();
   await signIn(page);
 });
-
-async function expectNoAxeViolations(page: Page) {
-  const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
-  expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
-}
 
 const logoPng = () => sharp({ create: { width: 360, height: 96, channels: 4, background: { r: 120, g: 80, b: 50, alpha: 1 } } }).png().toBuffer();
 
@@ -147,22 +141,6 @@ test("delivery charges are text until changed; the folded Settings group opens w
   await expect(zone.getByRole("textbox")).toHaveCount(0);
   await expectNoAxeViolations(page);
 });
-
-/** Controls smaller than 44 px (the phone rule of mobile.spec.ts; a link inline in a sentence is exempt). */
-async function smallTargets(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    const small: string[] = [];
-    for (const el of document.querySelectorAll<HTMLElement>("main a, main button, main input:not([type=hidden]), main select, main textarea, main summary, nav a, nav button")) {
-      const choice = el.matches("input[type=radio], input[type=checkbox]");
-      const target = choice ? (el.closest("label") ?? el.parentElement ?? el) : el;
-      const r = target.getBoundingClientRect();
-      if (r.width === 0 || r.height === 0) continue;
-      if (el.tagName === "A" && getComputedStyle(el).display === "inline" && el.closest("p")) continue;
-      if (r.height < 43.5 || r.width < 24) small.push(`${el.tagName.toLowerCase()} "${(el.getAttribute("aria-label") ?? el.textContent ?? "").trim().slice(0, 30)}" ${Math.round(r.width)}×${Math.round(r.height)}`);
-    }
-    return small;
-  });
-}
 
 /** The file picker opens the system file dialog from the keyboard and shows a focus ring when reached with the keyboard. */
 async function expectKeyboardFilePicker(page: Page, label: RegExp) {

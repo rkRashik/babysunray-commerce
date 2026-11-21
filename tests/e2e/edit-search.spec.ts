@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { clearSignInLimits, fillNewProduct, signIn, submitAndWait, testDatabase, uniqueName } from "./support";
+import { clearSignInLimits, fillNewProduct, signIn, submitAndWait, testDatabase, uniqueName, openPanel } from "./support";
 
 // Draft editing, archive and deactivate confirmations, and product search, in a real browser.
 
@@ -15,6 +15,7 @@ async function createProductWithVariant(page: Page, prefix: string, names = { en
   await page.getByRole("button", { name: "Create draft" }).click();
   await expect(page.getByRole("status")).toHaveText("Draft product created.");
   const productUrl = page.url().split("?")[0];
+  await openPanel(page, "Add a variant");
   const form = page.getByRole("region", { name: "Add a variant" });
   await form.getByLabel("SKU").fill(sku);
   await form.getByLabel("Size").fill("0-3M");
@@ -114,10 +115,12 @@ test("archive and deactivate ask first; cancelling changes nothing", async ({ pa
   await expect(page.getByRole("link", { name: `Edit ${sku}` })).toHaveCount(0);
 
   page.once("dialog", (dialog) => void dialog.dismiss());
+  await openPanel(page, "Archive this product");
   await page.getByRole("button", { name: "Archive product" }).click();
   await expect(page.getByRole("link", { name: "Edit details" })).toBeVisible();
 
   page.once("dialog", (dialog) => void dialog.accept());
+  await openPanel(page, "Archive this product");
   await page.getByRole("button", { name: "Archive product" }).click();
   await expect(page.getByRole("status")).toHaveText("Product archived.");
   await expect(page.getByRole("link", { name: "Edit details" })).toHaveCount(0);

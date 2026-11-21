@@ -98,7 +98,7 @@ async function createOrder(page: Page, n: number, lines: [string, number][]): Pr
 async function step(page: Page, url: string, button: string) {
   await page.goto(url);
   const before = await page.getByTestId("order-version").textContent();
-  await page.getByRole("region", { name: "Actions" }).getByRole("button", { name: button }).click();
+  await page.getByRole("region", { name: "Next step" }).getByRole("button", { name: button }).click();
   await expect(page.getByTestId("order-version")).not.toHaveText(before ?? "");
 }
 
@@ -273,6 +273,10 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   await capture(mobile, "phone-31-reports-cod.png", "Reports COD tab on a phone", "Phone");
   await mobile.goto("/admin/reports");
   await capture(mobile, "phone-30-reports.png", "Reports on a phone", "Phone");
+  await mobile.goto(orders[4]);
+  await capture(mobile, "phone-60-order-detail.png", "One order on a phone", "Phone");
+  await mobile.goto(`/admin/products/${romperId}`);
+  await capture(mobile, "phone-42-product.png", "One product on a phone", "Phone");
   await mobile.goto("/admin/settings/store");
   await capture(mobile, "phone-50-store-settings.png", "Store settings on a phone", "Phone");
   await mobile.getByRole("navigation", { name: "Quick links" }).getByRole("button", { name: "Menu" }).tap();

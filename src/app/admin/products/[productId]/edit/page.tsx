@@ -6,6 +6,7 @@ import { getProductWithVariants, listCategories } from "@/modules/catalogue/serv
 import { DomainError } from "@/modules/domain-error";
 import { updateProductAction } from "../../../actions";
 import { ActionForm, Checkbox, Field, SelectField } from "../../../_components/action-form";
+import { UnsavedChangesGuard } from "../../../_components/editable-section";
 import { LanguageTabs } from "../../../_components/language-tabs";
 import { AdminShell, Section, productTitle } from "../../../_components/shell";
 import { requireAdmin } from "../../../_lib/session";
@@ -50,6 +51,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ pr
           Web address: <span className="font-mono">{product.slug}</span> (cannot be changed). Empty a field to remove it; at least one name must remain. Write each language yourself:
           nothing is translated automatically.
         </p>
+        <UnsavedChangesGuard>
         <ActionForm action={updateProductAction} idempotencyKey={randomUUID()} hidden={{ productId: product.id, version: String(product.version) }} submitLabel="Save changes">
           <LanguageTabs
             emptyEn={empty([product.nameEn, product.descriptionEn, product.fabricEn, product.careEn])}
@@ -85,6 +87,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ pr
             label="I confirm the fabric statement above is accurate and backed by evidence. Changing the text needs a new confirmation."
             defaultChecked={product.fabricConfirmedAt !== null}
           />
+          <h3 className="border-t border-gray-200 pt-4 text-sm font-bold">Where it appears</h3>
           <SelectField
             name="categoryId"
             label="Category"
@@ -94,7 +97,8 @@ export default async function EditProductPage({ params }: { params: Promise<{ pr
           />
           <Checkbox name="featured" label="Featured (shown first in the storefront preview)" defaultChecked={product.featured} />
         </ActionForm>
-        <Link href={back} className="inline-block text-sm underline">
+        </UnsavedChangesGuard>
+        <Link href={back} className="of-btn of-btn-line of-btn-sm">
           Cancel
         </Link>
       </Section>

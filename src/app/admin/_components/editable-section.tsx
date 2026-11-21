@@ -86,3 +86,10 @@ function useLeaveGuard(active: boolean) {
     };
   }, [active]);
 }
+
+/** Wraps a page-sized form that is always editable (for example a product's details): once something is typed, leaving asks first. */
+export function UnsavedChangesGuard({ children }: { children: React.ReactNode }) {
+  const [dirty, setDirty] = useState(false);
+  useLeaveGuard(dirty);
+  return <div onInput={() => setDirty(true)}>{children}</div>;
+}

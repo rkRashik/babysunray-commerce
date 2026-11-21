@@ -33,7 +33,7 @@ async function createOrder(page: Page, sku: string, quantity = 1) {
 
 async function step(page: Page, button: string) {
   const before = (await page.getByTestId("order-version").textContent()) ?? "";
-  await page.getByRole("region", { name: "Actions" }).getByRole("button", { name: button }).click();
+  await page.getByRole("region", { name: "Next step" }).getByRole("button", { name: button }).click();
   await expect(page.getByTestId("order-version")).not.toHaveText(before);
 }
 
@@ -182,7 +182,7 @@ async function startCount(page: Page, sku: string) {
 
 async function stockOf(page: Page, sku: string) {
   await page.goto(`/admin/skus/${sku}`);
-  return { onHand: await page.getByTestId("on-hand").textContent(), reservation: await page.getByTestId("reservation").textContent() };
+  return { onHand: await page.getByTestId("on-hand").textContent(), reservation: `Reserved for orders: ${await page.getByTestId("reserved").textContent()} · Available for new orders: ${await page.getByTestId("available").textContent()}` };
 }
 
 test("a stock count: enter, resume, review, refuse without a reason, apply once", async ({ page }) => {

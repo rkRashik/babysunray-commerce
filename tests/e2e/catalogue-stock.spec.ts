@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { clearSignInLimits, fillNewProduct, signIn, submitAndWait, testDatabase, uniqueName } from "./support";
+import { clearSignInLimits, fillNewProduct, signIn, submitAndWait, testDatabase, uniqueName, openPanel } from "./support";
 
 // The Owner's catalogue and stock work in a real browser: every step goes through the Server Actions, the
 // shared operations and PostgreSQL. Fictional products only.
@@ -24,6 +24,7 @@ async function createProduct(page: Page, slug: string, nameEn = "E2E Cotton Romp
 }
 
 async function addVariant(page: Page, sku: string, price = "850.50"): Promise<void> {
+  await openPanel(page, "Add a variant");
   const form = page.getByRole("region", { name: "Add a variant" });
   await form.getByLabel("SKU").fill(sku.toLowerCase());
   await form.getByLabel("Size").fill("0-3M");
@@ -164,6 +165,7 @@ test("wrong inputs get understandable errors and keep what was typed", async ({ 
   await page.getByRole("button", { name: "Create draft" }).click();
   await expect(page.getByRole("status")).toHaveText("Draft product created.");
 
+  await openPanel(page, "Add a variant");
   const form = page.getByRole("region", { name: "Add a variant" });
   await form.getByLabel("SKU").fill(sku);
   for (const price of ["abc", "8.505", "-5", "0"]) {
@@ -176,7 +178,8 @@ test("wrong inputs get understandable errors and keep what was typed", async ({ 
   await form.getByRole("button", { name: "Add variant" }).click();
   await expect(page.getByRole("status")).toHaveText("Variant added.");
 
-  // A second variant with the same SKU (in another case) is refused.
+  // A second variant with the same SKU (in another case) is refused. With a variant there, the form starts closed.
+  await openPanel(page, "Add a variant");
   await form.getByLabel("SKU").fill(sku.toLowerCase());
   await form.getByLabel("Price (BDT)").fill("100");
   await form.getByRole("button", { name: "Add variant" }).click();

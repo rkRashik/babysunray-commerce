@@ -260,13 +260,25 @@ export async function AdminShell({
 }
 
 /** A titled panel; the heading names the region for assistive technology. */
-export function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const id = `section-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+export const sectionId = (title: string) => `section-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+
+/** A card with a heading; `action` sits beside the heading (for example the card's edit link). */
+export function Section({ title, children, action, className = "" }: { title: string; children: React.ReactNode; action?: React.ReactNode; className?: string }) {
+  const id = sectionId(title);
   return (
-    <section aria-labelledby={id} className="of-card space-y-4 p-5 lg:p-6">
-      <h2 id={id} className="text-[1.0625rem] font-bold">
-        {title}
-      </h2>
+    <section aria-labelledby={id} className={`of-card space-y-4 p-5 lg:p-6 ${className}`}>
+      {action ? (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <h2 id={id} className="scroll-mt-6 text-[1.0625rem] font-bold">
+            {title}
+          </h2>
+          {action}
+        </div>
+      ) : (
+        <h2 id={id} className="scroll-mt-6 text-[1.0625rem] font-bold">
+          {title}
+        </h2>
+      )}
       {children}
     </section>
   );

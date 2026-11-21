@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { clearSignInLimits, ensureZones, seedStorefrontProduct, signIn, testDatabase } from "./support";
+import { clearSignInLimits, ensureZones, seedStorefrontProduct, signIn, testDatabase, openPanel } from "./support";
 
 // The founder acceptance rehearsal (ADR-0011), end to end in real browsers against the real server and PostgreSQL (the
 // test database is marked staging by global-setup): the shop does not exist without a pass; the Owner reviews and publishes;
@@ -12,7 +12,7 @@ const dimension = (page: Page, name: string) => page.locator(`[data-dimension="$
 
 async function step(page: Page, button: string) {
   const before = await page.getByTestId("order-version").textContent();
-  await page.getByRole("region", { name: "Actions" }).getByRole("button", { name: button }).click();
+  await page.getByRole("region", { name: "Next step" }).getByRole("button", { name: button }).click();
   await expect(page.getByTestId("order-version")).not.toHaveText(before ?? "");
 }
 
@@ -106,7 +106,8 @@ test("founder acceptance: publish, shop as a separate customer, place a real COD
 
   // The Owner sees that exact order and runs the whole workflow.
   await page.goto(`/admin/skus/${sku}`);
-  await expect(page.getByTestId("reservation")).toHaveText("Reserved for orders: 2 · Available for new orders: 3");
+  await expect(page.getByTestId("reserved")).toHaveText("2");
+  await expect(page.getByTestId("available")).toHaveText("3");
   await page.goto("/admin/orders");
   await page.getByRole("link", { name: reference, exact: true }).click();
   await expect(dimension(page, "order")).toHaveText("Pending verification");
@@ -119,10 +120,12 @@ test("founder acceptance: publish, shop as a separate customer, place a real COD
   await expect(page.getByTestId("deliver-note")).toContainText("No courier system is connected");
   await step(page, "Record delivery");
   const cod = page.getByRole("region", { name: "Cash on delivery" });
+  await openPanel(page, "Record a payment");
   await cod.getByLabel("Courier collected").check();
   await cod.getByLabel("Amount (BDT)").fill("1760");
   await cod.getByRole("button", { name: "Record amount" }).click();
   await expect(dimension(page, "payment")).toHaveText("Collected, not fully settled");
+  await openPanel(page, "Record a payment");
   await cod.getByLabel("Settled to me").check();
   await cod.getByLabel("Amount (BDT)").fill("1760");
   await cod.getByRole("button", { name: "Record amount" }).click();
@@ -132,7 +135,8 @@ test("founder acceptance: publish, shop as a separate customer, place a real COD
   // Stock moved out exactly once; the customer's tracking link shows the same order.
   await page.goto(`/admin/skus/${sku}`);
   await expect(page.getByTestId("on-hand")).toHaveText("3");
-  await expect(page.getByTestId("reservation")).toHaveText("Reserved for orders: 0 · Available for new orders: 3");
+  await expect(page.getByTestId("reserved")).toHaveText("0");
+  await expect(page.getByTestId("available")).toHaveText("3");
   await shopper.goto(trackingUrl);
   await expect(shopper.getByTestId("guest-order-status")).toHaveText("Confirmed");
   await expect(shopper.getByText(reference)).toBeVisible();

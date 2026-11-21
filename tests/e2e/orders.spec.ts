@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
-import { clearSignInLimits, ensureZones, expectLabelledFields, seedSku, signIn, submitAndWait, testDatabase } from "./support";
+import { clearSignInLimits, ensureZones, expectLabelledFields, seedSku, signIn, submitAndWait, testDatabase, openPanel } from "./support";
 
 // The Owner's order work and the customer's tracking page in a real browser, against the real server, Better
 // Auth and PostgreSQL. Fictional customers and SKUs only.
@@ -50,7 +50,7 @@ const version = async (page: Page) => (await page.getByTestId("order-version").t
 /** Presses a lifecycle button and waits for the next order version, so later steps never act on a stale form. */
 async function step(page: Page, button: string) {
   const before = await version(page);
-  await page.getByRole("region", { name: "Actions" }).getByRole("button", { name: button }).click();
+  await page.getByRole("region", { name: "Next step" }).getByRole("button", { name: button }).click();
   await expect(page.getByTestId("order-version")).not.toHaveText(before);
 }
 
@@ -63,7 +63,7 @@ async function save(page: Page, click: () => Promise<void>) {
 
 async function stock(page: Page, sku: string) {
   await page.goto(`/admin/skus/${sku}`);
-  return { onHand: await page.getByTestId("on-hand").textContent(), reservation: await page.getByTestId("reservation").textContent() };
+  return { onHand: await page.getByTestId("on-hand").textContent(), reservation: `Reserved for orders: ${await page.getByTestId("reserved").textContent()} · Available for new orders: ${await page.getByTestId("available").textContent()}` };
 }
 
 test("delivery charges, an assisted order, reservation, verification, packing, dispatch, delivery, COD and closing", async ({ page }) => {
@@ -90,21 +90,24 @@ test("delivery charges, an assisted order, reservation, verification, packing, d
   await step(page, "Record delivery");
   await expect(dimension(page, "payment")).toHaveText("Nothing collected");
   const cod = page.getByRole("region", { name: "Cash on delivery" });
+  await openPanel(page, "Record a payment");
   await cod.getByLabel("Courier collected").check();
   await cod.getByLabel("Amount (BDT)").fill("1060");
   await save(page, () => cod.getByRole("button", { name: "Record amount" }).click());
   await expect(dimension(page, "payment")).toHaveText("Collected, not fully settled");
-  await expect(page.getByRole("region", { name: "Actions" })).not.toContainText("Close order");
+  await expect(page.getByRole("region", { name: "Next step" })).not.toContainText("Close order");
+  await openPanel(page, "Record a payment");
   await cod.getByLabel("Settled to me").check();
   await cod.getByLabel("Amount (BDT)").fill("1000");
   await save(page, () => cod.getByRole("button", { name: "Record amount" }).click());
   await expect(page.getByTestId("cod")).toContainText("৳ 60");
+  await openPanel(page, "Record a payment");
   await cod.getByLabel("Settled to me").check();
   await cod.getByLabel("Amount (BDT)").fill("60");
   await save(page, () => cod.getByRole("button", { name: "Record amount" }).click());
   await expect(dimension(page, "payment")).toHaveText("Settled");
   // Settled, but delivered today: the order stays open until the 7-day return window has ended.
-  await expect(page.getByRole("region", { name: "Actions" })).not.toContainText("Close order");
+  await expect(page.getByRole("region", { name: "Next step" })).not.toContainText("Close order");
   await expect(page.getByTestId("close-hint")).toContainText("Can be closed after");
   const db = await testDatabase();
   try {
@@ -138,8 +141,8 @@ test("an order past its 24-hour deadline shows for review and is confirmed only 
   // A second order releases the overdue hold first, then takes the unit.
   await createOrder(page, sku, 1);
   await page.goto(orderUrl);
-  await page.getByRole("region", { name: "Actions" }).getByRole("button", { name: "Confirm order (verified with the customer)" }).click();
-  await expect(page.getByRole("region", { name: "Actions" }).getByRole("alert")).toContainText("Not enough stock");
+  await page.getByRole("region", { name: "Next step" }).getByRole("button", { name: "Confirm order (verified with the customer)" }).click();
+  await expect(page.getByRole("region", { name: "Next step" }).getByRole("alert")).toContainText("Not enough stock");
   await expect(dimension(page, "order")).toHaveText("Verification expired — Owner review");
 });
 
@@ -301,6 +304,7 @@ test("RTO: the returned parcel goes to inspection, and only a passed inspection 
   expect(await stock(page, sku)).toMatchObject({ onHand: "0" });
   await page.goto(orderUrl);
   const cod = page.getByRole("region", { name: "Cash on delivery" });
+  await openPanel(page, "Record the RTO charge");
   await cod.getByLabel("RTO charge billed by the courier (BDT)").fill("50");
   await save(page, () => cod.getByRole("button", { name: "Save RTO charge" }).click());
   await expect(page.getByTestId("cod")).toContainText("৳ 50");
@@ -309,7 +313,7 @@ test("RTO: the returned parcel goes to inspection, and only a passed inspection 
   await inspection.getByRole("button", { name: "Passed: back to stock" }).click();
   await expect(page.getByTestId("inspection-status")).toHaveText("Passed: back in stock");
   expect(await stock(page, sku)).toMatchObject({ onHand: "2" });
-  await expect(page.getByRole("table")).toContainText("return_restock");
+  await expect(page.getByRole("table")).toContainText("Returned to stock");
 });
 
 test("the order list finds an order by phone or name without putting either in the URL, and packs it from the row", async ({ page }) => {

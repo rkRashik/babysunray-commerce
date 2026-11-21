@@ -9,6 +9,7 @@ import { getStockLevel, listStockMovementsPage } from "@/modules/inventory/servi
 import { adjustStockAction, receiveStockAction } from "../../actions";
 import { ActionForm, Choice, Field } from "../../_components/action-form";
 import { AdminShell, Section, formatTime, noticeFor, productTitle } from "../../_components/shell";
+import { Stat } from "../../_components/stat";
 import { requireAdmin } from "../../_lib/session";
 import { bdt } from "../../orders/_components/labels";
 
@@ -17,6 +18,9 @@ export const metadata = { title: "Stock · Admin" };
 type Props = { params: Promise<{ sku: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 const PAGE_SIZE = 50;
+
+// Stock movement types in plain words.
+const MOVEMENTS: Record<string, string> = { receipt: "Received", adjustment: "Adjusted by hand", dispatch: "Sent with an order", return_restock: "Returned to stock" };
 
 export default async function SkuPage({ params, searchParams }: Props) {
   const principal = await requireAdmin("stock:read");
@@ -51,17 +55,20 @@ export default async function SkuPage({ params, searchParams }: Props) {
       ]}
     >
       <Section title="Current stock">
-        <p className="text-3xl font-semibold tabular-nums" data-testid="on-hand">
-          {level.onHand}
-        </p>
-        <p className="text-sm" data-testid="reservation">
-          Reserved for orders: <span className="font-semibold tabular-nums">{level.reserved}</span> · Available for new orders:{" "}
-          <span className="font-semibold tabular-nums">{level.available}</span>
-        </p>
         <p className="text-sm text-gray-700">
-          Units on hand. {[variant.size, variant.colour].filter(Boolean).join(", ") || "No size or colour"} · {bdt(variant.pricePaisa)} · variant{" "}
-          {variant.status}.
+          {[variant.size, variant.colour].filter(Boolean).join(", ") || "No size or colour"} · {bdt(variant.pricePaisa)} · variant {variant.status === "active" ? "active" : "inactive"}
         </p>
+        <dl className="grid gap-3 sm:grid-cols-3">
+          <Stat term="On hand" value={level.onHand} note="Units you have, by your records." testId="on-hand" />
+          <Stat term="Reserved for orders" value={level.reserved} note="Held for orders not yet dispatched." testId="reserved" />
+          <Stat
+            term="Available for new orders"
+            value={level.available}
+            note="On hand minus reserved."
+            tone={level.available > 0 ? "ok" : "wait"}
+            testId="available"
+          />
+        </dl>
       </Section>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -90,6 +97,7 @@ export default async function SkuPage({ params, searchParams }: Props) {
       </div>
 
       <Section title="Movement history (oldest first)">
+        <p className="text-sm text-gray-700">Every change to this SKU&apos;s stock, with who made it. Entries cannot be edited or deleted here; a mistake is corrected with a new adjustment.</p>
         {page.items.length === 0 ? (
           <p className="text-sm text-gray-700">No movements yet. Receipts and adjustments appear here with who made them.</p>
         ) : (
@@ -108,7 +116,7 @@ export default async function SkuPage({ params, searchParams }: Props) {
                 {page.items.map((m) => (
                   <tr key={m.id}>
                     <td className="py-2 pr-3 whitespace-nowrap">{formatTime(m.createdAt)}</td>
-                    <td className="py-2 pr-3">{m.movementType}</td>
+                    <td className="py-2 pr-3">{MOVEMENTS[m.movementType] ?? m.movementType}</td>
                     <td className={`py-2 pr-3 text-right font-medium tabular-nums ${m.quantityDelta > 0 ? "text-green-800" : "text-red-800"}`}>
                       {m.quantityDelta > 0 ? `+${m.quantityDelta}` : m.quantityDelta}
                       <span className="sr-only">{m.quantityDelta > 0 ? " added" : " removed"}</span>

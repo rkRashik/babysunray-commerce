@@ -118,6 +118,23 @@ async function ReportBody({ range, tab }: { range: DateRange | null; tab: Tab })
             <RefreshButton />
           </div>
           <KpiTiles r={report} />
+          <details className="text-sm">
+            <summary className="cursor-pointer py-3 font-semibold lg:py-1">What these words mean</summary>
+            <dl className="mt-2 grid gap-x-6 gap-y-2 sm:grid-cols-[12rem_1fr]" data-testid="report-glossary">
+              <dt className="font-semibold">Order value</dt>
+              <dd className="text-gray-700">The total of orders placed, whatever happened to them later. It is not sales, revenue or profit.</dd>
+              <dt className="font-semibold">Expected COD</dt>
+              <dd className="text-gray-700">What a verified order should bring in when it is delivered. Expected is not money.</dd>
+              <dt className="font-semibold">Collected</dt>
+              <dd className="text-gray-700">Cash the courier took from the customer. It stays with the courier until it is settled to you or recorded as kept by the courier.</dd>
+              <dt className="font-semibold">Settled</dt>
+              <dd className="text-gray-700">Money the courier has paid to you.</dd>
+              <dt className="font-semibold">Kept by the courier</dt>
+              <dd className="text-gray-700">Fees or deductions you recorded from the courier&apos;s statements.</dd>
+              <dt className="font-semibold">Refunded</dt>
+              <dd className="text-gray-700">Money you paid back to customers for returns.</dd>
+            </dl>
+          </details>
           <ScrollArea label="Report section tabs" fade>
           <nav aria-label="Report sections">
             <ul className="flex gap-1 border-b border-gray-300">

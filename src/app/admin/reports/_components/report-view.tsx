@@ -3,6 +3,7 @@ import { formatOrderNumber } from "@/modules/orders/rules";
 import type { Bucket, CodRow, Outstanding, PeriodReport } from "@/modules/reports/summary";
 import { bdt, label, tone } from "../../orders/_components/labels";
 import { ScrollArea } from "../../_components/scroll-area";
+import { Stat } from "../../_components/stat";
 import { StackBar } from "./stack-bar";
 
 // Report sections shared by the Reports page and its printed version. Each heading says what the figures are
@@ -130,31 +131,30 @@ export function OutstandingView({ o, charts = false }: { o: Outstanding; charts?
   );
 }
 
-/** The headline figures of the period. */
+/** The headline figures of the period: order activity and money recorded, kept apart so order value is never read as money. */
 export function KpiTiles({ r }: { r: PeriodReport }) {
   return (
-    <dl className="grid grid-cols-2 gap-3 lg:grid-cols-5 [&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1" data-testid="report-kpis">
-      <div className="of-stat">
-        <dt>Orders placed</dt>
-        <dd>{r.received.total.count}</dd>
+    <div className="grid gap-x-5 gap-y-4 lg:grid-cols-[2fr_3fr]" data-testid="report-kpis">
+      <div className="space-y-2">
+        <h3 className="text-sm font-bold">
+          Orders placed <span className="font-normal text-gray-600">(activity, not money)</span>
+        </h3>
+        <dl className="grid grid-cols-2 gap-3">
+          <Stat term="Orders placed" value={r.received.total.count} note="Including cancelled and unverified orders." />
+          <Stat term="Order value placed" value={bdt(r.received.total.amountPaisa)} note="What these orders are worth. Not sales or money received." />
+        </dl>
       </div>
-      <div className="of-stat">
-        <dt>Order value placed</dt>
-        <dd>{bdt(r.received.total.amountPaisa)}</dd>
+      <div className="space-y-2">
+        <h3 className="text-sm font-bold">
+          Money recorded <span className="font-normal text-gray-600">(by the date you entered)</span>
+        </h3>
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Stat term="COD collected by courier" value={bdt(r.money.collected.amountPaisa)} note="Taken from customers by the courier." />
+          <Stat term="Settled to you" value={bdt(r.money.settled.amountPaisa)} note="Paid to you by the courier." tone={r.money.settled.amountPaisa > 0 ? "ok" : undefined} />
+          <Stat term="Refunded" value={bdt(r.money.refunded.amountPaisa)} note="Paid back by you to customers." />
+        </dl>
       </div>
-      <div className="of-stat">
-        <dt>COD collected by courier</dt>
-        <dd>{bdt(r.money.collected.amountPaisa)}</dd>
-      </div>
-      <div className="of-stat">
-        <dt>Settled to you</dt>
-        <dd>{bdt(r.money.settled.amountPaisa)}</dd>
-      </div>
-      <div className="of-stat">
-        <dt>Refunded</dt>
-        <dd>{bdt(r.money.refunded.amountPaisa)}</dd>
-      </div>
-    </dl>
+    </div>
   );
 }
 

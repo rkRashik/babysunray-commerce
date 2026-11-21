@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { clearSignInLimits, fillNewProduct, ensureZones, seedSku, seedStorefrontProduct, signIn, testDatabase, uniqueName } from "./support";
+import { clearSignInLimits, fillNewProduct, ensureZones, seedSku, seedStorefrontProduct, signIn, testDatabase, uniqueName, openPanel } from "./support";
 
 // The Admin on a phone-sized screen (Pixel 7 profile: touch, 412 px wide).
 
@@ -68,6 +68,7 @@ test("navigation and the main screens work without sideways scrolling", async ({
   await expect(page.getByRole("status")).toHaveText("Draft product created.");
   await noSideScroll(page);
 
+  await openPanel(page, "Add a variant");
   const form = page.getByRole("region", { name: "Add a variant" });
   await form.getByLabel("SKU").fill(sku);
   await form.getByLabel("Price (BDT)").fill("450");
