@@ -299,8 +299,14 @@ test("RTO: the returned parcel goes to inspection, and only a passed inspection 
   for (const button of ["Confirm order (verified with the customer)", "Mark packed", "Dispatch"]) await step(page, button);
   await step(page, "Mark returned to sender (refused or undelivered)");
   await expect(dimension(page, "fulfilment")).toHaveText("Returning to sender (RTO)");
+  // The progress strip: on its way back is the current step, not done, until the parcel is received.
+  const progress = page.getByTestId("order-progress");
+  await expect(progress.locator("[aria-current=step]")).toContainText("Returning to sender (next)");
+  await expect(progress.locator("[data-done=true]")).toHaveCount(3);
   await step(page, "Receive returned parcel into inspection");
   await expect(page.getByTestId("inspection-status")).toHaveText("Awaiting inspection");
+  await expect(progress.locator("[data-done=true]")).toHaveCount(4);
+  await expect(progress.locator("[aria-current=step]")).toContainText("Closed (next)");
   expect(await stock(page, sku)).toMatchObject({ onHand: "0" });
   await page.goto(orderUrl);
   const cod = page.getByRole("region", { name: "Cash on delivery" });

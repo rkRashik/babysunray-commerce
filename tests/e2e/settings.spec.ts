@@ -93,6 +93,9 @@ test("the logo is replaced only after choosing, previewing and saving; a rejecte
   await expect(logo.getByTestId("logo-source")).toContainText("Uploaded here");
 
   // A file that claims to be a PNG but is not one: the server refuses it and the logo in use stays.
+  // The save above reloaded the whole page (a plain form post and redirect); "Replace logo" only works once the page's
+  // scripts have loaded, and a click before that is lost (seen under `next dev`, where the first load compiles).
+  await page.waitForLoadState("networkidle");
   await logo.getByRole("button", { name: "Replace logo" }).click();
   await logo.getByLabel(/^New logo/).setInputFiles({ name: "fake.png", mimeType: "image/png", buffer: Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>") });
   await logo.getByRole("button", { name: "Save logo" }).click();

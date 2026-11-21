@@ -62,7 +62,7 @@ const NAV: { group: string; fold?: true; items: { key: Current; href: string; la
     ],
   },
   {
-    group: "Shop",
+    group: "Opening the shop",
     fold: true,
     items: [
       { key: "preview", href: "/admin/storefront-preview", label: "Storefront preview", icon: Eye },
@@ -202,7 +202,7 @@ export async function AdminShell({
                 {NAV.map(({ group, items }) => (
                   <div key={group} className="pb-2">
                     <p className="px-3 pt-3 pb-1 text-[0.8125rem] font-semibold text-gray-600">{group}</p>
-                    <ul>
+                    <ul className="grid grid-cols-2 gap-1">
                       {items.map(({ key, href, label, icon: Icon }) => (
                         <li key={key}>
                           <Link href={href} aria-current={current === key ? "page" : undefined} className="of-menu-link">

@@ -39,7 +39,7 @@ test("a product opens on an overview with its stock and next step; publishing is
   await expect(page.getByTestId("product-glance")).toContainText("On hand: 4");
   await expect(page.getByTestId("product-glance")).toContainText("Available for orders: 4");
   // The next step comes from the publication blockers: something to finish, or publishing switched off.
-  await expect(page.getByTestId("next-step")).toContainText(/to finish before you can publish|Publishing is off/);
+  await expect(page.getByTestId("next-step")).toContainText(/before you can publish|Publishing is off/);
 
   // The jump links reach each part of the page.
   await page.getByRole("navigation", { name: "On this page" }).getByRole("link", { name: "Publishing" }).click();
@@ -68,6 +68,10 @@ test("an order shows its next step apart from cancelling, the customer beside it
   const sku = await seedSku(3);
   const orderPath = await newOrder(page, sku);
 
+  // A pending order: the progress strip marks verification as the next step and nothing as done.
+  const progress = page.getByTestId("order-progress");
+  await expect(progress.locator("[aria-current=step]")).toContainText("Verified (next)");
+  await expect(progress.locator("[data-done=true]")).toHaveCount(0);
   const next = page.getByRole("region", { name: "Next step" });
   await expect(next.getByRole("button", { name: "Confirm order (verified with the customer)" })).toBeVisible();
   // Cancelling is a separate, quieter choice under its own heading.
@@ -136,7 +140,7 @@ test("the product, order, stock, report and edit pages fit a phone with 44-pixel
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), `${state}: sideways scroll`).toBeLessThanOrEqual(0);
     expect(await smallTargets(page), state).toEqual([]);
   };
-  for (const path of [`/admin/products/${id}`, orderPath, `/admin/skus/${sku}`, "/admin/reports", `/admin/products/${id}/edit`]) {
+  for (const path of [`/admin/products/${id}`, orderPath, `/admin/skus/${sku}`, "/admin/reports", `/admin/products/${id}/edit`, "/admin", "/admin/orders", "/admin/exports", "/admin/acceptance", "/admin/launch-readiness"]) {
     await page.goto(path);
     await check(path);
   }
@@ -187,4 +191,52 @@ test("payment and return forms open from their panels, and a saved payment close
   await panel.getByLabel(`Units of ${sku} coming back (of 1)`).fill("1");
   await panel.getByRole("button", { name: "Record request" }).click();
   await expect(page.getByTestId("return-status")).toHaveText("Requested");
+  // Delivered: verified, packed, dispatched and delivered are done; closing is next.
+  await expect(page.getByTestId("order-progress").locator("[data-done=true]")).toHaveCount(4);
+  await expect(page.getByTestId("order-progress").locator("[aria-current=step]")).toContainText("Closed (next)");
+});
+
+test("the product list keeps less frequent filters behind one button and shows each filter in use as a removable chip", async ({ page }) => {
+  await page.goto("/admin");
+  const more = page.locator("details.of-panel").filter({ has: page.locator("summary", { hasText: "More filters" }) });
+  await expect(more).not.toHaveAttribute("open");
+  await expect(page.getByLabel("Stock", { exact: true })).toBeHidden();
+  await openPanel(page, "More filters");
+  await page.getByLabel("Stock", { exact: true }).selectOption("out");
+  await expect(page).toHaveURL(/stock=out/);
+  // In use: the panel opens by itself, says how many are in use, and the chip removes just that filter.
+  await expect(more).toHaveAttribute("open", "");
+  await expect(more.locator("summary")).toContainText("More filters (1 in use)");
+  const chips = page.getByRole("list", { name: "Filters in use" });
+  await page.getByLabel("Status").selectOption("draft");
+  await expect(page).toHaveURL(/status=draft/);
+  await expect(chips.getByRole("link")).toHaveCount(2);
+  await chips.getByRole("link", { name: "Remove filter: Out of stock" }).click();
+  await expect(page).not.toHaveURL(/stock=/);
+  await expect(page).toHaveURL(/status=draft/);
+  await expect(chips.getByRole("link")).toHaveCount(1);
+});
+
+test("on a phone, variants are cards with their stock and actions, and the menu lists every page in two columns", async ({ page }) => {
+  const sku = await seedSku(3);
+  const { id } = await productOf(sku);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/admin/products/${id}`);
+  await expect(page.getByRole("table", { name: "Variants table" })).toBeHidden();
+  const card = page.getByRole("list", { name: "Variants" }).getByRole("listitem").filter({ hasText: sku });
+  await expect(card).toContainText("Available");
+  await expect(card.getByRole("link", { name: `Stock of ${sku}` })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Deactivate" })).toBeVisible();
+  await card.getByRole("link", { name: `Stock of ${sku}` }).click();
+  await expect(page.getByTestId("on-hand")).toHaveText("3");
+
+  await page.getByTestId("admin-menu-button").click();
+  const menu = page.getByTestId("admin-menu");
+  await expect(menu.getByText("Opening the shop")).toBeVisible();
+  // Measured in one frame, so the sheet's rise does not matter: Dashboard and Orders share a row.
+  const [dashboardTop, ordersTop] = await menu.evaluate((el) =>
+    ["Dashboard", "Orders"].map((name) => [...el.querySelectorAll("a")].find((a) => a.textContent?.trim() === name)!.getBoundingClientRect().top),
+  );
+  expect(ordersTop).toBeCloseTo(dashboardTop, 0);
+  expect(await smallTargets(page)).toEqual([]);
 });

@@ -81,7 +81,8 @@ export function OrderFilters({
         </div>
       </div>
       <p id="order-search-hint" className="mt-1.5 text-xs text-gray-600">
-        An order number (ORD-000042), a full mobile number (01XXXXXXXXX) or part of a name. It updates as you type. A name or phone number is never put in the page address.
+        Order number (ORD-000042), full mobile number or part of a name. Updates as you type.
+        <span className="sr-only"> A name or phone number is never put in the page address.</span>
       </p>
     </form>
   );

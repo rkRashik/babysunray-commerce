@@ -35,6 +35,27 @@ function blockerText(code: string): string {
   return item ? `Missing: ${item.label}.` : code;
 }
 
+/** Where to fix a publication blocker: the page or part of this page that does it, in the Owner's words. */
+function nextAction(code: string, productId: string): { text: string; action: string; href: string } {
+  const edit = `/admin/products/${productId}/edit`;
+  const photos = `/admin/products/${productId}/photos`;
+  const variants = `#${sectionId("Variants and stock")}`;
+  const map: Record<string, { text: string; action: string; href: string }> = {
+    review_not_current: { text: "mark the current content as reviewed.", action: "Go to the review", href: `#${sectionId("Publishing")}` },
+    "item:name": { text: "add the product name in English and Bangla.", action: "Edit the name", href: edit },
+    "item:description": { text: "add the description in English and Bangla.", action: "Edit the description", href: edit },
+    "item:fabric": { text: "add and confirm the fabric statement.", action: "Edit the fabric", href: edit },
+    "item:care": { text: "add the care instructions in English and Bangla.", action: "Edit the care instructions", href: edit },
+    "item:category": { text: "choose a category.", action: "Choose a category", href: edit },
+    "item:measurements": { text: "add the size chart measurements.", action: "Add measurements", href: `/admin/products/${productId}/measurements` },
+    "item:photo": { text: "add a product photo.", action: "Add photos", href: photos },
+    "item:alt": { text: "describe each photo in English and Bangla.", action: "Describe photos", href: photos },
+    "item:variant": { text: "add a variant with a price.", action: "Go to variants", href: variants },
+    "item:sizes": { text: "give every active variant a size.", action: "Go to variants", href: variants },
+  };
+  return map[code] ?? { text: "finish the publishing checklist.", action: "See what is missing", href: `#${sectionId("Publishing")}` };
+}
+
 /** One numbered publishing step; a finished step shows a tick instead of its number. */
 function Step({ n, title, done, children }: { n: number; title: string; done: boolean; children: React.ReactNode }) {
   return (
@@ -81,7 +102,36 @@ export default async function ProductPage({ params, searchParams }: Props) {
   const onHand = stock.reduce((n, s) => n + s.onHand, 0);
   const available = stock.reduce((n, s, i) => n + (product.variants[i].status === "active" ? s.available : 0), 0);
   const itemsLeft = publication.blockers.filter((b) => b.startsWith("item:") || b === "review_not_current").length;
+  // The first thing publishing still needs, as one direct action: missing information first, since a review of content
+  // that is still changing goes out of date; then the review.
+  const first = nextAction(publication.blockers.find((b) => b.startsWith("item:")) ?? publication.blockers.find((b) => b === "review_not_current") ?? "", product.id);
   const cover = product.media[0];
+  // A variant's actions, the same in the table and in the phone cards.
+  const variantActions = (v: (typeof product.variants)[number], card: boolean) =>
+    v.status === "active" ? (
+      <div className={`flex flex-wrap items-start gap-2 ${card ? "justify-start" : "justify-end"}`}>
+        {/* In the table the SKU itself links to its stock; a card gets a button for it. */}
+        {card ? (
+          <Link href={`/admin/skus/${encodeURIComponent(v.sku)}`} className="of-btn of-btn-line of-btn-sm" aria-label={`Stock of ${v.sku}`}>
+            Stock
+          </Link>
+        ) : null}
+        {draft ? (
+          <Link href={`/admin/variants/${v.id}/edit`} className="of-btn of-btn-line of-btn-sm" aria-label={`Edit ${v.sku}`}>
+            Edit
+          </Link>
+        ) : null}
+        <ActionForm
+          action={deactivateVariantAction}
+          idempotencyKey={randomUUID()}
+          hidden={{ variantId: v.id }}
+          submitLabel="Deactivate"
+          variant="secondary"
+          compact
+          confirm={`Deactivate ${v.sku}? It keeps its stock and history, but there is no way to reactivate it here.`}
+        />
+      </div>
+    ) : null;
   const jump = ["Variants and stock", "Publishing", "Details", "Size chart (cm)", "Photos"];
 
   return (
@@ -166,12 +216,21 @@ export default async function ProductPage({ params, searchParams }: Props) {
               </>
             ) : (
               <>
-                <span className="font-semibold">
-                  {itemsLeft} {itemsLeft === 1 ? "thing" : "things"} to finish before you can publish.
+                <span className="w-full">
+                  <span className="font-semibold">Next: {first.text}</span>
+                  <span className="text-gray-700">
+                    {" "}
+                    ({itemsLeft} {itemsLeft === 1 ? "thing" : "things"} left before you can publish)
+                  </span>
                 </span>
-                <Link href={`#${sectionId("Publishing")}`} className={BUTTON_LINK}>
-                  See what is missing
+                <Link href={first.href} className="of-btn of-btn-primary min-h-11 px-3.5 text-sm lg:min-h-10">
+                  {first.action}
                 </Link>
+                {itemsLeft > 1 && !first.href.startsWith("#section-publishing") ? (
+                  <Link href={`#${sectionId("Publishing")}`} className={BUTTON_LINK}>
+                    See all {itemsLeft}
+                  </Link>
+                ) : null}
               </>
             )}
           </div>
@@ -198,7 +257,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
         ) : (
           <>
             <p className="text-sm text-gray-700">Select a SKU to receive or adjust its stock. Available is what new orders can still take: on hand minus units reserved for orders.</p>
-            <div className="overflow-hidden rounded-xl border border-gray-200">
+            <div className="hidden overflow-hidden rounded-xl border border-gray-200 md:block">
               <ScrollArea label="Variants table" hint="Scroll sideways for more columns. The actions stay in view.">
                 <table className="of-table">
                   <thead>
@@ -240,32 +299,48 @@ export default async function ProductPage({ params, searchParams }: Props) {
                             {v.status === "active" ? "Active" : "Inactive"}
                           </span>
                         </td>
-                        <td className="of-sticky-end">
-                          {v.status === "active" ? (
-                            <div className="flex items-start justify-end gap-2">
-                              {draft ? (
-                                <Link href={`/admin/variants/${v.id}/edit`} className="of-btn of-btn-line of-btn-sm" aria-label={`Edit ${v.sku}`}>
-                                  Edit
-                                </Link>
-                              ) : null}
-                              <ActionForm
-                                action={deactivateVariantAction}
-                                idempotencyKey={randomUUID()}
-                                hidden={{ variantId: v.id }}
-                                submitLabel="Deactivate"
-                                variant="secondary"
-                                compact
-                                confirm={`Deactivate ${v.sku}? It keeps its stock and history, but there is no way to reactivate it here.`}
-                              />
-                            </div>
-                          ) : null}
-                        </td>
+                        <td className="of-sticky-end">{variantActions(v, false)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </ScrollArea>
             </div>
+            {/* On a phone: one card per variant, with its stock figures and actions, instead of a sideways-scrolling table. */}
+            <ul aria-label="Variants" className="space-y-3 md:hidden">
+              {product.variants.map((v, i) => (
+                <li key={v.id} className="rounded-xl border border-gray-200 p-3.5" data-variant={v.sku}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <Link href={`/admin/skus/${encodeURIComponent(v.sku)}`} className="inline-flex min-h-11 items-center font-semibold break-all underline underline-offset-4">
+                        {v.sku}
+                      </Link>
+                      <p className="text-sm text-gray-700">
+                        {[v.size, v.colour].filter(Boolean).join(" · ") || "No size or colour"} · {bdt(v.pricePaisa)}
+                      </p>
+                    </div>
+                    <span className="of-pill shrink-0" data-tone={v.status === "active" ? "ok" : "quiet"}>
+                      {v.status === "active" ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                  <dl className="mt-3 grid grid-cols-3 gap-2 text-center text-sm">
+                    {(
+                      [
+                        ["Available", stock[i].available],
+                        ["Reserved", stock[i].reserved],
+                        ["On hand", stock[i].onHand],
+                      ] as const
+                    ).map(([term, n]) => (
+                      <div key={term} className="rounded-lg bg-[var(--color-sf-mist)] px-2 py-1.5">
+                        <dt className="text-xs text-gray-600">{term}</dt>
+                        <dd className={`font-bold tabular-nums ${term === "Available" && n === 0 && v.status === "active" ? "text-red-800" : ""}`}>{n}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <div className="mt-3">{variantActions(v, true)}</div>
+                </li>
+              ))}
+            </ul>
           </>
         )}
         <ActionPanel key={`variant-${product.variants.length}`} label="Add a variant" open={product.variants.length === 0}>

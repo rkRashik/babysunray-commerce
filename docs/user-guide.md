@@ -47,10 +47,10 @@ On a **phone**, the most used pages are at the bottom of the screen: **Dashboard
 | **Daily work** | Dashboard, Orders, Products, Stock counts |
 | **Catalogue** | Catalogue checklist, Product reviews, Categories, Photo storage |
 | **Money and records** | Reports, Exports |
-| **Shop** | Storefront preview, Policies, Shop acceptance, Launch readiness |
+| **Opening the shop** | Storefront preview, Policies, Shop acceptance, Launch readiness |
 | **Settings** | Store setup, Store settings, Delivery charges, Publication requirements, Account security |
 
-On a computer, **Shop** and **Settings** are folded, because you use them less often. Click the group's name to open it. When you are on one of their pages, the group stays open. On a phone, **Menu** always lists every page.
+On a computer, **Opening the shop** and **Settings** are folded, because you use them less often. Click the group's name to open it. When you are on one of their pages, the group stays open. On a phone, **Menu** lists every page in two columns, grouped the same way.
 
 **A yellow "Test database (staging)" bar** at the top of every page means this Admin is connected to the test database. Orders, customers and money figures there are test data, not your shop's real sales.
 
@@ -149,7 +149,7 @@ Open an order by its number. On a computer the page has two columns: the work on
 
 | Card | What it shows |
 |---|---|
-| **Status** | The four separate statuses: order, fulfilment (packing and delivery), payment and return. They are never merged into one. |
+| **Status** | A progress strip (Verified, Packed, Dispatched, Delivered or Returned to sender, Closed) with the next step marked, then the four separate statuses: order, fulfilment (packing and delivery), payment and return. They are never merged into one. Cancelled and expired orders show no strip. |
 | **Next step** | The steps possible now, as buttons. **Cancel order** and **Mark returned to sender** sit apart, under *If the order cannot go ahead*. |
 | **Customer and delivery** | Name, phone, address and delivery zone. **Copy** puts the phone or address on your clipboard (for the courier's form). The print button makes the packing and shipping document. |
 | **Items** | What was ordered, at the price it was ordered at, and the expected COD. |
@@ -204,11 +204,11 @@ A new product is a **draft** — customers can't see it yet.
 
 ### Finishing the product
 
-The product's page starts with an **overview**: the first photo, whether customers can see the product, how many variants it has, the units on hand and available, and **the one thing to do next** (for example *2 things to finish before you can publish*, with a button that takes you to them). The row of buttons under it jumps to each part of the page.
+The product's page starts with an **overview**: the first photo, whether customers can see the product, how many variants it has, the units on hand and available, and **the one thing to do next**, with a button that goes straight there (for example *Next: add a product photo* with **Add photos**, or *Next: add the size chart measurements* with **Add measurements**). **See all** lists everything still needed. The row of buttons under it jumps to each part of the page.
 
 | Part | What to do |
 |---|---|
-| **Variants and stock** | Each size/colour is a *variant* with its own code (SKU) and price. **Add a variant** opens the form (it is already open for a product with no variants). Click a SKU to receive or adjust its stock. |
+| **Variants and stock** | Each size/colour is a *variant* with its own code (SKU) and price. On a phone each variant is a card with its available, reserved and on-hand units and a **Stock** button. **Add a variant** opens the form (it is already open for a product with no variants). Click a SKU to receive or adjust its stock. |
 | **Publishing** | Three steps: complete the information, mark it reviewed, publish. A finished step shows a tick. |
 | **Details** | Description, fabric, care instructions, size guidance, category — change them with **Edit details** at the top. If you type something and try to leave without saving, you are asked first. |
 | **Size chart** | Measurements in centimetres for each size |
@@ -233,6 +233,10 @@ Follow the three steps in the product's **Publishing** card:
 3. Press **Publish to the shop**. Until it is possible, the card lists exactly what is still needed.
 
 Publishing only works when everything your **Publication requirements** ask for is filled in. You can **Withdraw from the shop** a published product at any time — it becomes a draft again.
+
+### Finding products
+
+Type in **Search** (name, web address or SKU) or choose a **Status**. **More filters** holds Category, Stock and Still missing; it opens by itself while one of them is in use. Every filter in use appears as a chip under the search: press a chip to remove just that filter, or **Clear** to remove them all.
 
 ### Working with many products
 
@@ -336,7 +340,9 @@ If the reconciliation check ever turns red, the payment records don't match — 
 
 **Printing:** press **Printable reconciliation** for an A4 copy.
 
-**Exports:** **Exports** gives you Excel, CSV or JSON files of orders, products or stock. Some exports contain customer details — keep those files private and delete them when done.
+**Exports:** **Exports** gives you Excel, CSV or JSON files of orders, products or stock. In the dataset list, the ones marked *contains customer contact details* hold names, phone numbers and addresses: keep those files private and delete them when done. **Show all datasets** explains what each one holds.
+
+On the **Orders & performance** tab, the bar shows orders by status; **Show the detail tables** opens the counts by source and by each status.
 
 ---
 
@@ -385,6 +391,11 @@ Customers never need an email account to order.
 - They get a **tracking link** to follow their order and, while it's still waiting for your call, to cancel it.
 
 > Until you officially launch, the shop is closed to the public. You can see it safely through **Storefront preview** or **Shop acceptance**.
+
+The pages under **Opening the shop** help you get ready:
+
+- **Launch readiness** starts with how many things keep public checkout closed, each with its next step. Every section shows a count of its checks by status (for example *2 incomplete, 3 ready*) before the details.
+- **Shop acceptance** shows what matters for a test run on the test database; settings for the person who sets up the website are under *Technical details*.
 
 ---
 

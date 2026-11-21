@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Printer } from "lucide-react";
+import { Check, Printer } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
@@ -47,6 +47,46 @@ const RETURN_STATES: Record<string, string> = { requested: "Requested", received
 const INSPECTION_STATES: Record<string, string> = { awaiting_inspection: "Awaiting inspection", restocked: "Passed: back in stock", rejected: "Failed: kept out of stock" };
 const words = (map: Record<string, string>, value: string) => map[value] ?? value.replace(/_/g, " ");
 
+/**
+ * Where a normal order is on its way, read only from its recorded statuses. Fulfilment moves one step at a time
+ * (packed needs a confirmed order, dispatch needs packed, delivery needs dispatch; rules.ts), so a step shown done
+ * was recorded. Cancelled and expired orders show no strip: the status alone cannot say whether they were verified.
+ */
+function OrderProgress({ order }: { order: OrderDetail }) {
+  if (order.orderStatus !== "pending_verification" && order.orderStatus !== "confirmed" && order.orderStatus !== "closed") return null;
+  const f = order.fulfilmentStatus;
+  const returned = f === "rto" || f === "rto_received";
+  // Returning (rto) is not done until the parcel is received back (rto_received); only then can the order close.
+  const steps: [string, boolean][] = [
+    ["Verified", order.orderStatus !== "pending_verification"],
+    ["Packed", f !== "unfulfilled"],
+    ["Dispatched", f === "dispatched" || f === "delivered" || returned],
+    [f === "rto" ? "Returning to sender" : returned ? "Returned to sender" : "Delivered", f === "delivered" || f === "rto_received"],
+    ["Closed", order.orderStatus === "closed"],
+  ];
+  const next = steps.findIndex(([, done]) => !done);
+  return (
+    <ol aria-label="Progress" className="grid grid-cols-5 gap-1 text-center text-xs sm:text-sm" data-testid="order-progress">
+      {steps.map(([name, done], i) => (
+        <li key={name} className="flex flex-col items-center gap-1" data-done={done} aria-current={i === next ? "step" : undefined}>
+          <span
+            aria-hidden="true"
+            className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+              done ? (returned && i === 3 ? "bg-[var(--color-sf-danger)] text-white" : "bg-green-700 text-white") : i === next ? (returned && i === 3 ? "bg-[var(--color-sf-danger-soft)] text-gray-900 ring-2 ring-[var(--color-sf-danger)]" : "bg-[var(--color-sf-sun-soft)] text-gray-900 ring-2 ring-[var(--color-sf-sun)]") : "bg-[var(--color-sf-mist)] text-gray-600"
+            }`}
+          >
+            {done ? <Check size={14} strokeWidth={3} /> : i + 1}
+          </span>
+          <span className={done || i === next ? "font-semibold text-gray-900" : "text-gray-600"}>
+            {name}
+            <span className="sr-only">{done ? " (done)" : i === next ? " (next)" : " (not yet)"}</span>
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 const openReturn = (o: OrderDetail) => o.returns.find((r) => r.status === "requested" || r.status === "received" || r.status === "approved");
 
 export default async function OrderPage({ params, searchParams }: Props) {
@@ -86,6 +126,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
       {/* The side column spans every row of the main column, so a tall side column never stretches the cards beside it. */}
       <div className="of-split" style={{ "--side-rows": mainCards } as React.CSSProperties}>
         <Section title="Status">
+          <OrderProgress order={order} />
           <Dimensions order={order} />
           <p className="text-sm text-gray-700">
             Taken on {label(order.source)} · created {formatTime(order.createdAt)} · version <span data-testid="order-version">{order.version}</span>

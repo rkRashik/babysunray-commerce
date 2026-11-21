@@ -7,15 +7,17 @@ import { requireAdmin } from "../_lib/session";
 export const metadata = { title: "Launch readiness · Admin" };
 
 // What still blocks a public shop, from live data where the system can check it (src/modules/launch/readiness.ts).
-// Functional layout only. No score or percentage: each row says what it rests on and what happens next.
+// No score or percentage: each section counts its checks by status, and each row says what it rests on and what happens next.
 
-const STATUS: Record<CheckStatus, { label: string; className: string }> = {
-  ready: { label: "Ready", className: "border-green-700 bg-green-50 text-green-900" },
-  incomplete: { label: "Incomplete", className: "border-amber-700 bg-amber-50 text-amber-950" },
-  founder_approval: { label: "Requires founder approval", className: "border-blue-800 bg-blue-50 text-blue-950" },
-  not_verified: { label: "Not verified", className: "border-gray-700 bg-gray-100 text-gray-900" },
-  not_applicable: { label: "Not applicable", className: "border-gray-400 bg-white text-gray-700" },
+// Status pills in the shared Admin tones (the word carries the meaning; colour only groups).
+const STATUS: Record<CheckStatus, { label: string; tone: "ok" | "wait" | "move" | "quiet" }> = {
+  ready: { label: "Ready", tone: "ok" },
+  incomplete: { label: "Incomplete", tone: "wait" },
+  founder_approval: { label: "Requires founder approval", tone: "move" },
+  not_verified: { label: "Not verified", tone: "quiet" },
+  not_applicable: { label: "Not applicable", tone: "quiet" },
 };
+const ORDER: CheckStatus[] = ["incomplete", "founder_approval", "not_verified", "ready", "not_applicable"];
 
 export default async function LaunchReadinessPage() {
   const principal = await requireAdmin("launch:read");
@@ -31,6 +33,9 @@ export default async function LaunchReadinessPage() {
       </div>
 
       <Section title="Why public checkout is closed">
+        <p className="text-sm font-semibold" data-testid="gate-count">
+          {readiness.gate.blockers.length === 1 ? "1 thing keeps" : `${readiness.gate.blockers.length} things keep`} public checkout closed. Each says what comes next.
+        </p>
         <ol className="list-decimal space-y-2 pl-5 text-sm" data-testid="gate-blockers">
           {readiness.gate.blockers.map((b) => (
             <li key={b.id}>
@@ -44,6 +49,17 @@ export default async function LaunchReadinessPage() {
 
       {readiness.sections.map((section) => (
         <Section key={section.id} title={section.title}>
+          {/* A count of checks by status, not a score: each row below still says what it rests on. */}
+          <ul className="flex flex-wrap gap-2" aria-label={`${section.title}: checks by status`}>
+            {ORDER.map((status) => {
+              const n = section.checks.filter((c) => c.status === status).length;
+              return n ? (
+                <li key={status} className="of-pill" data-tone={STATUS[status].tone}>
+                  {n} {STATUS[status].label.toLowerCase()}
+                </li>
+              ) : null;
+            })}
+          </ul>
           <ul className="divide-y divide-gray-200">
             {section.checks.map((check) => (
               <li key={check.id} className="py-3" data-testid={`check-${check.id}`}>
@@ -57,7 +73,9 @@ export default async function LaunchReadinessPage() {
                       check.label
                     )}
                   </p>
-                  <span className={`rounded border px-2 py-0.5 text-xs font-semibold ${STATUS[check.status].className}`}>{STATUS[check.status].label}</span>
+                  <span className="of-pill" data-tone={STATUS[check.status].tone}>
+                    {STATUS[check.status].label}
+                  </span>
                 </div>
                 <p className="mt-1 text-sm">{check.evidence}</p>
                 {check.next ? <p className="mt-1 text-sm text-gray-700">Next: {check.next}</p> : null}

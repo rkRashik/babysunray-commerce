@@ -160,6 +160,14 @@ export function KpiTiles({ r }: { r: PeriodReport }) {
 
 /** Orders placed in the period, by source and by their status now. `charts` adds the status bar (not in the printed copy). */
 export function OrdersSection({ r, charts = false }: { r: PeriodReport; charts?: boolean }) {
+  const tables = (
+    <div className="grid items-start gap-x-6 gap-y-5 md:grid-cols-2">
+      <Table caption="By source" rows={byKey(r.received.bySource)} amount="Order value" />
+      <Table caption="By order status (now)" rows={byKey(r.received.byOrderStatus)} amount="Order value" />
+      <Table caption="By fulfilment status (now)" rows={byKey(r.received.byFulfilmentStatus)} amount="Order value" />
+      <Table caption="By payment status (now)" rows={byKey(r.received.byPaymentStatus)} amount="Order value" />
+    </div>
+  );
   return (
     <div className="space-y-3">
       <p className="text-xs text-gray-600">Orders by the time they were placed, with their status now. Order value includes cancelled and unverified orders; it is not sales, revenue or profit.</p>
@@ -170,12 +178,15 @@ export function OrdersSection({ r, charts = false }: { r: PeriodReport; charts?:
           format={(n) => `${n} order${n === 1 ? "" : "s"}`}
         />
       ) : null}
-      <div className="grid items-start gap-x-6 gap-y-5 md:grid-cols-2">
-        <Table caption="By source" rows={byKey(r.received.bySource)} amount="Order value" />
-        <Table caption="By order status (now)" rows={byKey(r.received.byOrderStatus)} amount="Order value" />
-        <Table caption="By fulfilment status (now)" rows={byKey(r.received.byFulfilmentStatus)} amount="Order value" />
-        <Table caption="By payment status (now)" rows={byKey(r.received.byPaymentStatus)} amount="Order value" />
-      </div>
+      {charts ? (
+        // On screen the bar gives the overview; the four tables wait behind one toggle. The printed copy shows them all.
+        <details className="text-sm">
+          <summary className="cursor-pointer py-3 font-semibold lg:py-1">Show the detail tables (by source, order, fulfilment and payment status)</summary>
+          <div className="mt-3">{tables}</div>
+        </details>
+      ) : (
+        tables
+      )}
     </div>
   );
 }

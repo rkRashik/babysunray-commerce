@@ -73,6 +73,9 @@ function useLeaveGuard(active: boolean) {
     const click = (event: MouseEvent) => {
       const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
       if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.getAttribute("target") === "_blank") return;
+      // A jump within this page (#section-…) loses nothing.
+      const to = new URL((link as HTMLAnchorElement).href, location.href);
+      if (to.hash && to.pathname === location.pathname && to.search === location.search) return;
       if (!window.confirm(LEAVE)) {
         event.preventDefault();
         event.stopPropagation();
