@@ -115,9 +115,10 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   // The screenshots show a named store, as a real installation would (Store settings).
   const named = await testDatabase();
   let romperSlug = "";
+  let romperId = "";
   try {
     await named.query("insert into store_settings (id, store_name) values (1, 'BabySunRay') on conflict (id) do update set store_name = excluded.store_name");
-    romperSlug = (await named.query<{ slug: string }>("select slug from products where name_en = 'Grey Button Romper' order by created_at desc limit 1")).rows[0].slug;
+    ({ slug: romperSlug, id: romperId } = (await named.query<{ slug: string; id: string }>("select slug, id from products where name_en = 'Grey Button Romper' order by created_at desc limit 1")).rows[0]);
   } finally {
     await named.end();
   }
@@ -217,6 +218,25 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   await page.goto("/admin/orders?queue=to_pack");
   await page.locator("input.of-check").first().check();
   await capture(page, "desktop-09-orders-bulk.png", "Orders: a selection offers one bulk step", "Orders · desktop");
+  await page.goto(orders[4]);
+  await capture(page, "desktop-60-order-detail.png", "One order (dispatched, COD to collect)", "Orders · desktop");
+  await page.goto(`/admin/products/${romperId}`);
+  await capture(page, "desktop-42-product.png", "One product: content, checklist, variants and stock", "Products · desktop");
+  await page.goto("/admin/settings/store");
+  await capture(page, "desktop-50-store-settings.png", "Store settings: saved details, logo and customer account emails", "Settings · desktop");
+  const edit = page.getByRole("button", { name: "Edit details" });
+  if (await edit.count()) {
+    await edit.click();
+    await page.getByLabel("Store name").fill("BabySunRay Kids");
+    await capture(page, "desktop-51-store-settings-edit.png", "Store settings: editing, with Save changes and Cancel", "Settings · desktop");
+  }
+  const replace = page.getByRole("button", { name: "Replace logo" });
+  if (await replace.count()) {
+    await page.goto("/admin/settings/store");
+    await page.getByRole("button", { name: "Replace logo" }).click();
+    await page.getByLabel(/^New logo/).setInputFiles(path.join(process.cwd(), "public/brand/logo.png"));
+    await capture(page, "desktop-52-store-logo-replace.png", "Store settings: a chosen replacement logo, previewed before saving", "Settings · desktop");
+  }
   await desktop.close();
 
   // A smaller laptop: the order table scrolls sideways and keeps the row's action in view.
@@ -225,6 +245,10 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   await signIn(small);
   await small.goto("/admin/orders");
   await capture(small, "desktop-08-orders-1280.png", "Orders at 1280 px: the action column stays in view", "Orders · desktop");
+  await small.goto("/admin/dashboard");
+  await small.getByTestId("generated-at").waitFor();
+  await small.screenshot({ path: path.join(OUT!, "desktop-21-dashboard-1280-fold.png") });
+  shots.push({ file: "desktop-21-dashboard-1280-fold.png", caption: "Dashboard at 1280 × 800, first screen only (what the Owner sees on opening)", group: "Dashboard · desktop" });
   await laptop.close();
 
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: "en-GB" });
@@ -249,6 +273,12 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   await capture(mobile, "phone-31-reports-cod.png", "Reports COD tab on a phone", "Phone");
   await mobile.goto("/admin/reports");
   await capture(mobile, "phone-30-reports.png", "Reports on a phone", "Phone");
+  await mobile.goto("/admin/settings/store");
+  await capture(mobile, "phone-50-store-settings.png", "Store settings on a phone", "Phone");
+  await mobile.getByRole("navigation", { name: "Quick links" }).getByRole("button", { name: "Menu" }).tap();
+  await mobile.waitForTimeout(500);
+  await mobile.screenshot({ path: path.join(OUT!, "phone-90-menu.png") });
+  shots.push({ file: "phone-90-menu.png", caption: "The phone's Menu with every page", group: "Phone" });
   await phone.close();
 
   const groups = [...new Set(shots.map((s) => s.group))];

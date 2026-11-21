@@ -1,4 +1,4 @@
-import { ArrowRight, Plus } from "lucide-react";
+import { AlertTriangle, ArrowRight, BarChart3, CheckCircle2, CircleX, type LucideIcon, PackageCheck, PackageX, PhoneCall, Plus, Printer, SearchCheck, Truck } from "lucide-react";
 import { Suspense } from "react";
 import Link from "next/link";
 import { getDb } from "@/db/client";
@@ -41,38 +41,60 @@ function detail(queue: OrderQueue, o: Queue["oldest"][number], now: Date) {
   return o.createdAt.getTime() >= now.getTime() - 60_000 ? "placed just now" : `placed ${relative(o.createdAt, now)}`;
 }
 
-function QueueCard({ q, now, urgent }: { q: Queue; now: Date; urgent: boolean }) {
+// What each urgent queue means and what to do about it, in the Owner's words.
+const WHY: Partial<Record<OrderQueue, { why: string; action: string }>> = {
+  overdue: { why: "Past the 24-hour verification window. Call each customer, then confirm (stock is checked again) or cancel.", action: "Review overdue" },
+  cancellation_requests: { why: "Customers asked to cancel. Approve or reject each request; a packed order cannot be dispatched until you decide.", action: "Review requests" },
+  pending: { why: "New orders waiting for your call. Verify each one with the customer before its 24-hour deadline, then confirm it.", action: "Verify orders" },
+};
+
+type Attention = { key: string; tone: "bad" | "wait"; icon: LucideIcon; count: number; title: string; why: string; href: string; action: string; queue?: OrderQueue; orders?: React.ReactNode };
+
+/** One thing that needs the Owner: what happened (count and title), why it matters, the oldest orders, and where to act. */
+function AttentionRow({ a }: { a: Attention }) {
+  const Icon = a.icon;
   return (
-    <li className={`flex flex-col rounded-2xl border bg-white p-4 ${urgent ? "border-amber-300 shadow-[inset_4px_0_0_var(--color-sf-sun)]" : "border-gray-200"}`} data-queue={q.queue}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="font-semibold">{TITLES[q.queue]}</h3>
-          <p className="text-xs text-gray-600">{q.label}</p>
-        </div>
-        <span className="text-[2rem] leading-none font-bold tabular-nums" data-testid={`count-${q.queue}`}>
-          {q.count}
+    <li className="flex flex-col gap-3 py-3.5 first:pt-0 last:pb-0 sm:flex-row sm:items-center" data-queue={a.queue}>
+      <span className="flex min-w-0 flex-1 gap-3">
+        <span className={`mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${a.tone === "bad" ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-900"}`} aria-hidden="true">
+          <Icon size={18} strokeWidth={2} />
         </span>
-      </div>
-      <table className="mt-3 w-full border-t border-gray-200 text-sm">
-        <caption className="sr-only">Oldest orders: {q.label}</caption>
-        <tbody>
-          {q.oldest.slice(0, 5).map((o) => (
-            <tr key={o.id}>
-              <th scope="row" className="py-1 text-left font-normal">
-                <Link prefetch={false} href={`/admin/orders/${o.id}`} className="inline-flex min-h-11 items-center font-medium underline underline-offset-4 lg:min-h-9">
-                  {formatOrderNumber(o.number)}
-                </Link>
-              </th>
-              <td className="py-1 text-right text-xs text-gray-600 tabular-nums">{detail(q.queue, o, now)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <Link href={`/admin/orders?queue=${q.queue}`} className="mt-auto inline-flex min-h-11 items-center gap-1 pt-2 text-sm font-semibold underline-offset-4 hover:underline lg:min-h-10">
-        Show all {q.count}
-        <span className="sr-only"> ({q.label})</span>
+        <span className="min-w-0 space-y-0.5">
+          <span className="block font-semibold">
+            <span className="tabular-nums" data-testid={a.queue ? `count-${a.queue}` : undefined}>
+              {a.count}
+            </span>{" "}
+            {a.title}
+          </span>
+          <span className="block text-sm text-gray-700">{a.why}</span>
+          {a.orders}
+        </span>
+      </span>
+      <Link href={a.href} className="of-btn of-btn-ink of-btn-sm self-start sm:self-center">
+        {a.action}
         <ArrowRight aria-hidden="true" size={16} />
       </Link>
+    </li>
+  );
+}
+
+/** A queue of the day's work: how many, what it is, and the way to the list. */
+function QueueTile({ q }: { q: Queue }) {
+  const empty = q.count === 0;
+  return (
+    <li className={`of-card flex flex-col gap-0.5 p-4 ${empty ? "bg-transparent" : ""}`} data-queue={q.queue}>
+      <span className={`text-[1.75rem] leading-tight font-bold tabular-nums ${empty ? "text-gray-500" : ""}`} data-testid={`count-${q.queue}`}>
+        {q.count}
+      </span>
+      <h3 className={`font-semibold ${empty ? "text-gray-600" : ""}`}>{TITLES[q.queue]}</h3>
+      <p className="text-xs text-gray-600">{q.label}</p>
+      {empty ? null : (
+        <Link href={`/admin/orders?queue=${q.queue}`} className="mt-auto inline-flex min-h-11 items-center gap-1 pt-1 text-sm font-semibold underline-offset-4 hover:underline lg:min-h-9">
+          Show all {q.count}
+          <span className="sr-only"> ({q.label})</span>
+          <ArrowRight aria-hidden="true" size={16} />
+        </Link>
+      )}
     </li>
   );
 }
@@ -150,11 +172,10 @@ function StockTable({ rows, caption }: { rows: StockRow[]; caption: string }) {
   );
 }
 
-/** A grid that never leaves one card alone on its last row: 4 cards make two rows of two, 5 or 6 make rows of three. */
-const gridFor = (n: number) => (n <= 1 ? "" : n === 2 || n === 4 ? "sm:grid-cols-2" : "md:grid-cols-3");
 
 // The Owner's daily work list. Every number is read from the database at `generatedAt`; nothing is a target or an
-// estimate. Queues with work come first (the urgent ones on top); empty queues shrink to one line.
+// estimate. First what needs the Owner (each with why it matters and where to act), then the orders moving through
+// the day's work, shortcuts, returns and stock.
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   // Access is checked before anything is sent; only then the figures stream in behind a placeholder.
   const principal = await requireAdmin("reports:read", "orders:read", "stock:read");
@@ -165,10 +186,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       title="Dashboard"
       current="dashboard"
       actions={
-        <Link href="/admin/orders/new" className="of-btn of-btn-primary">
-          <Plus aria-hidden="true" size={18} strokeWidth={2} />
-          New order
-        </Link>
+        <>
+          <Link href="/admin/products/new" className="of-btn of-btn-line">
+            <Plus aria-hidden="true" size={18} strokeWidth={2} />
+            Add product
+          </Link>
+          <Link href="/admin/orders/new" className="of-btn of-btn-primary">
+            <Plus aria-hidden="true" size={18} strokeWidth={2} />
+            New order
+          </Link>
+        </>
       }
     >
       <Suspense fallback={<PageSkeleton />}>
@@ -193,10 +220,75 @@ async function DashboardBody({ principal, rawLow }: { principal: Principal; rawL
   const essential = setup ? setup.filter((s) => s.required) : [];
   const setupLeft = essential.filter((s) => !s.done);
   const byQueue = new Map(d.queues.map((q) => [q.queue, q]));
-  const urgent = URGENT.map((k) => byQueue.get(k)!).filter((q) => q.count > 0);
-  const flow = FLOW.map((k) => byQueue.get(k)!).filter((q) => q.count > 0);
-  const quiet = [...URGENT, ...FLOW].map((k) => byQueue.get(k)!).filter((q) => q.count === 0);
+  const urgent = URGENT.map((k) => byQueue.get(k)!);
   const returnsOpen = d.returns.awaitingParcel + d.returns.awaitingDecision + d.returns.approvedOpen + d.quarantine.return.count + d.quarantine.rto.count;
+  const inspection = d.quarantine.return.units + d.quarantine.rto.units;
+  const plural = (n: number, word: string) => `${word}${n === 1 ? "" : "s"}`;
+  const attention: Attention[] = [
+    ...urgent
+      .filter((q) => q.count > 0)
+      .map(
+        (q): Attention => ({
+          key: q.queue,
+          queue: q.queue,
+          tone: q.queue === "pending" ? "wait" : "bad",
+          icon: q.queue === "pending" ? PhoneCall : q.queue === "overdue" ? AlertTriangle : CircleX,
+          count: q.count,
+          title: q.queue === "overdue" ? `${plural(q.count, "order")} past the verification deadline` : q.queue === "pending" ? `${plural(q.count, "order")} to verify` : plural(q.count, "cancellation request"),
+          why: WHY[q.queue]!.why,
+          href: `/admin/orders?queue=${q.queue}`,
+          action: WHY[q.queue]!.action,
+          orders: (
+            <span className="block text-sm text-gray-700">
+              Oldest:{" "}
+              {q.oldest.slice(0, 3).map((o, i) => (
+                <span key={o.id}>
+                  {i ? ", " : null}
+                  <Link prefetch={false} href={`/admin/orders/${o.id}`} className="inline-flex min-h-11 items-center font-medium underline underline-offset-4 lg:min-h-0">
+                    {formatOrderNumber(o.number)}
+                  </Link>{" "}
+                  <span className="text-gray-600">({detail(q.queue, o, now)})</span>
+                </span>
+              ))}
+            </span>
+          ),
+        }),
+      ),
+  ];
+  if (d.unconfiguredZones.length)
+    attention.push({
+      key: "zones",
+      tone: "bad",
+      icon: Truck,
+      count: d.unconfiguredZones.length,
+      title: plural(d.unconfiguredZones.length, "delivery zone") + " without a charge",
+      why: `${d.unconfiguredZones.map((z) => ZONE_LABELS[z]).join(" and ")} cannot take orders until you set an active delivery charge.`,
+      href: "/admin/settings/delivery",
+      action: "Set delivery charges",
+    });
+  if (d.stock.zeroAvailable.count)
+    attention.push({
+      key: "stock",
+      tone: "wait",
+      icon: PackageX,
+      count: d.stock.zeroAvailable.count,
+      title: plural(d.stock.zeroAvailable.count, "SKU") + " out of stock",
+      why: "No unit is available, so customers cannot buy these sizes. Receive stock on each SKU's page when it arrives.",
+      href: "#section-stock-availability",
+      action: "See which",
+    });
+  if (inspection)
+    attention.push({
+      key: "inspection",
+      tone: "wait",
+      icon: SearchCheck,
+      count: inspection,
+      title: plural(inspection, "returned unit") + " awaiting inspection",
+      why: "Returned and RTO goods cannot be sold until you inspect them: pass them back into stock or keep them out.",
+      href: "#section-returns-and-inspection",
+      action: "See returns",
+    });
+  const clear = urgent.filter((q) => q.count === 0);
 
   return (
     <>
@@ -222,60 +314,61 @@ async function DashboardBody({ principal, rawLow }: { principal: Principal; rawL
         </Link>
       ) : null}
 
-      {d.unconfiguredZones.length ? (
-        <p role="alert" className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-950">
-          No active delivery charge for {d.unconfiguredZones.map((z) => ZONE_LABELS[z]).join(" and ")}, so orders there cannot be taken.{" "}
-          <Link href="/admin/settings/delivery" className="underline">
-            Set delivery charges
-          </Link>
-        </p>
-      ) : null}
-
-      <Section title="Order work queues">
-        {urgent.length || flow.length ? null : <p className="text-sm text-gray-700">No order is waiting for you.</p>}
-        {urgent.length ? (
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-amber-900">Needs you now</h3>
-            <ul className={`grid gap-3 ${gridFor(urgent.length)}`} aria-label="Urgent queues">
-              {urgent.map((q) => (
-                <QueueCard key={q.queue} q={q} now={now} urgent />
-              ))}
-            </ul>
-          </div>
+      <Section title="Needs attention">
+        {attention.length ? (
+          <ul className="divide-y divide-gray-200" aria-label="Things that need you">
+            {attention.map((a) => (
+              <AttentionRow key={a.key} a={a} />
+            ))}
+          </ul>
+        ) : (
+          <p className="flex items-center gap-2 text-sm text-gray-700">
+            <CheckCircle2 aria-hidden="true" size={18} className="text-green-700" />
+            Nothing needs you right now.
+          </p>
+        )}
+        {clear.length ? (
+          <ul className="flex flex-wrap gap-x-4 gap-y-1 border-t border-gray-200 pt-3 text-sm text-gray-600" aria-label="Also checked, nothing waiting">
+            {clear.map((q) => (
+              <li key={q.queue} data-queue={q.queue} title={q.label}>
+                {TITLES[q.queue]}{" "}
+                <span className="font-semibold tabular-nums text-gray-500" data-testid={`count-${q.queue}`}>
+                  {q.count}
+                </span>
+              </li>
+            ))}
+          </ul>
         ) : null}
-        {flow.length ? (
-          <div className="space-y-2">
-            {urgent.length ? <h3 className="text-sm font-semibold text-gray-700">In progress</h3> : null}
-            <ul className={`grid gap-3 ${gridFor(flow.length)}`} aria-label="Queues in progress">
-              {flow.map((q) => (
-                <QueueCard key={q.queue} q={q} now={now} urgent={false} />
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {quiet.length ? (
-          <div className="border-t border-gray-200 pt-3">
-            <h3 className="sr-only">Empty queues</h3>
-            <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600" aria-label="Empty queues">
-              {quiet.map((q) => (
-                <li key={q.queue} data-queue={q.queue} title={q.label}>
-                  {TITLES[q.queue]}{" "}
-                  <span className="font-semibold tabular-nums text-gray-500" data-testid={`count-${q.queue}`}>
-                    {q.count}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        <p className="text-xs text-gray-600">
-          Order counts are not sales: money counts once its collection and settlement are recorded (see{" "}
-          <Link href="/admin/reports" className="underline">
-            Reports
-          </Link>
-          ).
-        </p>
       </Section>
+
+      <section aria-labelledby="flow-heading" className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 id="flow-heading" className="text-[1.0625rem] font-bold">
+            Orders in progress
+          </h2>
+          <p className="text-xs text-gray-600">Order counts are not sales: money counts once its collection and settlement are recorded.</p>
+        </div>
+        <ul className="grid grid-cols-2 gap-3 md:grid-cols-3" aria-label="Queues in progress">
+          {FLOW.map((k) => (
+            <QueueTile key={k} q={byQueue.get(k)!} />
+          ))}
+        </ul>
+      </section>
+
+      <nav aria-label="Shortcuts" className="flex flex-wrap gap-2">
+        <Link href="/admin/print/picking" className="of-btn of-btn-line of-btn-sm">
+          <Printer aria-hidden="true" size={16} />
+          Picking list
+        </Link>
+        <Link href="/admin/reports" className="of-btn of-btn-line of-btn-sm">
+          <BarChart3 aria-hidden="true" size={16} />
+          Reports and COD reconciliation
+        </Link>
+        <Link href="/admin/stock-counts" className="of-btn of-btn-line of-btn-sm">
+          <PackageCheck aria-hidden="true" size={16} />
+          Stock counts
+        </Link>
+      </nav>
 
       <Section title="Returns and inspection">
         {returnsOpen === 0 ? (
@@ -369,14 +462,6 @@ async function DashboardBody({ principal, rawLow }: { principal: Principal; rawL
         ) : null}
       </Section>
 
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <Link href="/admin/reports" className="of-btn of-btn-line">
-          Reports and COD reconciliation
-        </Link>
-        <Link href="/admin/print/picking" className="of-btn of-btn-line">
-          Picking list and packing summary
-        </Link>
-      </div>
     </>
   );
 }

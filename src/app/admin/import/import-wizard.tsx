@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState } from "react";
 import type { ImportIssue, ImportPlan } from "@/modules/catalogue/import-plan";
+import { FilePicker } from "../_components/file-picker";
 
 // The import wizard: choose a file, check it (preview: nothing is written), read every problem by row and column,
 // then import explicitly. The same File is sent again to import, with the preview's fingerprint and key, so the
@@ -96,20 +97,18 @@ export function ImportWizard() {
   return (
     <div className="space-y-6">
       <div className="space-y-3 of-card p-4 lg:p-5">
-        <label htmlFor={`${id}-file`} className="block text-sm font-semibold">
-          Catalogue file (CSV UTF-8 or XLSX, at most 2 MB and 1,000 rows)
-        </label>
-        <input
-          id={`${id}-file`}
-          type="file"
+        <FilePicker
+          label="Catalogue file"
+          hint="CSV (UTF-8) or XLSX, at most 2 MB and 1,000 rows."
           accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          onChange={(e) => {
-            setFile(e.target.files?.[0] ?? null);
+          types={[".csv", ".xlsx"]}
+          maxBytes={2 * 1024 * 1024}
+          onFile={(chosen) => {
+            setFile(chosen);
             setPreview(null);
             setResult(null);
             setError(null);
           }}
-          className="of-input"
         />
         <button type="button" onClick={check} disabled={busy !== null} className={BUTTON}>
           {busy === "checking" ? "Checking…" : "Check file (nothing is saved)"}

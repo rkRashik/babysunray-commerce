@@ -20,7 +20,7 @@ import {
   revokeTrackingLinkAction,
   rtoChargeAction,
 } from "../actions";
-import { bdt, Dimensions, label, relative } from "../_components/labels";
+import { bdt, Dimensions, eventLabel, label, relative } from "../_components/labels";
 
 export const metadata = { title: "Order · Admin" };
 
@@ -37,6 +37,11 @@ const BUTTONS: { action: OrderAction & ("confirm" | "pack" | "dispatch" | "deliv
   { action: "close", label: "Close order", confirm: "Close this order? The tracking link stops working 30 days from now." },
   { action: "cancel", label: "Cancel order", confirm: "Cancel this order? Any reserved stock is released.", secondary: true },
 ];
+
+// Return and inspection states in plain language.
+const RETURN_STATES: Record<string, string> = { requested: "Requested", received: "Received, decision pending", approved: "Approved", rejected: "Rejected", completed: "Completed" };
+const INSPECTION_STATES: Record<string, string> = { awaiting_inspection: "Awaiting inspection", restocked: "Passed: back in stock", rejected: "Failed: kept out of stock" };
+const words = (map: Record<string, string>, value: string) => map[value] ?? value.replace(/_/g, " ");
 
 const openReturn = (o: OrderDetail) => o.returns.find((r) => r.status === "requested" || r.status === "received" || r.status === "approved");
 
@@ -290,7 +295,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
                 <p>
                   <strong>{r.kind === "return" ? "Return" : "Exchange"}</strong> · {r.reason === "wrong_or_defective" ? "wrong or defective" : "size or preference"} · return shipping paid by{" "}
                   {r.shippingPaidBy === "business" ? "us" : "the customer"}
-                  {r.returnShippingCostPaisa !== null ? ` (${bdt(r.returnShippingCostPaisa)})` : ""} · <span data-testid="return-status">{r.status}</span>
+                  {r.returnShippingCostPaisa !== null ? ` (${bdt(r.returnShippingCostPaisa)})` : ""} · <span data-testid="return-status">{words(RETURN_STATES, r.status)}</span>
                 </p>
                 <p className="text-gray-700">{r.items.map((i) => `${itemBy.get(i.orderItemId)?.sku} × ${i.quantity}`).join(", ")}</p>
                 {r.id === current?.id && r.status === "requested" ? (
@@ -332,7 +337,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
             {order.quarantine.map((q) => (
               <li key={q.id} className="space-y-2 rounded border border-gray-200 p-3 text-sm">
                 <p>
-                  {itemBy.get(q.orderItemId)?.sku} × {q.quantity} · from {q.source === "rto" ? "RTO" : "a return"} · <span data-testid="inspection-status">{q.status.replace(/_/g, " ")}</span>
+                  {itemBy.get(q.orderItemId)?.sku} × {q.quantity} · from {q.source === "rto" ? "RTO" : "a return"} · <span data-testid="inspection-status">{words(INSPECTION_STATES, q.status)}</span>
                   {q.note ? ` · ${q.note}` : ""}
                 </p>
                 {q.status === "awaiting_inspection" ? (
@@ -366,7 +371,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
         <ol className="space-y-1 text-sm" aria-label="Order history">
           {order.events.map((e) => (
             <li key={e.id}>
-              <span className="text-gray-600">{formatTime(e.createdAt)}</span> · {e.event.replace(/_/g, " ")} ·{" "}
+              <span className="text-gray-600">{formatTime(e.createdAt)}</span> · {eventLabel(e.event)} ·{" "}
               {e.actorType === "user" ? "Owner" : e.actorType === "customer" ? (e.actorRef === "guest-checkout" ? "Customer (website checkout)" : "Customer (tracking link)") : `System (${e.actorRef})`}
             </li>
           ))}

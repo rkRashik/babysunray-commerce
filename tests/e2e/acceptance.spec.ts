@@ -127,7 +127,7 @@ test("founder acceptance: publish, shop as a separate customer, place a real COD
   await cod.getByLabel("Amount (BDT)").fill("1760");
   await cod.getByRole("button", { name: "Record amount" }).click();
   await expect(dimension(page, "payment")).toHaveText("Settled");
-  await expect(page.getByRole("list", { name: "Order history" })).toContainText("cod settled");
+  await expect(page.getByRole("list", { name: "Order history" })).toContainText("COD settled to you");
 
   // Stock moved out exactly once; the customer's tracking link shows the same order.
   await page.goto(`/admin/skus/${sku}`);

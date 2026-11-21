@@ -24,6 +24,9 @@ function pngSize(file: string): Size | null {
   }
 }
 
+/** Whether the installation ships its own wordmark file (public/brand/logo.png). */
+export const hasInstallationLogo = () => pngSize("logo.png") !== null;
+
 /** The wordmark at a given height, or the shop's name as text. */
 export function BrandLogo({ name, height, logo, className = "", textClassName = "" }: { name: string; height: number; logo?: { src: string; width: number; height: number } | null; className?: string; textClassName?: string }) {
   // The logo the Owner uploaded in Admin settings comes first.

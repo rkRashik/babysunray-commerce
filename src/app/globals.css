@@ -1632,6 +1632,97 @@
     background: linear-gradient(90deg, #efe8de 0%, #f8f3eb 50%, #efe8de 100%) 0 0 / 200% 100%;
     animation: sf-shimmer 1.4s linear infinite;
   }
+  /* File picker (file-picker.tsx): a drop area with the real file input lying transparent over it. */
+  .of .of-file {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    min-height: 4.5rem;
+    max-width: 36rem;
+    border-radius: 0.875rem;
+    border: 1.5px dashed var(--color-gray-400);
+    background: var(--color-white);
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition:
+      border-color 140ms ease,
+      background-color 140ms ease;
+  }
+  .of .of-file:hover,
+  .of .of-file[data-chosen="true"] {
+    border-color: var(--color-gray-900);
+    background: #fdfaf5;
+  }
+  .of .of-file[data-chosen="true"] {
+    border-style: solid;
+  }
+  .of .of-file:has(input:focus-visible) {
+    outline: 2.5px solid var(--color-gray-900);
+    outline-offset: 2px;
+  }
+  .of .of-file:has(input:disabled) {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  .of .of-file input[type="file"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: inherit;
+  }
+  .of .of-file-icon {
+    display: inline-flex;
+    height: 2.5rem;
+    width: 2.5rem;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: var(--color-amber-100);
+    color: var(--color-sf-sun-deep);
+  }
+  .of .of-file-preview {
+    display: flex;
+    max-width: 36rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    border-radius: 0.875rem;
+    background: var(--color-gray-50);
+    padding: 0.75rem 1rem;
+  }
+  /* Sidebar groups used now and then (Settings, Shop) fold away; the group of the current page is open. */
+  .of .of-nav-group > summary {
+    display: flex;
+    min-height: 2.25rem;
+    align-items: center;
+    justify-content: space-between;
+    border-radius: 0.625rem;
+    padding: 0 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #bfae9b;
+    list-style: none;
+  }
+  .of .of-nav-group > summary::-webkit-details-marker {
+    display: none;
+  }
+  .of .of-nav-group > summary:hover {
+    background: var(--color-of-night-2);
+    color: #fff;
+  }
+  .of .of-nav-group > summary:focus-visible {
+    outline-color: var(--color-sf-sun-glow);
+  }
+  .of .of-nav-group > summary svg {
+    transition: transform 160ms ease;
+  }
+  .of .of-nav-group[open] > summary svg {
+    transform: rotate(180deg);
+  }
   @media (prefers-reduced-motion: reduce) {
     .of *,
     .of *::before,

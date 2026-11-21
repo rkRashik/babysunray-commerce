@@ -11,6 +11,9 @@ import type { FormState } from "../actions";
 
 const Values = createContext<Record<string, string> | null>(null);
 
+/** Set by EditableSection: the form then shows Cancel beside its submit button. */
+export const CancelEdit = createContext<(() => void) | null>(null);
+
 function typedValues(form: FormData): Record<string, string> {
   const values: Record<string, string> = {};
   for (const [name, value] of form) if (typeof value === "string" && /^[a-zA-Z][a-zA-Z0-9]*$/.test(name) && name !== "idempotencyKey") values[name] = value;
@@ -46,6 +49,7 @@ export function ActionForm({ action, idempotencyKey, hidden = {}, submitLabel, c
     }
   }, {});
   const errorId = useId();
+  const cancel = useContext(CancelEdit);
   return (
     <form
       action={formAction}
@@ -68,8 +72,24 @@ export function ActionForm({ action, idempotencyKey, hidden = {}, submitLabel, c
         </p>
       ) : null}
       {state.link ? <OneTimeLink link={state.link} /> : null}
-      <Submit label={submitLabel} variant={variant} compact={compact} />
+      {cancel ? (
+        <div className="flex flex-wrap gap-2">
+          <Submit label={submitLabel} variant={variant} compact={compact} />
+          <CancelButton onCancel={cancel} />
+        </div>
+      ) : (
+        <Submit label={submitLabel} variant={variant} compact={compact} />
+      )}
     </form>
+  );
+}
+
+function CancelButton({ onCancel }: { onCancel: () => void }) {
+  const { pending } = useFormStatus();
+  return (
+    <button type="button" onClick={onCancel} disabled={pending} className="of-btn of-btn-line">
+      Cancel
+    </button>
   );
 }
 
@@ -99,7 +119,8 @@ function useValue(name: string, initial: string | undefined): string {
   return typed ? (typed[name] ?? "") : (initial ?? "");
 }
 
-const INPUT = "of-input mt-1.5";
+// A field's width hints at what it takes: one line of text never stretches across a wide card.
+const INPUT = "of-input mt-1.5 max-w-xl";
 
 type FieldProps = {
   name: string;
@@ -127,7 +148,7 @@ export function Field({ name, label, hint, required, multiline, inputMode, maxLe
     lang,
     defaultValue: value,
     "aria-describedby": hint ? `${id}-hint` : undefined,
-    className: INPUT,
+    className: multiline ? "of-input mt-1.5 max-w-3xl" : INPUT,
   };
   return (
     <div>

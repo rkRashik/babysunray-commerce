@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { type QuickView, orderQuickViewAction } from "../actions";
-import { bdt, label, StatusPill } from "./labels";
+import { bdt, eventLabel, label, StatusPill } from "./labels";
 
 // The order list's quick view: a side drawer (full width on a phone) with what is needed to decide the next step without
 // leaving the list. A native <dialog>: focus stays inside while it is open, Escape and the backdrop close it, and focus returns
@@ -140,7 +140,7 @@ export function OrderQuickView() {
                 <ul className="mt-1 space-y-1 text-sm text-gray-700">
                   {order.events.map((e, n) => (
                     <li key={`${e.event}-${n}`} className="flex justify-between gap-3">
-                      <span className="first-letter:uppercase">{label(e.event)}</span>
+                      <span>{eventLabel(e.event)}</span>
                       <span className="text-gray-600 tabular-nums">{when.format(new Date(e.at))}</span>
                     </li>
                   ))}

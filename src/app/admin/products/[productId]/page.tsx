@@ -73,7 +73,12 @@ export default async function ProductPage({ params, searchParams }: Props) {
       <Section title="Details">
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-[10rem_1fr]">
           <dt className="text-gray-600">Status</dt>
-          <dd>{draft ? "draft (not shown to customers)" : `${product.status} (cannot be edited)`}</dd>
+          <dd className="flex flex-wrap items-center gap-2">
+            <span className="of-pill" data-tone={draft ? "wait" : product.status === "published" ? "ok" : "quiet"}>
+              {product.status.charAt(0).toUpperCase() + product.status.slice(1)}
+            </span>
+            <span className="text-gray-600">{draft ? "Not shown to customers" : "Cannot be edited"}</span>
+          </dd>
           <dt className="text-gray-600">Web address</dt>
           <dd className="break-all">{product.slug}</dd>
           <Bilingual label="Name" en={product.nameEn} bn={product.nameBn} />
@@ -278,8 +283,8 @@ export default async function ProductPage({ params, searchParams }: Props) {
                       <td className="num">{bdt(v.pricePaisa)}</td>
                       <td className="num">{stock[i].onHand}</td>
                       <td>
-                        <span className="of-pill first-letter:uppercase" data-tone={v.status === "active" ? "ok" : "quiet"}>
-                          {v.status}
+                        <span className="of-pill" data-tone={v.status === "active" ? "ok" : "quiet"}>
+                          {v.status === "active" ? "Active" : "Inactive"}
                         </span>
                       </td>
                       <td className="of-sticky-end">

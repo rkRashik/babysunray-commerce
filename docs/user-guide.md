@@ -44,11 +44,15 @@ On a **phone**, the most used pages are at the bottom of the screen: **Dashboard
 
 | Menu group | What's inside |
 |---|---|
-| **Daily work** | Dashboard, Orders, Stock counts |
-| **Catalogue** | Products, Catalogue checklist, Product reviews, Categories, Photo storage |
+| **Daily work** | Dashboard, Orders, Products, Stock counts |
+| **Catalogue** | Catalogue checklist, Product reviews, Categories, Photo storage |
 | **Money and records** | Reports, Exports |
-| **Settings** | Store setup, Store settings, Delivery charges, Publication requirements, Account security |
 | **Shop** | Storefront preview, Policies, Shop acceptance, Launch readiness |
+| **Settings** | Store setup, Store settings, Delivery charges, Publication requirements, Account security |
+
+On a computer, **Shop** and **Settings** are folded, because you use them less often. Click the group's name to open it. When you are on one of their pages, the group stays open. On a phone, **Menu** always lists every page.
+
+**A yellow "Test database (staging)" bar** at the top of every page means this Admin is connected to the test database. Orders, customers and money figures there are test data, not your shop's real sales.
 
 **After you save something**, a small green message appears at the bottom of the screen (for example *"Order packed."*). It means the change really was saved.
 
@@ -65,27 +69,33 @@ Start every day on the **Dashboard**.
 The dashboard shows what needs you, most urgent first:
 
 ```
-┌─────────────────────────────┐
-│  NEEDS YOU NOW              │   ← call these customers first
-│  • Verification overdue     │
-│  • Cancellation requests    │
-│  • To verify                │
-├─────────────────────────────┤
-│  IN PROGRESS                │   ← then pack and send
-│  • To pack  • To dispatch   │
-│  • In transit • COD to collect │
-└─────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│  NEEDS ATTENTION                             │  ← each line says why, and has a button
+│  • Orders past the verification deadline     │     that takes you there
+│  • Cancellation requests                     │
+│  • Orders to verify                          │
+│  • SKUs out of stock                         │
+├──────────────────────────────────────────────┤
+│  ORDERS IN PROGRESS                          │  ← then pack, send and collect
+│  To pack · To dispatch · In transit          │
+│  Returning (RTO) · COD to collect ·          │
+│  Not settled by courier                      │
+└──────────────────────────────────────────────┘
 ```
+
+Under **Needs attention**, each line tells you what happened, why it matters, the oldest orders, and has a button to the right list (for example **Verify orders**). If nothing is listed, nothing needs you right now. A delivery zone without a charge, and returned items waiting for inspection, also appear here.
+
+**Orders in progress** shows how many orders are in each step of the day's work. Press **Show all** to open that list. These are order counts, not sales: money counts only once you record that it was collected and settled.
 
 A simple daily rhythm:
 
-1. **Call** customers in *To verify* and confirm their orders.
+1. **Call** customers in *Orders to verify* and confirm their orders.
 2. **Pack** the orders in *To pack*.
 3. **Dispatch** the packed parcels with the courier.
 4. **Record** deliveries and COD money as the courier reports them.
 5. Glance at **Stock availability** at the bottom — it lists items that have run out.
 
-Press **Refresh** at any time to see the latest numbers.
+The buttons at the top (**Add product**, **New order**) and the shortcuts below the order counts (**Picking list**, **Reports and COD reconciliation**, **Stock counts**) take you straight to common work. Press **Refresh** at any time to see the latest numbers.
 
 ---
 
@@ -315,6 +325,27 @@ Do these once, from **Settings → Store setup** (it shows a checklist):
 | **Account security** | Recovery codes |
 
 > If the menu shows **"Your store — Set store name"**, your shop's name hasn't been entered yet. Click it to add it.
+
+### Changing a setting safely
+
+**Store settings** and **Delivery charges** show what is saved as plain text, so nothing changes by accident.
+
+1. Press **Edit details** (or **Change charge** for a delivery zone).
+2. Change what you need, then press **Save changes** (**Save charge**). A green message confirms it was saved, and the page shows the saved values again.
+3. Changed your mind? Press **Cancel**. If you had typed something, you are asked first whether to discard it. Leaving the page with unsaved changes also asks first.
+
+### Your logo
+
+The **Logo** card shows the logo in use and where it comes from. To change it, press **Replace logo**, choose a file (PNG, JPEG or WebP, at most 5 MB; a PNG with a transparent background works best), check the preview, then press **Save logo**. **Cancel** keeps the current logo. If the file cannot be used, a red message says why and the logo in use does not change.
+
+### Customer account emails
+
+This card explains the two emails customers receive when they make an account with an email address: a **verification email** and a **password reset email**.
+
+- **Email service: Set up** means the website has the settings it needs to send them. **Not set up** or **Settings incomplete** means no email can be sent; ask whoever set up your website (the details are under *For the person who sets up the website*).
+- **Delivery: Not checked** — the Admin cannot see whether an email reached a customer. To check, make a customer account in the shop with an email address you own and see whether the verification email arrives (look in the spam folder too).
+
+Customers never need an email account to order.
 
 ---
 

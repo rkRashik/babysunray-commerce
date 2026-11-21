@@ -101,7 +101,7 @@ test("archive and deactivate ask first; cancelling changes nothing", async ({ pa
 
   page.once("dialog", (dialog) => void dialog.dismiss());
   await page.getByRole("region", { name: "Variants and stock" }).getByRole("button", { name: "Deactivate" }).click();
-  await expect(page.getByRole("row", { name: new RegExp(sku) })).toContainText("active");
+  await expect(page.getByRole("row", { name: new RegExp(sku) })).toContainText("Active");
   await expect(page.getByRole("link", { name: `Edit ${sku}` })).toBeVisible();
 
   page.once("dialog", (dialog) => {
@@ -110,7 +110,7 @@ test("archive and deactivate ask first; cancelling changes nothing", async ({ pa
   });
   await page.getByRole("region", { name: "Variants and stock" }).getByRole("button", { name: "Deactivate" }).click();
   await expect(page.getByRole("status")).toHaveText("Variant deactivated.");
-  await expect(page.getByRole("row", { name: new RegExp(sku) })).toContainText("inactive");
+  await expect(page.getByRole("row", { name: new RegExp(sku) })).toContainText("Inactive");
   await expect(page.getByRole("link", { name: `Edit ${sku}` })).toHaveCount(0);
 
   page.once("dialog", (dialog) => void dialog.dismiss());

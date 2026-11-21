@@ -9,6 +9,7 @@ import { MAX_PRODUCT_PHOTOS } from "@/modules/media/service";
 import { mediaStoreConfig } from "@/modules/media/storage";
 import { ActionForm, Checkbox, Field } from "../../../_components/action-form";
 import { LanguageStatus } from "../../../_components/content";
+import { FilePicker, UploadButton } from "../../../_components/file-picker";
 import { noticeFor, AdminShell, Section, productTitle } from "../../../_components/shell";
 import { describePhotoAction, movePhotoAction, removePhotoAction } from "../../../content-actions";
 import { requireAdmin } from "../../../_lib/session";
@@ -29,7 +30,7 @@ const UPLOAD_ERRORS: Record<string, string> = {
 };
 
 const INPUT = "of-input mt-1.5";
-const BUTTON = "of-btn of-btn-primary";
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 /** A plain multipart form to the upload route (works without JavaScript; the server renders the key). */
 function UploadForm({ productId, version, replaceMediaId, label }: { productId: string; version: number; replaceMediaId?: string; label: string }) {
@@ -39,16 +40,20 @@ function UploadForm({ productId, version, replaceMediaId, label }: { productId: 
       <input type="hidden" name="idempotencyKey" value={randomUUID()} />
       <input type="hidden" name="version" value={String(version)} />
       {replaceMediaId ? <input type="hidden" name="replaceMediaId" value={replaceMediaId} /> : null}
-      <div>
-        <label htmlFor={`image-${id}`} className="block text-sm font-semibold">
-          {label} <span className="text-gray-600">(required)</span>
-        </label>
-        <input id={`image-${id}`} type="file" name="image" accept="image/jpeg,image/png,image/webp" required aria-describedby={`image-${id}-hint`} className={INPUT} />
-        <p id={`image-${id}-hint`} className="mt-1 text-xs text-gray-600">
-          JPEG, PNG or WebP, up to 10 MB, {IMAGE_BOUNDS.minSide} to {IMAGE_BOUNDS.maxSide} pixels on each side. Use only your own photos of this product. The location and camera details
-          in the file are removed; the photo is stored at most {IMAGE_BOUNDS.storedMaxSide} pixels wide or high. Keep your original.
-        </p>
-      </div>
+      <FilePicker
+        name="image"
+        label={label}
+        hint={`JPEG, PNG or WebP, up to 10 MB, ${IMAGE_BOUNDS.minSide} to ${IMAGE_BOUNDS.maxSide} pixels on each side.`}
+        accept={PHOTO_TYPES.join(",")}
+        types={PHOTO_TYPES}
+        maxBytes={10 * 1024 * 1024}
+        preview
+        required
+      />
+      <p className="text-xs text-gray-600">
+        Use only your own photos of this product. The location and camera details in the file are removed; the photo is stored at most {IMAGE_BOUNDS.storedMaxSide} pixels wide or
+        high. Keep your original.
+      </p>
       {replaceMediaId ? null : (
         <>
           <div>
@@ -61,9 +66,7 @@ function UploadForm({ productId, version, replaceMediaId, label }: { productId: 
           </div>
         </>
       )}
-      <button type="submit" className={BUTTON}>
-        {replaceMediaId ? "Replace photo" : "Upload photo"}
-      </button>
+      <UploadButton label={replaceMediaId ? "Replace photo" : "Upload photo"} busyLabel="Uploading…" />
     </form>
   );
 }
@@ -174,7 +177,7 @@ export default async function PhotosPage({ params, searchParams }: Props) {
         </Section>
       ) : null}
       {!draft ? <p className="text-sm text-gray-700">This product is archived, so its photos cannot change.</p> : null}
-      <Link href={back} className="inline-block text-sm underline">
+      <Link href={back} className="inline-flex min-h-11 items-center text-sm underline lg:min-h-0">
         Back to the product
       </Link>
     </AdminShell>

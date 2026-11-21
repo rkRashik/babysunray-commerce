@@ -4,7 +4,8 @@ import { formatPaisa } from "@/modules/money";
 import { listDeliveryZones } from "@/modules/orders/delivery";
 import { DELIVERY_ZONES, ZONE_LABELS } from "@/modules/orders/rules";
 import { ActionForm, Checkbox, Field } from "../../_components/action-form";
-import { AdminShell, Section, formatTime, noticeFor } from "../../_components/shell";
+import { EditableSection } from "../../_components/editable-section";
+import { AdminShell, formatTime, noticeFor } from "../../_components/shell";
 import { requireAdmin } from "../../_lib/session";
 import { setDeliveryZoneAction } from "../../orders/actions";
 import { bdt } from "../../orders/_components/labels";
@@ -20,21 +21,39 @@ export default async function DeliverySettingsPage({ searchParams }: { searchPar
   return (
     <AdminShell title="Delivery charges" current="delivery" notice={noticeFor(done)}>
       <p className="text-sm text-gray-700">
-        Set the charge for each zone in Taka. New orders snapshot the charge; existing orders never change. A zone without an active charge cannot take orders.
+        The delivery charge added to each new order, by zone. Changing it never changes orders already placed. A zone without an active charge cannot take orders.
       </p>
       <div className="grid gap-6 md:grid-cols-2">
         {DELIVERY_ZONES.map((code) => {
           const zone = zones.get(code);
           return (
-            <Section key={code} title={ZONE_LABELS[code]}>
-              <p className="text-sm text-gray-700" data-testid={`zone-${code}`}>
-                {zone ? `${zone.active ? "Active" : "Not taking orders"} · ${bdt(zone.chargePaisa)} · last changed ${formatTime(zone.updatedAt)}` : "Not configured yet: orders to this zone are refused."}
-              </p>
-              <ActionForm action={setDeliveryZoneAction} idempotencyKey={randomUUID()} hidden={{ code, version: zone ? String(zone.version) : "" }} submitLabel="Save">
+            <EditableSection
+              key={`${code}-${zone?.version ?? 0}`}
+              title={ZONE_LABELS[code]}
+              editLabel={zone ? "Change charge" : "Set charge"}
+              view={
+                zone ? (
+                  <div className="space-y-2" data-testid={`zone-${code}`}>
+                    <p className="text-[1.75rem] leading-none font-bold tabular-nums">{bdt(zone.chargePaisa)}</p>
+                    <p className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
+                      <span className="of-pill" data-tone={zone.active ? "ok" : "bad"}>
+                        {zone.active ? "Taking orders" : "Not taking orders"}
+                      </span>
+                      Last changed {formatTime(zone.updatedAt)}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-950" data-testid={`zone-${code}`}>
+                    Not set yet: orders to this zone are refused until you set a charge.
+                  </p>
+                )
+              }
+            >
+              <ActionForm action={setDeliveryZoneAction} idempotencyKey={randomUUID()} hidden={{ code, version: zone ? String(zone.version) : "" }} submitLabel="Save charge">
                 <Field name="chargeTaka" label="Charge (BDT)" required inputMode="decimal" defaultValue={zone ? formatPaisa(zone.chargePaisa) : ""} hint="0 to 10000, up to two decimals." />
                 <Checkbox name="active" label="Take orders for this zone" defaultChecked={zone?.active ?? true} />
               </ActionForm>
-            </Section>
+            </EditableSection>
           );
         })}
       </div>

@@ -30,6 +30,40 @@ const LABEL: Record<string, string> = {
 };
 export const label = (value: string) => LABEL[value] ?? value.replace(/_/g, " ");
 
+// Order history in plain language (the order page and the quick view); an event not listed is shown as stored, never hidden.
+const EVENTS: Record<string, string> = {
+  submitted: "Order placed",
+  confirmed: "Confirmed (verified with the customer)",
+  packed: "Packed",
+  dispatched: "Dispatched (stock deducted)",
+  delivered: "Delivery recorded",
+  closed: "Closed",
+  cancelled_by_owner: "Cancelled by you (reserved stock released)",
+  cancelled_by_customer: "Cancelled by the customer (reserved stock released)",
+  cancelled_on_request: "Cancelled on the customer's request (reserved stock released)",
+  verification_expired: "24-hour verification window passed (reserved stock released)",
+  cancellation_requested: "Customer asked to cancel",
+  cancellation_request_approved: "Cancellation request approved",
+  cancellation_request_rejected: "Cancellation request rejected",
+  cod_collected: "COD collected by the courier",
+  cod_settled: "COD settled to you",
+  cod_deducted: "Courier deduction recorded",
+  rto_marked: "Marked returned to sender (RTO)",
+  rto_received: "Returned parcel received for inspection",
+  rto_charge_recorded: "RTO charge recorded",
+  return_requested: "Return or exchange requested",
+  return_received: "Returned goods received",
+  return_approved: "Return request approved",
+  return_rejected: "Return request rejected",
+  return_completed: "Return completed",
+  refund_recorded: "Refund recorded",
+  inspection_restocked: "Inspection passed: back in stock",
+  inspection_rejected: "Inspection failed: kept out of stock",
+  tracking_link_created: "Tracking link created",
+  tracking_link_revoked: "Tracking link revoked",
+};
+export const eventLabel = (event: string) => EVENTS[event] ?? event.replace(/_/g, " ");
+
 // The tone of a status pill (First Light): waiting on someone (amber), done (green), moving (blue), off the normal path (red),
 // or quiet. The word always says the state; the colour only groups it.
 const TONE: Record<string, "wait" | "ok" | "move" | "bad" | "quiet"> = {

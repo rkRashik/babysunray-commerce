@@ -14,12 +14,17 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function configureZones(page: Page) {
-  await page.getByRole("navigation", { name: "Admin" }).getByRole("link", { name: "Delivery charges" }).click();
+  // Settings is a folded sidebar group: open it first.
+  const nav = page.getByRole("navigation", { name: "Admin" });
+  await nav.locator("summary").filter({ hasText: /^Settings$/ }).click();
+  await nav.getByRole("link", { name: "Delivery charges" }).click();
   for (const zone of ["Dhaka City", "Outside Dhaka"]) {
     const section = page.getByRole("region", { name: zone });
+    // Saved charges are shown as text until you choose to change them.
+    await section.getByRole("button", { name: /^(Change|Set) charge$/ }).click();
     await section.getByLabel("Charge (BDT)").fill(zone === "Dhaka City" ? "60" : "120");
     await section.getByLabel("Take orders for this zone").check();
-    await section.getByRole("button", { name: "Save" }).click();
+    await section.getByRole("button", { name: "Save charge" }).click();
     await expect(page.getByRole("status")).toHaveText("Delivery charge saved.");
   }
 }
@@ -110,7 +115,7 @@ test("delivery charges, an assisted order, reservation, verification, packing, d
   await page.reload();
   await step(page, "Close order");
   await expect(dimension(page, "order")).toHaveText("Closed");
-  await expect(page.getByRole("list", { name: "Order history" })).toContainText("cod settled");
+  await expect(page.getByRole("list", { name: "Order history" })).toContainText("COD settled to you");
   for (const path of [orderUrl, "/admin/orders", "/admin/orders/new", "/admin/settings/delivery"]) {
     await page.goto(path);
     await expectLabelledFields(page);
@@ -292,7 +297,7 @@ test("RTO: the returned parcel goes to inspection, and only a passed inspection 
   await step(page, "Mark returned to sender (refused or undelivered)");
   await expect(dimension(page, "fulfilment")).toHaveText("Returning to sender (RTO)");
   await step(page, "Receive returned parcel into inspection");
-  await expect(page.getByTestId("inspection-status")).toHaveText("awaiting inspection");
+  await expect(page.getByTestId("inspection-status")).toHaveText("Awaiting inspection");
   expect(await stock(page, sku)).toMatchObject({ onHand: "0" });
   await page.goto(orderUrl);
   const cod = page.getByRole("region", { name: "Cash on delivery" });
@@ -302,7 +307,7 @@ test("RTO: the returned parcel goes to inspection, and only a passed inspection 
   const inspection = page.getByRole("region", { name: "Inspection (quarantine)" });
   await inspection.getByLabel("Inspection note").fill("Sealed, tags on");
   await inspection.getByRole("button", { name: "Passed: back to stock" }).click();
-  await expect(page.getByTestId("inspection-status")).toHaveText("restocked");
+  await expect(page.getByTestId("inspection-status")).toHaveText("Passed: back in stock");
   expect(await stock(page, sku)).toMatchObject({ onHand: "2" });
   await expect(page.getByRole("table")).toContainText("return_restock");
 });

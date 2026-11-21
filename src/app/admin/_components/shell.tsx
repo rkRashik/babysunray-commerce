@@ -1,10 +1,12 @@
 import {
   BarChart3,
+  ChevronDown,
   ClipboardCheck,
   ClipboardList,
   Eye,
   FileDown,
   FileText,
+  FlaskConical,
   FolderTree,
   ImageIcon,
   KeyRound,
@@ -22,6 +24,7 @@ import { BrandMark } from "@/app/_design/brand";
 import { flFontVariables } from "@/app/_design/fonts";
 import { currentStoreIdentity } from "@/app/_design/identity";
 import { DEFAULT_STORE_NAME } from "@/config/installation";
+import { stagingDatabase } from "../_lib/staging";
 import { SignOutButton } from "./auth-forms";
 import { Toast } from "./toast";
 import { AdminMenu } from "./admin-menu";
@@ -29,20 +32,22 @@ import { AdminMenu } from "./admin-menu";
 type Crumb = { href: string; label: string; lang?: string };
 type Current = "dashboard" | "products" | "preparation" | "reviews" | "categories" | "orders" | "delivery" | "reports" | "counts" | "exports" | "media" | "preview" | "policies" | "launch" | "acceptance" | "onboarding" | "store" | "publication" | "security";
 
-// Admin's navigation, grouped by the work it serves. Every Admin screen is reachable from here.
-const NAV: { group: string; items: { key: Current; href: string; label: string; icon: LucideIcon }[] }[] = [
+// Admin's navigation, grouped by the work it serves, the daily pages first. Every Admin screen is reachable from here.
+// Groups used now and then (`fold`) are folded in the desktop sidebar unless the current page is in them, so the daily
+// groups fit a laptop screen without scrolling; the phone's Menu always lists every page.
+const NAV: { group: string; fold?: true; items: { key: Current; href: string; label: string; icon: LucideIcon }[] }[] = [
   {
     group: "Daily work",
     items: [
       { key: "dashboard", href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { key: "orders", href: "/admin/orders", label: "Orders", icon: ClipboardList },
+      { key: "products", href: "/admin", label: "Products", icon: Shirt },
       { key: "counts", href: "/admin/stock-counts", label: "Stock counts", icon: PackageCheck },
     ],
   },
   {
     group: "Catalogue",
     items: [
-      { key: "products", href: "/admin", label: "Products", icon: Shirt },
       { key: "preparation", href: "/admin/catalogue-preparation", label: "Catalogue checklist", icon: ListChecks },
       { key: "reviews", href: "/admin/product-reviews", label: "Product reviews", icon: ClipboardCheck },
       { key: "categories", href: "/admin/categories", label: "Categories", icon: FolderTree },
@@ -57,22 +62,24 @@ const NAV: { group: string; items: { key: Current; href: string; label: string; 
     ],
   },
   {
+    group: "Shop",
+    fold: true,
+    items: [
+      { key: "preview", href: "/admin/storefront-preview", label: "Storefront preview", icon: Eye },
+      { key: "policies", href: "/admin/policies", label: "Policies", icon: FileText },
+      { key: "acceptance", href: "/admin/acceptance", label: "Shop acceptance", icon: Store },
+      { key: "launch", href: "/admin/launch-readiness", label: "Launch readiness", icon: Rocket },
+    ],
+  },
+  {
     group: "Settings",
+    fold: true,
     items: [
       { key: "onboarding", href: "/admin/onboarding", label: "Store setup", icon: ListChecks },
       { key: "store", href: "/admin/settings/store", label: "Store settings", icon: Store },
       { key: "delivery", href: "/admin/settings/delivery", label: "Delivery charges", icon: Truck },
       { key: "publication", href: "/admin/settings/publication", label: "Publication requirements", icon: ClipboardCheck },
       { key: "security", href: "/admin/settings/security", label: "Account security", icon: KeyRound },
-    ],
-  },
-  {
-    group: "Shop",
-    items: [
-      { key: "preview", href: "/admin/storefront-preview", label: "Storefront preview", icon: Eye },
-      { key: "policies", href: "/admin/policies", label: "Policies", icon: FileText },
-      { key: "acceptance", href: "/admin/acceptance", label: "Shop acceptance", icon: Store },
-      { key: "launch", href: "/admin/launch-readiness", label: "Launch readiness", icon: Rocket },
     ],
   },
 ];
@@ -109,7 +116,7 @@ export async function AdminShell({
   /** Buttons or links beside the title (the page's main actions). */
   actions?: React.ReactNode;
 }) {
-  const identity = await currentStoreIdentity();
+  const [identity, staging] = await Promise.all([currentStoreIdentity(), stagingDatabase()]);
   // The installation's own name (Store settings, else STORE_NAME). Only a store with no name at all shows a neutral
   // placeholder and a link to set it, never a made-up brand.
   const named = identity.storeName !== DEFAULT_STORE_NAME;
@@ -141,9 +148,8 @@ export async function AdminShell({
         </div>
         <nav aria-label="Admin" className="of-scroll hidden lg:block lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:px-3 lg:pb-5">
           <ul className="space-y-4">
-            {NAV.map(({ group, items }) => (
-              <li key={group}>
-                <p className="px-3 pb-1.5 text-[0.75rem] font-semibold tracking-wide text-[#bfae9b]">{group}</p>
+            {NAV.map(({ group, fold, items }) => {
+              const links = (
                 <ul className="space-y-0.5">
                   {items.map(({ key, href, label, icon: Icon }) => (
                     <li key={key}>
@@ -154,8 +160,26 @@ export async function AdminShell({
                     </li>
                   ))}
                 </ul>
-              </li>
-            ))}
+              );
+              return (
+                <li key={group}>
+                  {fold ? (
+                    <details className="of-nav-group" open={items.some((i) => i.key === current)}>
+                      <summary>
+                        {group}
+                        <ChevronDown aria-hidden="true" size={16} />
+                      </summary>
+                      <div className="pt-1">{links}</div>
+                    </details>
+                  ) : (
+                    <>
+                      <p className="px-3 pb-1.5 text-[0.8125rem] font-semibold text-[#bfae9b]">{group}</p>
+                      {links}
+                    </>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </nav>
       </aside>
@@ -197,13 +221,21 @@ export async function AdminShell({
       </nav>
       <main id="main" tabIndex={-1} className="min-w-0 flex-1 focus:outline-none">
         <div className={`mx-auto ${wide ? "max-w-[78rem]" : "max-w-5xl"} space-y-6 px-4 pt-6 pb-[calc(var(--of-bar-h)+2.5rem)] lg:px-10 lg:pt-10 lg:pb-16`}>
+          {staging ? (
+            <p className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-sm text-amber-950" data-testid="staging-notice">
+              <FlaskConical aria-hidden="true" size={18} className="mt-0.5 shrink-0" />
+              <span>
+                <strong>Test database (staging).</strong> Orders, customers and money figures here are test data, not your shop&apos;s real sales.
+              </span>
+            </p>
+          ) : null}
           <div className="space-y-2">
             {breadcrumbs.length ? (
               <nav aria-label="Breadcrumb" className="text-sm text-gray-600">
                 <ol className="flex flex-wrap items-center gap-1">
                   {breadcrumbs.map((crumb) => (
                     <li key={crumb.href} className="flex items-center gap-1">
-                      <Link href={crumb.href} lang={crumb.lang} className="rounded font-medium text-gray-700 underline-offset-4 hover:underline">
+                      <Link href={crumb.href} lang={crumb.lang} className="inline-flex min-h-11 items-center rounded font-medium text-gray-700 underline-offset-4 hover:underline lg:min-h-0">
                         {crumb.label}
                       </Link>
                       <span aria-hidden="true">›</span>
@@ -297,7 +329,7 @@ const NOTICES: Record<string, string> = {
   policyWithdrawn: "Withdrawn. Customers no longer see this policy.",
   acceptanceStarted: "Acceptance started in this browser for a few hours. Open the shop below.",
   acceptanceEnded: "Acceptance ended in this browser. The shop is closed to it again.",
-  storeSaved: "Store settings saved.",
+  storeSaved: "Store details saved.",
   logoSaved: "Logo saved.",
   logoRemoved: "Logo removed.",
   ruleApproved: "Publication requirements approved. Products that meet them can now be published.",

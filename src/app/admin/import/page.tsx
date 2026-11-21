@@ -21,12 +21,12 @@ export default async function ImportPage() {
         <div className="flex flex-wrap gap-3 text-sm">
           {/* A file download from a route handler, not a page (the rule mistakes it for the shop's /[lang] pages). */}
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-          <a href="/admin/import/template?format=xlsx" className="underline">
+          <a href="/admin/import/template?format=xlsx" className="inline-flex min-h-11 items-center underline lg:min-h-0">
             Download the XLSX template
           </a>
           {/* A file download from a route handler, not a page (the rule mistakes it for the shop's /[lang] pages). */}
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-          <a href="/admin/import/template?format=csv" className="underline">
+          <a href="/admin/import/template?format=csv" className="inline-flex min-h-11 items-center underline lg:min-h-0">
             Download the CSV template
           </a>
         </div>
