@@ -1,101 +1,105 @@
-# BabySunray Commerce
+<div align="center">
 
-A bilingual (English and Bangla) e-commerce platform and admin panel for a baby and kidswear shop in Bangladesh. It is built as a single Next.js application over PostgreSQL, with the business rules in server-side domain modules shared by the admin panel and a versioned REST API.
+# BabySunRay
 
-> **Status:** in active development, not production-ready and not deployed. The public storefront and checkout are **not** live: the storefront exists only as a private preview inside the admin panel, and public checkout stays disabled until the shop's policies are approved and published.
+**A bilingual online shop and back office for a baby and kidswear business in Bangladesh.**
 
-## What is implemented
+English · বাংলা · Cash on delivery · Built for phones first
 
-- **Catalogue:** draft products with SKU-level variants, bilingual content, size charts in centimetres, categories, a photo pipeline (type detection by content, re-encoding, metadata removal) and an all-or-nothing CSV/XLSX bulk import with a full preview.
-- **Inventory:** on-hand and reserved stock per SKU backed by an append-only movement ledger; database constraints keep `0 <= reserved <= on_hand`; physical stock counts become reasoned ledger adjustments.
-- **Orders:** admin-entered orders that reserve every line atomically or create nothing; four separate lifecycle dimensions (order, fulfilment, payment, return); a 24-hour verification window that releases holds without depending on a scheduler; cash-on-delivery collection, settlement and courier deductions kept apart, with a read-only courier statement check; returns, refunds and returned parcels with quarantine and inspection before restocking.
-- **Concurrency and idempotency:** row locks in a fixed order, conditional updates whose affected rows are checked, and one idempotency record per client key committed in the same transaction as the operation. Tests race real connections for the last unit and prove the lock waits.
-- **Private order tracking:** 256-bit random links stored only as SHA-256 digests, a masked view, revocation and rate limits.
-- **Admin panel** (`/admin`): product, stock, order, delivery-charge and category management, a dashboard of work queues, period reports, audited XLSX/CSV/JSON exports protected against formula injection, A4 print views, a launch-readiness overview and private policy drafts.
-- **REST API** (`/api/v1`): Bearer-token authentication, OpenAPI 3.1, strict input validation, RFC 9457 errors, keyset pagination, idempotency keys, per-user rate limits, request size limits and no CORS.
-- **Security:** Better Auth sessions, no public sign-up, an append-only sign-in and access audit, server-side permission checks on every page, Server Action and endpoint, audit actors that only a verified session can produce, and security headers on every admin response.
-- **Recovery:** encrypted database and photo backups, verification, restore into an empty target only, and restore drills on fictional data.
-- **Customer-facing backend (not reachable):** published-only catalogue, filters and cart quote, a guest checkout with its own idempotency record, price checks and a storewide rate limit, and the publication mechanics, all tested against PostgreSQL but deliberately not connected to any route. No product can be published until the shop's publication rule is approved ([what is complete and what is blocked](docs/architecture/backend-completeness.md)).
+</div>
 
-## Not built yet
+![The BabySunRay shop](docs/images/storefront.png)
 
-- A public storefront, product publication and public checkout (built, not reachable; see above)
-- Online payments and courier integrations
-- Customer accounts and sign-in
-- Production hosting, a backup schedule and an off-device backup copy
-- Account recovery for the admin beyond a local command, and two-factor authentication
-- Native apps (the API is designed for them, but none exists)
-- A final visual design (the admin panel and storefront preview use functional or prototype layouts)
+---
 
-## Technology
+## About
 
-| Area | Choice |
+BabySunRay is a complete online shop for a small clothing business. Shoppers browse in English or বাংলা, check the size chart, and order with cash on delivery, with no account needed. The owner runs everything from a single Admin: products, stock, orders, cash-on-delivery money, returns, printed slips and reports.
+
+It was built for how small shops in Bangladesh actually work: orders arrive from the website, Messenger and WhatsApp; every order is confirmed by phone; and cash moves from customer to courier to shop in separate steps that all need tracking.
+
+## Preview
+
+| Product page | Owner dashboard |
 |---|---|
-| Application | Next.js (App Router), React, TypeScript in strict mode, Node.js 24 |
-| Database | PostgreSQL 18, Drizzle ORM, reviewed SQL migrations |
-| Authentication | Better Auth (email and password, database sessions; Bearer tokens for API clients) |
-| Validation and contract | zod, OpenAPI 3.1 |
-| Styling | Tailwind CSS |
-| Images | sharp |
-| Tests | Vitest, Playwright, axe-core |
+| ![Product page](docs/images/product-page.png) | ![Dashboard](docs/images/dashboard.png) |
 
-## Architecture
+| Orders | Reports |
+|---|---|
+| ![Orders](docs/images/orders.png) | ![Reports](docs/images/reports.png) |
 
-One modular monolith; no separate backend server. Route files handle HTTP and rendering, business rules live in domain modules, and the admin panel calls the same services as the API instead of calling its own HTTP endpoints.
+<sub>Screenshots use made-up test data.</sub>
+
+## Features
+
+### For shoppers
+
+- **Two languages:** every page, button and message works in English and বাংলা.
+- **Clear sizing:** sizes, colours and a size chart in centimetres on every product.
+- **Cash on delivery:** the delivery charge is shown before ordering, and no card or account is needed.
+- **Optional account:** sign up with email or Google to see past orders.
+- **Order tracking:** a private link for each order, with self-cancel while it's still waiting for the shop's call.
+
+### For the shop owner
+
+- **Orders in one place:** search by order number, name or phone, and take the next step in one tap. Pack or dispatch many orders at once.
+- **Quick view:** see the customer, items and payment without leaving the list.
+- **Products:** bilingual content, photos, variants, size charts, a readiness checklist and spreadsheet import.
+- **Honest stock:** items are held when an order arrives and leave stock only when the parcel is sent. Physical stock counts are built in.
+- **Cash on delivery tracking:** collected, settled and courier fees are recorded separately, with a reconciliation check.
+- **Returns:** returned items wait for inspection before they can be sold again.
+- **Reports and records:** period reports, Excel/CSV exports, and A4 picking lists and shipping slips.
+
+## How an order flows
 
 ```
-src/app       pages, Server Actions and route handlers (HTTP, input parsing, rendering)
-src/api       /api/v1 plumbing: authentication, validation, errors, idempotency keys, OpenAPI
-src/modules   domain modules: catalogue, inventory, orders, media, reports, exports,
-              storefront, policies, launch, auth, idempotency, rate-limit
-src/db        Drizzle schema, connection safeguards, backup format
-drizzle/      SQL migrations (forward only)
-tests/        unit, integration, contract, browser, recovery drills, benchmark
+ Order placed ──► Confirmed ──► Packed ──► Dispatched ──► Delivered ──► Closed
+ (stock held)    (phone call)              (stock leaves)  (owner's record)
+                                                │
+                                   COD: collected ──► settled to the shop
 ```
 
-Money is stored as integer paisa and timestamps in UTC (shown in Asia/Dhaka). Architecture decisions are recorded in [docs/adr](docs/adr).
+Late orders (past 24 hours) can still be confirmed: stock is checked again first, so nothing is ever sold twice.
+
+## Built with
+
+| | |
+|---|---|
+| **Application** | Next.js, React, TypeScript |
+| **Data** | PostgreSQL, Drizzle ORM |
+| **Sign-in** | Better Auth (email, password and Google) |
+| **Design** | Tailwind CSS, with a custom design system called "First Light" |
+| **Email and images** | Resend, Cloudinary |
+| **Testing** | Vitest, Playwright, axe-core |
+
+One application with no separate backend. The website and the `/api/v1` API share the same business rules, so future mobile apps can use them too.
 
 ## Getting started
 
-Requirements: Node.js 24 (`.nvmrc`), PostgreSQL 18, and `openssl` for the production-build browser tests.
-
-```
+```bash
 npm install
-psql -U postgres -f db/local-setup.sql   # creates the local dev and test databases and roles
-cp .env.example .env.local               # then fill in the connection strings and auth settings
-npm run db:migrate                       # applies migrations to the local development database only
-npm run auth:bootstrap-owner             # creates the first admin account (interactive)
-npm run dev                              # http://localhost:3000/admin
+cp .env.example .env.local     # add your database and sign-in settings
+npm run db:migrate
+npm run dev                    # open http://localhost:3000/admin
 ```
 
-Passwords for the database roles are set with `\password` in `psql`, never in a file. Full setup, configuration and every npm script: [docs/getting-started.md](docs/getting-started.md).
-
-## Running tests
-
-```
-npm run typecheck && npm run lint
-npm test                # unit tests, no database
-npm run test:db         # PostgreSQL integration tests (local babysunray_test only)
-npm run test:contract   # OpenAPI validity and every endpoint against it
-npm run test:e2e        # browser tests against a development server
-npm run test:e2e:prod   # the same against a production build behind local HTTPS
-```
-
-Database and browser tests refuse any database other than the local `babysunray_test`, confirm its identity with PostgreSQL, and take a lock so two runs never reset it at the same time. Details: [docs/testing.md](docs/testing.md).
-
-## API
-
-The OpenAPI document is served at `/api/v1/openapi.json`. Authentication, errors, idempotency, pagination, limits and the versioning rules are in the [API guide](docs/api/README.md). All endpoints are admin-only. The customer-facing contract (only order tracking is live) is in [public-api.md](docs/api/public-api.md).
+Full setup, configuration and testing: **[developer docs](docs/README.md)**.
 
 ## Documentation
 
-The full index is [docs/README.md](docs/README.md). Most used:
+| | |
+|---|---|
+| [User guide](docs/user-guide.md) | How to run the shop day to day, in plain words |
+| [Developer docs](docs/README.md) | Setup, architecture, API and operations |
 
-- [Getting started](docs/getting-started.md) and [Testing](docs/testing.md)
-- Feature guides: [catalogue and inventory](docs/guides/catalogue-and-inventory.md), [orders](docs/guides/orders.md), [authentication](docs/guides/authentication.md), [admin panel](docs/guides/admin-panel.md), [product photos](docs/guides/product-photos.md), [storefront preview](docs/guides/storefront-preview.md)
-- [Architecture decision records](docs/adr)
-- [Operations runbook](docs/operations/runbook.md): running, exports, stock counts, backup and restore
+## Status
 
-## Data handling
+Built and running on a protected test site, with the public launch still to come. Online card payments and automatic courier links are planned for later.
 
-Customer data, database dumps, backups, exports, secrets and private business documents never belong in this repository; tests and examples use fictional data only. See `.gitignore` and `.env.example`.
+---
+
+<div align="center">
+
+Built by **Redwanul Rashik** · [rkrashik@gmail.com](mailto:rkrashik@gmail.com)
+
+</div>

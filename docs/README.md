@@ -5,10 +5,40 @@
 
 Each document starts with a status line. Most are **Draft — Founder Review**: they describe what was built and tested, but the decisions behind them are not all final.
 
+## For developers
+
+**Stack:** Next.js (App Router), React, TypeScript, PostgreSQL with Drizzle, Better Auth, Tailwind CSS. One application, no separate backend: pages and the `/api/v1` API share the same business modules in `src/modules`.
+
+```bash
+npm install
+psql -U postgres -f db/local-setup.sql   # local dev and test databases
+cp .env.example .env.local               # fill in connection strings and auth settings
+npm run db:migrate                       # local development database only
+npm run dev                              # http://localhost:3000/admin
+```
+
+Checks before any change goes in:
+
+```bash
+npm run typecheck && npm run lint
+npm test            # unit tests
+npm run test:db     # database tests (local test database only)
+npm run test:e2e    # browser tests
+npm run build
+```
+
+Rules the code lives by:
+
+- Money is whole paisa. Times are stored in UTC and shown in Dhaka time.
+- Every change to stock or an order runs in one database transaction and can be safely retried.
+- Customer names, phones and addresses never go into logs, URLs or test data.
+- Secrets, backups and exports never go into this repository.
+
 ## Getting started
 
 | Document | What it covers |
 |---|---|
+| [User guide](user-guide.md) | How to run the shop day to day, in plain words: orders, products, stock, COD, returns, reports |
 | [Getting started](getting-started.md) | Tools, local PostgreSQL, configuration, database migrations, the first admin account, every npm script |
 | [Installing a separate copy](operations/installation.md) | A separate, rebranded installation with fictional data, shop identity settings, the installation rehearsal, the licence inventory |
 

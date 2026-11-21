@@ -112,6 +112,15 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   mkdirSync(OUT!, { recursive: true });
   await ensureZones();
   const skus = await seedCatalogue();
+  // The screenshots show a named store, as a real installation would (Store settings).
+  const named = await testDatabase();
+  let romperSlug = "";
+  try {
+    await named.query("insert into store_settings (id, store_name) values (1, 'BabySunRay') on conflict (id) do update set store_name = excluded.store_name");
+    romperSlug = (await named.query<{ slug: string }>("select slug from products where name_en = 'Grey Button Romper' order by created_at desc limit 1")).rows[0].slug;
+  } finally {
+    await named.end();
+  }
   const shots: Shot[] = [];
 
   const desktop = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: "en-GB" });
@@ -197,6 +206,14 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   await page.getByLabel("Name (English)").fill("Cotton Sleep Bag");
   await page.waitForTimeout(1200);
   await capture(page, "desktop-41-new-product.png", "New product: name first, language tabs, web address made from the name", "Products · desktop");
+  // The shop as customers see it (the Owner's preview, its "preview" bar hidden for the picture).
+  const hideBar = () => page.addStyleTag({ content: "*:has(> [data-testid=preview-banner]) { display: none !important } nextjs-portal { display: none !important }" });
+  await page.goto("/admin/storefront-preview/en");
+  await hideBar();
+  await capture(page, "storefront.png", "Storefront home", "Storefront");
+  await page.goto(`/admin/storefront-preview/en/products/${romperSlug}`);
+  await hideBar();
+  await capture(page, "product-page.png", "Product page with sizes and size chart", "Storefront");
   await page.goto("/admin/orders?queue=to_pack");
   await page.locator("input.of-check").first().check();
   await capture(page, "desktop-09-orders-bulk.png", "Orders: a selection offers one bulk step", "Orders · desktop");
