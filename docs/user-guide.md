@@ -352,10 +352,10 @@ Do these once, from **Settings → Store setup** (it shows a checklist):
 
 | Setting | Why |
 |---|---|
-| **Store settings** | Your shop's name, short description, contact numbers and logo |
+| **Store settings** | Your shop's name, short description, contact details, social links and logo |
 | **Delivery charges** | The charge for Dhaka City and Outside Dhaka. Orders can't be taken without them |
 | **Categories** | e.g. Rompers, Sets, Accessories |
-| **Policies** | Your delivery, return and privacy policies, in English and Bangla |
+| **Policies** | Your delivery, return and privacy policies, in English and Bangla. The page starts with all four policies and their state; choose one to write, review or publish it |
 | **Publication requirements** | What every product must have before customers can see it |
 | **Account security** | Recovery codes |
 
@@ -368,6 +368,12 @@ Do these once, from **Settings → Store setup** (it shows a checklist):
 1. Press **Edit details** (or **Change charge** for a delivery zone).
 2. Change what you need, then press **Save changes** (**Save charge**). A green message confirms it was saved, and the page shows the saved values again.
 3. Changed your mind? Press **Cancel**. If you had typed something, you are asked first whether to discard it. Leaving the page with unsaved changes also asks first.
+
+### Social links
+
+The **Social links** card holds your Facebook page and Instagram profile. Press **Edit social links**, paste the full address of each (for example `https://www.facebook.com/yourpage`), and press **Save social links**. Both are optional: the shop's footer shows only the ones you fill in, next to your phone, email, WhatsApp and Messenger. To remove one, empty the field and save.
+
+If the card says the database needs its latest update, the links cannot be saved yet; everything else works as usual. Whoever looks after your website applies the update (migration 0023).
 
 ### Your logo
 

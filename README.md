@@ -14,9 +14,11 @@ English · বাংলা · Cash on delivery · Built for phones first
 
 ## About
 
-BabySunRay is a complete online shop for a small clothing business. Shoppers browse in English or বাংলা, check the size chart, and order with cash on delivery, with no account needed. The owner runs everything from a single Admin: products, stock, orders, cash-on-delivery money, returns, printed slips and reports.
+BabySunRay is an online shop and back office for a small clothing business. Shoppers browse in English or বাংলা, check the size chart, and order with cash on delivery, with no account needed. The owner runs everything from one Admin: products, stock, orders, cash-on-delivery money, returns, printed slips and reports.
 
-It was built for how small shops in Bangladesh actually work: orders arrive from the website, Messenger and WhatsApp; every order is confirmed by phone; and cash moves from customer to courier to shop in separate steps that all need tracking.
+It was built for how small shops in Bangladesh actually work: orders arrive from the website, Messenger and WhatsApp; every order is confirmed by phone before it is packed; and cash moves from customer to courier to shop in separate steps that each need recording.
+
+> **Not open to the public yet.** The shop runs on a private test site that only the owner's team can open. Public checkout stays switched off until the owner approves the store's policies and the launch.
 
 ## Preview
 
@@ -28,7 +30,7 @@ It was built for how small shops in Bangladesh actually work: orders arrive from
 |---|---|
 | ![Orders](docs/images/orders.png) | ![Reports](docs/images/reports.png) |
 
-<sub>Screenshots use made-up test data.</sub>
+<sub>Screenshots come from the automated browser tests and use made-up products and customers. The products have no photos, so the shop shows its "No photo yet" state.</sub>
 
 ## Features
 
@@ -39,6 +41,7 @@ It was built for how small shops in Bangladesh actually work: orders arrive from
 - **Cash on delivery:** the delivery charge is shown before ordering, and no card or account is needed.
 - **Optional account:** sign up with email or Google to see past orders.
 - **Order tracking:** a private link for each order, with self-cancel while it's still waiting for the shop's call.
+- **Easy to reach the shop:** the footer lists only the contact channels the owner has set: phone, email, WhatsApp, Messenger, Facebook and Instagram.
 
 ### For the shop owner
 
@@ -48,7 +51,8 @@ It was built for how small shops in Bangladesh actually work: orders arrive from
 - **Honest stock:** items are held when an order arrives and leave stock only when the parcel is sent. Physical stock counts are built in.
 - **Cash on delivery tracking:** collected, settled and courier fees are recorded separately, with a reconciliation check.
 - **Returns:** returned items wait for inspection before they can be sold again.
-- **Reports and records:** period reports, Excel/CSV exports, and A4 picking lists and shipping slips.
+- **Reports and records:** period reports that keep order activity apart from money actually collected, Excel/CSV exports, and A4 picking lists and shipping slips.
+- **Shop set-up:** store details, logo, contact and social links, delivery charges, bilingual policy drafts and a launch-readiness checklist, all without touching code.
 
 ## How an order flows
 
@@ -69,7 +73,8 @@ Late orders (past 24 hours) can still be confirmed: stock is checked again first
 | **Data** | PostgreSQL, Drizzle ORM |
 | **Sign-in** | Better Auth (email, password and Google) |
 | **Design** | Tailwind CSS, with a custom design system called "First Light" |
-| **Email and images** | Resend, Cloudinary |
+| **Optional services** | Resend for account emails, Cloudinary for published photos (each off until configured) |
+| **Hosting (staging)** | Netlify, private to the owner's team; PostgreSQL on Supabase |
 | **Testing** | Vitest, Playwright, axe-core |
 
 One application with no separate backend. The website and the `/api/v1` API share the same business rules, so future mobile apps can use them too.
@@ -94,7 +99,12 @@ Full setup, configuration and testing: **[developer docs](docs/README.md)**.
 
 ## Status
 
-Built and running on a protected test site, with the public launch still to come. Online card payments and automatic courier links are planned for later.
+| | |
+|---|---|
+| **Built and tested** | The shop, guest checkout with cash on delivery, customer accounts, order tracking, and the whole Admin, with unit, database and browser tests |
+| **Running on staging** | A private Netlify site on a test database, where the owner rehearses real orders through "founder acceptance" |
+| **Not public yet** | Public checkout is closed until the owner approves the delivery, return and privacy policies and the launch |
+| **Not built** | Online card or mobile-wallet payments, courier integrations, automatic messages to customers, and an AI shopping assistant |
 
 ---
 
