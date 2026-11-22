@@ -2,7 +2,7 @@ import { Banknote, ChevronDown, Truck } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
-import { formatCentimetres, MEASUREMENT_POINTS } from "@/modules/catalogue/content";
+import { formatCentimetres, formatInches, MEASUREMENT_POINTS } from "@/modules/catalogue/content";
 import { dictionary, formatTaka, type Lang, localised } from "@/modules/storefront/i18n";
 import { type CatalogueScope, listProductCards, productBySlug } from "@/modules/storefront/service";
 import { Gallery } from "../gallery";
@@ -66,8 +66,12 @@ export async function ProductView({ lang, surface, scope, slug, from: rawFrom, p
       <section aria-label={t.sizeGuide} className="space-y-5">
         {points.length ? (
           <div className="overflow-x-auto rounded-2xl border border-sf-line bg-sf-card">
+            {/* Each figure in cm (stored) and in inches (worked out from the same millimetres); the guide's unit switch shows one. */}
             <table className="sf-num w-full text-start text-[0.9375rem]">
-              <caption className="px-4 pt-3 text-start text-[0.8125rem] text-sf-ink-2">{t.sizeGuideUnit}</caption>
+              <caption className="px-4 pt-3 text-start text-[0.8125rem] text-sf-ink-2">
+                <span data-unit-cm>{t.sizeGuideUnit}</span>
+                <span data-unit-in>{t.sizeGuideUnitIn}</span>
+              </caption>
               <thead className="border-b border-sf-line text-[0.8125rem] text-sf-ink-2">
                 <tr>
                   <th scope="col" className="px-4 py-2.5 text-start font-semibold">
@@ -82,7 +86,7 @@ export async function ProductView({ lang, surface, scope, slug, from: rawFrom, p
               </thead>
               <tbody className="divide-y divide-sf-line">
                 {chartSizes.map((s) => (
-                  <tr key={s}>
+                  <tr key={s} data-size={s}>
                     <th scope="row" className="px-4 py-3 text-start font-semibold">
                       {s}
                     </th>
@@ -90,7 +94,14 @@ export async function ProductView({ lang, surface, scope, slug, from: rawFrom, p
                       const m = product.measurements.find((x) => x.size === s && x.point === p);
                       return (
                         <td key={p} className="px-4 py-3 text-end">
-                          {m ? formatCentimetres(m.valueMm, lang) : "—"}
+                          {m ? (
+                            <>
+                              <span data-unit-cm>{formatCentimetres(m.valueMm, lang)}</span>
+                              <span data-unit-in>{formatInches(m.valueMm, lang)}</span>
+                            </>
+                          ) : (
+                            "—"
+                          )}
                         </td>
                       );
                     })}

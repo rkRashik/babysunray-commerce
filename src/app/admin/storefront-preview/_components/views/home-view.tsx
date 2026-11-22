@@ -2,6 +2,7 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { SunMark } from "@/app/_design/sun-mark";
 import { currentStoreIdentity } from "@/app/_design/identity";
+import { DEFAULT_STORE_NAME } from "@/config/installation";
 import { getDb } from "@/db/client";
 import { dictionary, type Lang, localised } from "@/modules/storefront/i18n";
 import { type CatalogueScope, catalogueFacets, listProductCards } from "@/modules/storefront/service";
@@ -40,7 +41,11 @@ export async function HomeView({ lang, surface, scope }: { lang: Lang; surface: 
   const photographed = [...latest, ...featured].filter((p) => p.photo).slice(0, 3);
   // The tallest arch (the middle) gets the newest photo.
   const heroes = photographed.length === 3 ? [photographed[1], photographed[0], photographed[2]] : photographed;
-  const headline = line ?? t.latest;
+  // The shop's own line; without one, its name (never an invented slogan). "New Arrivals" only for a shop with neither,
+  // as it would otherwise repeat the shelf's heading below.
+  const headline = line ?? (identity.storeName !== DEFAULT_STORE_NAME ? identity.storeName : t.latest);
+  // Categories in whole rows on a phone: three across when they divide by three, otherwise two, the odd last one full width.
+  const phoneCols = categories.length % 3 === 0 ? 3 : 2;
 
   return (
     <div className="space-y-12 lg:space-y-20">
@@ -63,7 +68,8 @@ export async function HomeView({ lang, surface, scope }: { lang: Lang; surface: 
               ) : null}
             </div>
           </div>
-          <div className="mx-auto flex w-full max-w-[30rem] items-end justify-center gap-2.5 lg:gap-4" data-testid="hero-photo">
+          {/* Smaller on a phone, so the sizes and categories begin on the first screen. */}
+          <div className="mx-auto flex w-full max-w-[19rem] items-end justify-center gap-2.5 sm:max-w-[30rem] lg:gap-4" data-testid="hero-photo">
             {heroes.length ? (
               heroes.map((p, i) => {
                 const arch = heroes.length === 3 ? ARCHES[i] : { box: heroes.length === 1 ? "w-[62%] aspect-[4/5.4]" : "w-[44%] aspect-[4/5.4]", tint: tintFor(p.id) };
@@ -76,7 +82,7 @@ export async function HomeView({ lang, surface, scope }: { lang: Lang; surface: 
                 );
               })
             ) : (
-              <div aria-hidden="true" className="sf-arch-open flex aspect-[4/5] w-[62%] items-center justify-center bg-sf-butter">
+              <div aria-hidden="true" className="sf-arch-open flex aspect-[4/5] w-[52%] items-center justify-center bg-sf-butter sm:w-[62%]">
                 <SunMark className="h-16 w-28 text-sf-sun" />
               </div>
             )}
@@ -97,10 +103,15 @@ export async function HomeView({ lang, surface, scope }: { lang: Lang; surface: 
       {facets.sizes.length ? (
         <section aria-labelledby="sf-sizes" id="sf-sizes" className="scroll-mt-24">
           <SectionHeading id="sf-sizes-title" title={t.shopBySize} />
-          <ul aria-label={t.shopBySize} className="sf-rail gap-2.5 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0">
+          {/* Whole cards in a grid (two across on a phone, one row on a desktop up to six): none cut off at the edge, no half-empty row. */}
+          <ul
+            aria-label={t.shopBySize}
+            className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 lg:grid-cols-[repeat(var(--sizes),minmax(0,1fr))]"
+            style={{ "--sizes": Math.min(facets.sizes.length, 6) } as React.CSSProperties}
+          >
             {facets.sizes.slice(0, MAX_SIZES).map((s) => (
               <li key={s}>
-                <Link href={`${base(lang, surface)}/products?size=${encodeURIComponent(s)}`} className="sf-chip sf-option min-h-14 min-w-24 bg-sf-card text-[1.0625rem] lg:min-w-32">
+                <Link href={`${base(lang, surface)}/products?size=${encodeURIComponent(s)}`} className="sf-chip sf-option min-h-14 w-full bg-sf-card text-[1.0625rem]">
                   {s}
                 </Link>
               </li>
@@ -109,23 +120,31 @@ export async function HomeView({ lang, surface, scope }: { lang: Lang; surface: 
         </section>
       ) : null}
 
-      {categories.length ? (
+      {/* From two categories up: a single one is not a choice (the header and Shop All already lead to it). */}
+      {categories.length > 1 ? (
         <section aria-labelledby="sf-categories">
           <SectionHeading id="sf-categories" title={t.shopByCategory} action={{ href: `${base(lang, surface)}/products`, label: t.seeAll }} />
-          <ul aria-label={t.shopByCategory} className={`grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-5 ${categories.length >= 4 ? "lg:grid-cols-4" : categories.length === 3 ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
+          <ul
+            aria-label={t.shopByCategory}
+            className={`grid gap-3 lg:gap-5 ${phoneCols === 3 ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-3"} ${categories.length >= 4 ? "lg:grid-cols-4" : categories.length === 3 ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}
+          >
             {categories.map((c, i) => {
               const cover = covers[i];
+              const wideLast = phoneCols === 2 && categories.length % 2 === 1 && i === categories.length - 1;
               return (
-                <li key={c.slug}>
-                  <Link href={`${base(lang, surface)}/products?category=${c.slug}`} className={`group flex h-full flex-col items-center gap-3 rounded-[1.5rem] px-3 pt-4 pb-4 text-center transition-transform active:scale-[0.98] ${tintFor(c.slug)}`}>
-                    <div className="sf-photo sf-arch aspect-[4/5] w-[72%] bg-sf-card/60">
+                <li key={c.slug} className={wideLast ? "col-span-2 sm:col-span-1" : undefined}>
+                  <Link
+                    href={`${base(lang, surface)}/products?category=${c.slug}`}
+                    className={`group flex h-full flex-col items-center gap-3 rounded-[1.5rem] pt-4 pb-4 text-center transition-transform active:scale-[0.98] ${phoneCols === 3 ? "px-1.5 sm:px-3" : "px-3"} ${tintFor(c.slug)}`}
+                  >
+                    <div className={`sf-photo sf-arch aspect-[4/5] bg-sf-card/60 ${wideLast ? "w-[34%] sm:w-[72%]" : "w-[72%]"}`}>
                       {cover?.photo ? (
                         <Photo photo={cover.photo} lang={lang} surface={surface} name={productName(lang, cover)} sizes="(min-width: 1024px) 16vw, 32vw" className="transition-transform duration-700 ease-out group-hover:scale-[1.04]" decorative />
                       ) : (
                         <NoPhoto label="" />
                       )}
                     </div>
-                    <p className="text-[1.0625rem] font-bold">
+                    <p className={`font-bold [overflow-wrap:anywhere] ${phoneCols === 3 ? "text-[0.9375rem] sm:text-[1.0625rem]" : "text-[1.0625rem]"}`}>
                       <Localised lang={lang} en={c.nameEn} bn={c.nameBn} />
                     </p>
                   </Link>

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { dictionary, isLang } from "@/modules/storefront/i18n";
+import { isLang } from "@/modules/storefront/i18n";
 import { requireAdmin } from "../../../_lib/session";
 import { CheckoutForm } from "../../_components/checkout-form";
 
@@ -9,11 +9,6 @@ export default async function PreviewCheckout({ params }: { params: Promise<{ la
   const { lang } = await params;
   if (!isLang(lang)) notFound();
   await requireAdmin("storefront:preview");
-  const t = dictionary(lang);
-  return (
-    <div className="space-y-4 lg:space-y-8">
-      <h1 className="sf-display text-[2.125rem] lg:text-[3.25rem]">{t.checkoutTitle}</h1>
-      <CheckoutForm lang={lang} />
-    </div>
-  );
+  // The form renders the page heading (a confirmation replaces it with its own).
+  return <CheckoutForm lang={lang} />;
 }

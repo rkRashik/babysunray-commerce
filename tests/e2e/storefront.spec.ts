@@ -105,7 +105,15 @@ test("the Owner browses in English and Bangla: banner, private headers, search, 
   await expect(page.getByRole("img", { name: "Fictional romper, front" })).toBeVisible();
   await expect.poll(() => page.getByRole("img", { name: "Fictional romper, front" }).evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
   await page.getByRole("button", { name: "Size guide" }).click();
-  await expect(page.getByRole("region", { name: "Size guide" }).getByRole("row", { name: /3-6M/ })).toContainText("26");
+  const guide = page.getByRole("region", { name: "Size guide" });
+  await expect(guide.getByRole("row", { name: /3-6M/ })).toContainText("26");
+  // The chosen size's row is marked; inches are the same millimetres worked out (260 mm = 10.2 in), cm stays the default.
+  await expect(guide.getByRole("row", { name: /0-3M/ })).toHaveAttribute("aria-current", "true");
+  await expect(guide.getByRole("row", { name: /3-6M/ })).not.toHaveAttribute("aria-current");
+  await page.getByTestId("unit-in").click();
+  await expect(guide.getByText("10.2", { exact: true }).first()).toBeVisible();
+  await expect(guide.getByText("26", { exact: true }).first()).toBeHidden();
+  await page.getByTestId("unit-cm").click();
   await expectNoAxeViolations(page);
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("size-guide-sheet")).toHaveCount(0);
@@ -129,9 +137,16 @@ test("cart: choose size and colour, add, change quantities, totals in paisa, inv
   await page.getByRole("radio", { name: /^0-3M/ }).focus();
   await page.keyboard.press("Space");
   await expect(page.getByRole("radio", { name: /^0-3M/ })).toBeChecked();
-  await page.getByRole("button", { name: "Add to Bag", exact: true }).click();
-  await expect(page.getByTestId("add-message")).toHaveText("Select a size and colour first.");
+  // Until the choice is complete the button names the next step; pressing it says what is missing.
+  const add = page.getByTestId("add-to-bag");
+  await expect(add).toHaveText("Select a colour");
+  await expect(add).toHaveAttribute("aria-disabled", "true");
+  // aria-disabled keeps it pressable (Playwright would wait for it to be enabled): pressing it says what is missing.
+  await add.click({ force: true });
+  await expect(page.getByTestId("add-message")).toHaveText("Select a colour first.");
   await chip(page, "Ivory").click();
+  await expect(add).toHaveText("Add to Bag");
+  await expect(add).not.toHaveAttribute("aria-disabled");
   await expect(page.getByTestId("availability")).toHaveText("In stock: 5 available");
   await page.getByLabel("Quantity").fill("2.5");
   await page.getByRole("button", { name: "Add to Bag", exact: true }).click();
@@ -144,13 +159,18 @@ test("cart: choose size and colour, add, change quantities, totals in paisa, inv
   await expect(page.getByTestId("add-message")).toHaveText(`2 × ${product.nameEn} added to your bag.`);
   await expect(page.getByTestId("cart-count")).toHaveText("2");
 
-  // The sold-out colour is marked and cannot be added.
+  // The sold-out colour (no size left) is marked and cannot be added: the button says so and the quantity steps aside.
   await chip(page, "3-6M").click();
+  await expect(chip(page, "Ivory")).toHaveAttribute("data-out", "false");
+  await expect(chip(page, "Sand")).toHaveAttribute("data-out", "true");
   await chip(page, "Sand").click();
   await expect(page.getByTestId("availability")).toHaveText("Sold out");
-  await page.getByRole("button", { name: "Add to Bag", exact: true }).click();
+  await expect(add).toHaveText("Sold out");
+  await expect(page.getByLabel("Quantity")).toBeHidden();
+  await add.click({ force: true });
   await expect(page.getByTestId("add-message")).toHaveText("This option is sold out.");
   await chip(page, "Ivory").click();
+  await expect(add).toHaveText("Add to Bag");
   await page.getByLabel("Quantity").fill("1");
   await page.getByRole("button", { name: "Add to Bag", exact: true }).click();
   await expect(page.getByTestId("cart-count")).toHaveText("3");
@@ -218,6 +238,8 @@ test("checkout simulation: contact, delivery, review and confirmation in both la
   await expect(page.getByTestId("simulation-note")).toContainText("সিমুলেশন");
   await expect(page.getByTestId("total")).toHaveText("৳ ৯১০");
 
+  // The area chosen above is remembered for this tab; forget it to check what happens when none is chosen.
+  await page.evaluate(() => sessionStorage.clear());
   await page.goto(`${PREVIEW}/en/checkout`);
   await page.getByLabel("Full name").fill("Test Customer");
   await page.getByLabel("Mobile number").fill("12345");
@@ -251,12 +273,60 @@ test("checkout simulation: contact, delivery, review and confirmation in both la
   await expect(result).toContainText("Order received (simulation)");
   await expect(result).toContainText("This was a simulation. No order was recorded and no stock was held.");
   await expect(result).toContainText("Pending Verification");
-  await expect(page.getByTestId("simulated-total")).toHaveText("৳ 970");
+  // One heading (the confirmation's, not "Checkout"), numbered next steps, one total, and the only way back is named a simulation.
+  await expect(page.locator("main h1")).toHaveText("Order received (simulation)");
+  await expect(result.getByTestId("next-steps").locator(".sf-step-num")).toHaveText(["1", "2", "3"]);
+  await expect(result.getByTestId("total")).toHaveText("৳ 970");
+  await expect(result.getByText("৳ 970", { exact: true })).toHaveCount(1);
+  await expect(result.getByRole("button", { name: "Edit" })).toHaveCount(0);
+  await expect(result.getByRole("button", { name: "Change details (simulation)" })).toBeVisible();
   await expectNoAxeViolations(page);
   // No order, line, event, hold, tracking link, payment, idempotency record or stock movement was created.
   expect(await counts()).toEqual(before);
   await page.goto(`${PREVIEW}/en/cart`);
   await expect(page.getByTestId("cart-count")).toHaveText("1");
+});
+
+test("the delivery area chosen in the bag carries into checkout: the same total from step 1, recalculated when changed, dropped when no longer offered", async ({ page }) => {
+  const product = await seedStorefrontProduct();
+  await signIn(page);
+  await page.goto(`${PREVIEW}/en/products/${product.slug}`);
+  await chip(page, "0-3M").click();
+  await chip(page, "Ivory").click();
+  await page.getByTestId("add-to-bag").click();
+  await expect(page.getByTestId("cart-count")).toHaveText("1");
+  await page.goto(`${PREVIEW}/en/cart`);
+  await chip(page, "Dhaka City").click();
+  await expect(page.getByTestId("total")).toHaveText("৳ 910");
+  await page.getByRole("link", { name: "Checkout", exact: true }).click();
+  const summary = page.getByRole("complementary", { name: "Order summary" });
+  // Step 1 already shows the total with delivery: no drop to the subtotal on the way in.
+  await expect(summary.getByTestId("total")).toHaveText("৳ 910");
+  await expect(page.getByRole("link", { name: "Back to bag" })).toBeVisible();
+  await page.getByLabel("Full name").fill("Test Customer");
+  await page.getByLabel("Mobile number").fill("01711000054");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Delivery address").fill("House 54, Test Road");
+  await expect(page.getByRole("radio", { name: /^Dhaka City/ })).toBeChecked();
+  // Changing it here prices it again on the server, and the choice survives a reload of the page.
+  await chip(page, "Outside Dhaka").click();
+  await expect(summary.getByTestId("total")).toHaveText("৳ 970");
+  await page.reload();
+  await expect(summary.getByTestId("total")).toHaveText("৳ 970");
+  await page.getByLabel("Full name").fill("Test Customer");
+  await page.getByLabel("Mobile number").fill("01711000054");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Delivery address").fill("House 54, Test Road");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByTestId("checkout-review")).toContainText("Outside Dhaka");
+  // The review step has a way back.
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page.getByLabel("Delivery address")).toHaveValue("House 54, Test Road");
+  // A remembered area the shop no longer offers is dropped, never sent on as if chosen.
+  await page.evaluate(() => sessionStorage.setItem("babysunray-preview-zone-v1", "no_such_zone"));
+  await page.reload();
+  await expect(summary.getByTestId("delivery")).toHaveText("Choose an area");
+  await expect(summary.getByTestId("total")).toHaveText("—");
 });
 
 test("product page: gallery by keyboard, category link, more in the category, back to the same results, cart kept across language and reload", async ({ page }) => {
@@ -387,6 +457,8 @@ test("the storefront design: the same product, price and cart in both languages;
 
 test("the home page, list, product, cart and checkout: search and category chips, delivery and payment beside the buying panel, axe in both languages, no console errors", async ({ page }) => {
   const product = await seedStorefrontProduct({ featured: true });
+  // A second category: the home page shows "Shop by Category" only when there is a choice (two or more).
+  await seedStorefrontProduct();
   const errors: string[] = [];
   page.on("console", (m) => m.type() === "error" && errors.push(m.text().slice(0, 300)));
   page.on("pageerror", (e) => errors.push(e.message.slice(0, 300)));

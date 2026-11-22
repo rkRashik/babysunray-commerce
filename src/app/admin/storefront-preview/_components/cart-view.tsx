@@ -1,13 +1,13 @@
 "use client";
 
-import { CircleAlert, Info, Minus, Plus, Trash2 } from "lucide-react";
+import { CircleAlert, ImageOff, Info, Minus, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 import { SunMark } from "@/app/_design/sun-mark";
 import { parseQuantity, removeLine, setQuantity } from "@/modules/storefront/cart";
 import { dictionary, formatTaka, type Lang, localised, toBnDigits } from "@/modules/storefront/i18n";
 import type { Quote, QuotedLine } from "@/modules/storefront/service";
-import { useCart } from "./cart-store";
+import { useCart, useZone } from "./cart-store";
 import { useSurface } from "./frame";
 import { photoPath } from "./surface";
 
@@ -46,6 +46,17 @@ export function useQuote(zone: string) {
   return { lines, setLines, quote, state, retry: () => setAttempt((a) => a + 1) };
 }
 
+/** The quote for the remembered delivery area (shared by the bag and checkout). An area the shop no longer offers is dropped. */
+export function useZoneQuote() {
+  const [zone, setZone] = useZone();
+  const result = useQuote(zone);
+  const { quote } = result;
+  useEffect(() => {
+    if (zone && quote && !quote.zones.some((z) => z.code === zone)) setZone("");
+  }, [zone, quote, setZone]);
+  return { zone, setZone, ...result };
+}
+
 /** A line's thumbnail: the product's first photo in a small arch, or the empty ground. */
 export function LineThumb({ line, className = "" }: { line: QuotedLine; className?: string }) {
   const { surface } = useSurface();
@@ -54,7 +65,12 @@ export function LineThumb({ line, className = "" }: { line: QuotedLine; classNam
       {line.photo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={photoPath(surface, line.photo.id, 320)} alt="" width={line.photo.width} height={line.photo.height} loading="lazy" />
-      ) : null}
+      ) : (
+        // No photo yet: a quiet mark, so the arch does not look like a picture that failed to load.
+        <span aria-hidden="true" className="flex h-full w-full items-center justify-center text-sf-ink-2/70">
+          <ImageOff size={20} strokeWidth={1.5} />
+        </span>
+      )}
     </div>
   );
 }
@@ -62,7 +78,8 @@ export function LineThumb({ line, className = "" }: { line: QuotedLine; classNam
 function LineRow({ line, lang, onQuantity, onRemove }: { line: QuotedLine; lang: Lang; onQuantity: (n: number) => void; onRemove: () => void }) {
   const t = dictionary(lang);
   const id = useId();
-  const [typed, setTyped] = useState(String(line.quantity));
+  // Bangla digits in Bangla (parseQuantity reads both).
+  const [typed, setTyped] = useState(lang === "bn" ? toBnDigits(line.quantity) : String(line.quantity));
   const [error, setError] = useState<string | null>(null);
   const name = lineName(lang, line, line.sku);
   const { root } = useSurface();
@@ -96,7 +113,7 @@ function LineRow({ line, lang, onQuantity, onRemove }: { line: QuotedLine; lang:
           </p>
         </div>
         <p className="text-[0.875rem] text-sf-ink-2">{[line.size, line.colour].filter(Boolean).join(", ")}</p>
-        {line.unitPricePaisa !== null ? <p className="sf-num text-[0.875rem] text-sf-ink-2">{t.each(formatTaka(line.unitPricePaisa, lang))}</p> : null}
+        {line.unitPricePaisa !== null && line.quantity > 1 ? <p className="sf-num text-[0.875rem] text-sf-ink-2">{t.each(formatTaka(line.unitPricePaisa, lang))}</p> : null}
         {problem ? (
           <p className="sf-note mt-1 font-semibold" data-tone="bad" data-testid="line-problem">
             {problem}
@@ -200,7 +217,7 @@ export function EmptyBag({ lang, message }: { lang: Lang; message: string }) {
     <div className="mx-auto flex max-w-md flex-col items-center gap-5 py-12 text-center" role="status">
       <SunMark className="h-10 w-16 text-sf-sun" />
       <p className="text-xl font-bold">{message}</p>
-      <Link href={`${root}/${lang}/products`} className="sf-btn sf-btn-ink">
+      <Link href={`${root}/${lang}/products`} className="sf-btn">
         {t.continueShopping}
       </Link>
     </div>
@@ -210,8 +227,7 @@ export function EmptyBag({ lang, message }: { lang: Lang; message: string }) {
 export function CartView({ lang }: { lang: Lang }) {
   const t = dictionary(lang);
   const { root } = useSurface();
-  const [zone, setZone] = useState("");
-  const { lines, setLines, quote, state, retry } = useQuote(zone);
+  const { zone, setZone, lines, setLines, quote, state, retry } = useZoneQuote();
   // What just changed, read out by screen readers (polite) and shown under the heading.
   const [announcement, setAnnouncement] = useState("");
   const blocked = !quote || quote.lines.some((l) => l.status !== "ok");
@@ -260,10 +276,6 @@ export function CartView({ lang }: { lang: Lang }) {
       <aside aria-label={t.orderSummary} className="sf-card space-y-5 self-start p-5 lg:sticky lg:top-28 lg:p-7">
         <h2 className="text-[1.5rem]">{t.orderSummary}</h2>
         <Totals quote={quote} lang={lang} zone={zone} onZone={setZone} />
-        <p className="sf-note">
-          <Info aria-hidden="true" size={18} strokeWidth={1.75} />
-          <span>{t.notInCart}</span>
-        </p>
         {blocked ? (
           <p className="sf-note font-semibold" data-tone="bad" data-testid="checkout-blocked">
             <CircleAlert aria-hidden="true" size={18} strokeWidth={2} />
@@ -274,6 +286,10 @@ export function CartView({ lang }: { lang: Lang }) {
             {t.toCheckout}
           </Link>
         )}
+        <p className="sf-hint flex gap-2">
+          <Info aria-hidden="true" size={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+          <span>{t.notInCart}</span>
+        </p>
       </aside>
       {blocked ? null : (
         <div className="sf-bar sf-bar-phone">

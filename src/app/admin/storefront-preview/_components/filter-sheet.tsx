@@ -10,7 +10,7 @@ export function FilterSheet({ lang, active, children }: { lang: Lang; active: nu
   const t = dictionary(lang);
   return (
     <Sheet
-      title={t.filters}
+      title={t.filterSort}
       closeLabel={t.close}
       testId="filter-sheet"
       triggerTestId="filter-button"
@@ -18,7 +18,7 @@ export function FilterSheet({ lang, active, children }: { lang: Lang; active: nu
       trigger={
         <>
           <SlidersHorizontal aria-hidden="true" size={18} strokeWidth={1.75} />
-          {t.filters}
+          {t.filterSort}
           {active ? <span className="sf-count">{lang === "bn" ? toBnDigits(active) : active}</span> : null}
         </>
       }

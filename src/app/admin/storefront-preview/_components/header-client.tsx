@@ -114,6 +114,10 @@ export function BagLink({ lang, place }: { lang: Lang; place: "header" | "tab" |
 export function SearchForm({ lang, id, inputRef, large = false }: { lang: Lang; id: string; inputRef?: React.RefObject<HTMLInputElement | null>; large?: boolean }) {
   const t = dictionary(lang);
   const { root } = useSurface();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  // On the results the field keeps what was searched, so it can be changed rather than typed again.
+  const current = pathname === `${root}/${lang}/products` ? (params.get("q") ?? "") : "";
   return (
     <form action={`${root}/${lang}/products`} method="get" role="search" className="relative flex items-center">
       <label htmlFor={id} className="sr-only">
@@ -121,17 +125,20 @@ export function SearchForm({ lang, id, inputRef, large = false }: { lang: Lang; 
       </label>
       <SearchIcon aria-hidden="true" size={19} strokeWidth={1.75} className="pointer-events-none absolute start-4 text-sf-ink-2" />
       <input
+        key={current}
         ref={inputRef}
         id={id}
         type="search"
         name="q"
         maxLength={100}
+        defaultValue={current}
         enterKeyHint="search"
         autoComplete="off"
         placeholder={t.searchPlaceholder}
         className={`sf-field rounded-full ps-11 ${large ? "pe-24" : "min-h-11 pe-[5.25rem] text-[0.9375rem]"}`}
       />
-      <button type="submit" className="sf-btn sf-btn-ink absolute end-1 min-h-9 px-4 text-[0.875rem]">
+      {/* A visible submit (Enter is not the only way), quieter than the Bag so the Bag stays the header's one dark button. */}
+      <button type="submit" className="sf-btn sf-btn-soft absolute end-1 min-h-9 px-4 text-[0.875rem]">
         {t.search}
       </button>
     </form>

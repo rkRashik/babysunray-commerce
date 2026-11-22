@@ -38,6 +38,13 @@ export function formatCentimetres(mm: number, locale: "en" | "bn" = "en"): strin
   return locale === "bn" ? text.replace(/[0-9]/g, (d) => BANGLA_DIGITS[Number(d)]) : text;
 }
 
+/** The same stored millimetres shown in inches (25.4 mm each), to one decimal place: a view of the cm value, never stored. */
+export function formatInches(mm: number, locale: "en" | "bn" = "en"): string {
+  const tenths = Math.round((mm * 10) / 25.4);
+  const text = tenths % 10 === 0 ? String(tenths / 10) : `${Math.trunc(tenths / 10)}.${tenths % 10}`;
+  return locale === "bn" ? text.replace(/[0-9]/g, (d) => BANGLA_DIGITS[Number(d)]) : text;
+}
+
 /**
  * A complete size chart: unique (size, point) pairs, known points, sizes as on the variants (trimmed, 1-64
  * characters), at most 30 sizes. An empty list removes the chart.

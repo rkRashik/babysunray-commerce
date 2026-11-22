@@ -209,11 +209,14 @@ test("on a phone: search in the tab bar, Add to Bag and its answer always on scr
   await expect(page.getByTestId("tab-search")).toBeInViewport();
   await noSideScroll(page);
   await page.goto(`/admin/storefront-preview/en/products/${product.slug}`);
-  const add = page.getByRole("button", { name: /^Add to Bag/ });
+  // Before a size is chosen the bar's button names that step (not an Add to Bag that cannot work), and says so when pressed.
+  const add = page.getByRole("button", { name: "Select a size", exact: true });
   await expect(add).toBeInViewport();
-  await add.tap();
+  await expect(add).toHaveAttribute("aria-disabled", "true");
+  // aria-disabled keeps it pressable (Playwright would wait for it to be enabled): pressing it says what is missing.
+  await add.tap({ force: true });
   await expect(page.getByTestId("add-message")).toBeInViewport();
-  await expect(page.getByTestId("add-message")).toHaveText("Select a size and colour first.");
+  await expect(page.getByTestId("add-message")).toHaveText("Select a size first.");
   await page.mouse.wheel(0, 3000);
   await expect(add).toBeInViewport();
   await noSideScroll(page);
@@ -259,7 +262,7 @@ test("the storefront on a 360-pixel phone: every page fits, every control is at 
 
   // The buying panel: Add to Bag in the fixed bar at once, its answer just above it.
   await page.goto(`/admin/storefront-preview/en/products/${product.slug}`);
-  await expect(page.getByRole("button", { name: /^Add to Bag/ })).toBeInViewport();
+  await expect(page.getByRole("button", { name: "Select a size", exact: true })).toBeInViewport();
   await page.locator("label").filter({ has: page.getByRole("radio", { name: /^0-3M/ }) }).tap();
   await page.locator("label").filter({ has: page.getByRole("radio", { name: /^Ivory/ }) }).tap();
   await page.getByRole("button", { name: /^Add to Bag/ }).tap();

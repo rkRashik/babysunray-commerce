@@ -1,6 +1,6 @@
 import { Banknote, Lock, Mail, MessageCircle, Phone, Truck } from "lucide-react";
 import Link from "next/link";
-import { SunMark } from "@/app/_design/sun-mark";
+import { BrandLogo } from "@/app/_design/brand";
 import type { InstallationIdentity } from "@/config/installation";
 import { type CdnImages, cdnConfig, cdnImages } from "@/modules/media/cdn";
 import { dictionary, formatTaka, type Lang, localised, toBnDigits } from "@/modules/storefront/i18n";
@@ -15,7 +15,7 @@ export type { Surface };
 // the product card, grid and rail, section headings, the trust lines and the ordering steps, the preview strip and the
 // footer. Each takes the surface it renders on (surface.ts): the Owner-only preview or the real shop.
 
-const LIST_KEYS = ["q", "category", "size", "colour", "stock", "page"];
+const LIST_KEYS = ["q", "category", "size", "colour", "stock", "sort", "page"];
 /**
  * A product list query carried to a product page ("Back to results"): only the list's own parameters, each at most
  * 100 characters, rebuilt from scratch, so nothing else can travel in it. Empty when there is nothing to keep.
@@ -117,7 +117,8 @@ export function ProductTile({ product, lang, surface, from, priority = false, si
               className={`transition-transform duration-500 ease-out group-hover:scale-[1.03] ${out ? "opacity-70 grayscale-[35%]" : ""}`}
             />
           ) : (
-            <NoPhoto label={t.noPhoto} />
+            // Decorative like the photo would be: the link is named by the product's name, not "No photo yet …".
+            <NoPhoto label={t.noPhoto} decorative />
           )}
           {out ? (
             <span className="sf-badge absolute top-[14%] start-1/2 -translate-x-1/2 rtl:translate-x-1/2" data-tone="out" data-testid="card-sold-out">
@@ -304,8 +305,10 @@ export function Footer({ lang, identity, facets, surface, policies = [] }: { lan
     <footer className="sf-on-dark mt-16 bg-sf-ink text-sf-paper lg:mt-24">
       <div className={`mx-auto grid max-w-7xl gap-10 px-4 pt-12 pb-8 lg:px-8 lg:pt-16 ${channels.length ? "sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]" : "lg:grid-cols-[1.6fr_1fr_1fr]"}`}>
         <div className="space-y-4">
-          <SunMark className="h-6 w-10 text-sf-sun-glow" />
-          <p className="fl-wordmark text-[1.75rem]">{identity.storeName}</p>
+          {/* The same logo as the header (or the shop's name), on an ivory plate: the artwork is never recoloured for the dark ground. */}
+          <p className="inline-flex rounded-2xl bg-sf-paper px-4 py-2.5 text-sf-ink">
+            <BrandLogo name={identity.storeName} logo={identity.logo} height={40} textClassName="text-[1.75rem]" />
+          </p>
           {line ? (
             <p lang={lineHere === null ? other : undefined} className="max-w-sm text-sf-paper/85">
               {line}

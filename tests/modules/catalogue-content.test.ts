@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { productMeasurements } from "../../src/db/schema";
-import { formatCentimetres, languages, MEASUREMENT_POINTS, parseCentimetres, validateMeasurements } from "../../src/modules/catalogue/content";
+import { formatCentimetres, formatInches, languages, MEASUREMENT_POINTS, parseCentimetres, validateMeasurements } from "../../src/modules/catalogue/content";
 import { evaluateReadiness, type ReadinessInput } from "../../src/modules/catalogue/readiness";
 import { sniffImage } from "../../src/modules/media/images";
 
@@ -21,6 +21,11 @@ describe("measurements in centimetres, stored as whole millimetres", () => {
     expect(formatCentimetres(1)).toBe("0.1");
     expect(formatCentimetres(425, "bn")).toBe("৪২.৫");
     for (const mm of [1, 9, 10, 425, 999, 3000]) expect(parseCentimetres(formatCentimetres(mm))).toBe(mm);
+    // Inches are a view of the same millimetres, to a tenth: 254 mm is exactly 10 in; 260 mm is 10.236… in.
+    expect(formatInches(254)).toBe("10");
+    expect(formatInches(260)).toBe("10.2");
+    expect(formatInches(245)).toBe("9.6");
+    expect(formatInches(440, "bn")).toBe("১৭.৩");
   });
 
   it("keeps the measuring points equal to the database check", () => {

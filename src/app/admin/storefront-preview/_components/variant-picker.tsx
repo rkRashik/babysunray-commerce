@@ -2,9 +2,9 @@
 
 import { Check, CircleAlert, Minus, Plus, Ruler, ShoppingBag } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { addToCart, parseQuantity } from "@/modules/storefront/cart";
-import { dictionary, formatTaka, type Lang } from "@/modules/storefront/i18n";
+import { dictionary, formatTaka, type Lang, toBnDigits } from "@/modules/storefront/i18n";
 import type { PreviewVariant } from "@/modules/storefront/service";
 import { useCart } from "./cart-store";
 import { useSurface } from "./frame";
@@ -28,6 +28,33 @@ type Props = {
 
 type Message = { text: string; error: boolean };
 
+/** The size guide's body: a cm / inch switch (cm stays the stored figure) and the chosen size's row marked in the chart. */
+function SizeGuideBody({ lang, size, children }: { lang: Lang; size: string | null; children: React.ReactNode }) {
+  const t = dictionary(lang);
+  const [unit, setUnit] = useState<"cm" | "in">("cm");
+  const body = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    for (const row of body.current?.querySelectorAll<HTMLElement>("tr[data-size]") ?? []) {
+      const chosen = row.dataset.size === size;
+      row.toggleAttribute("data-current", chosen);
+      if (chosen) row.setAttribute("aria-current", "true");
+      else row.removeAttribute("aria-current");
+    }
+  }, [size]);
+  return (
+    <div ref={body} className="sf-sheet-body space-y-4" data-units={unit}>
+      <div role="group" aria-label={t.unit} className="sf-seg">
+        {(["cm", "in"] as const).map((u) => (
+          <button key={u} type="button" aria-pressed={unit === u} onClick={() => setUnit(u)} data-testid={`unit-${u}`}>
+            {u === "cm" ? t.cm : t.inch}
+          </button>
+        ))}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export function VariantPicker({ lang, productName, variants, sizes, measurements, sizeChart }: Props) {
   const t = dictionary(lang);
   const id = useId();
@@ -36,7 +63,9 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
   const colours = [...new Set(variants.map((v) => v.colour).filter((c): c is string => c !== null))];
   const [size, setSize] = useState<string | null>(sizes.length === 1 ? sizes[0] : null);
   const [colour, setColour] = useState<string | null>(colours.length === 1 ? colours[0] : null);
-  const [quantity, setQuantity] = useState("1");
+  // Bangla digits in Bangla (the parser reads both), like the prices and the bag's count beside it.
+  const digits = (n: number) => (lang === "bn" ? toBnDigits(n) : String(n));
+  const [quantity, setQuantity] = useState(digits(1));
   const [message, setMessage] = useState<Message | null>(null);
 
   // A success message steps aside after a few seconds; an error stays until the next action.
@@ -49,15 +78,21 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
   const selected =
     variants.find((v) => (sizes.length === 0 || v.size === size) && (colours.length === 0 || v.colour === colour)) ?? (variants.length === 1 ? variants[0] : null);
   const soldOutSize = (s: string) => variants.filter((v) => v.size === s).every((v) => v.available === 0);
-  const soldOutColour = (c: string) => variants.filter((v) => v.colour === c && (size === null || v.size === size)).every((v) => v.available === 0);
+  // A colour is marked sold out only when no size of it is left; one sold-out size marks that size, not the colour.
+  const soldOutColour = (c: string) => variants.filter((v) => v.colour === c).every((v) => v.available === 0);
   const prices = variants.map((v) => v.pricePaisa);
   const price = selected ? formatTaka(selected.pricePaisa, lang) : Math.min(...prices) === Math.max(...prices) ? formatTaka(prices[0], lang) : t.from(formatTaka(Math.min(...prices), lang));
   const inCart = selected ? (lines.find((l) => l.sku === selected.sku)?.quantity ?? 0) : 0;
-  const out = selected !== null && selected.available === 0;
+  const allOut = variants.every((v) => v.available === 0);
+  const out = allOut || (selected !== null && selected.available === 0);
+  // The button names the next step until there is something to add. It stays focusable (aria-disabled), so pressing it
+  // says why; the bag and checkout check stock again on the server either way.
+  const cta = out ? t.soldOut : selected ? t.addToCart : sizes.length > 0 && size === null ? t.chooseSize : t.chooseColour;
+  const ready = selected !== null && !out;
 
   function add() {
-    if (!selected) return setMessage({ text: t.chooseFirst, error: true });
-    if (selected.available === 0) return setMessage({ text: t.outOfStock, error: true });
+    if (out) return setMessage({ text: t.outOfStock, error: true });
+    if (!selected) return setMessage({ text: sizes.length > 0 && size === null ? t.chooseSizeFirst : t.chooseColourFirst, error: true });
     const n = parseQuantity(quantity);
     if (n === null) return setMessage({ text: t.quantityInvalid(Math.max(1, Math.min(1000, selected.available))), error: true });
     if (n + inCart > selected.available) return setMessage({ text: t.onlyAvailable(selected.available), error: true });
@@ -67,7 +102,7 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
 
   const step = (delta: number) => {
     const n = parseQuantity(quantity) ?? 1;
-    setQuantity(String(Math.min(1000, Math.max(1, n + delta))));
+    setQuantity(digits(Math.min(1000, Math.max(1, n + delta))));
   };
 
   return (
@@ -77,8 +112,8 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
           {price}
         </p>
         <p className="pt-1">
-          <span data-testid="availability" className="sf-badge" data-tone={!selected ? undefined : out ? "out" : selected.available <= 3 ? "low" : "ok"}>
-            {selected ? (out ? t.soldOut : `${t.inStock}: ${t.available(selected.available)}`) : t.chooseFirst}
+          <span data-testid="availability" className="sf-badge" data-tone={out ? "out" : !selected ? undefined : selected.available <= 3 ? "low" : "ok"}>
+            {out ? t.soldOut : selected ? `${t.inStock}: ${t.available(selected.available)}` : cta}
           </span>
         </p>
       </div>
@@ -101,7 +136,9 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
                   </>
                 }
               >
-                <div className="sf-sheet-body">{sizeChart}</div>
+                <SizeGuideBody lang={lang} size={size}>
+                  {sizeChart}
+                </SizeGuideBody>
               </Sheet>
             </div>
           ) : null}
@@ -143,7 +180,7 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
       ) : null}
 
       <div className="flex flex-wrap items-end gap-3">
-        <div>
+        <div hidden={out}>
           <label htmlFor={`${id}-qty`} className="sf-label">
             {t.quantity}
           </label>
@@ -165,9 +202,9 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
             </button>
           </div>
         </div>
-        <button type="button" onClick={add} className="sf-btn sf-btn-lg hidden min-w-64 flex-1 lg:inline-flex">
-          <ShoppingBag aria-hidden="true" size={20} strokeWidth={1.75} />
-          {t.addToCart}
+        <button type="button" onClick={add} className="sf-btn sf-btn-lg hidden min-w-64 flex-1 lg:inline-flex" aria-disabled={!ready || undefined} data-testid="add-to-bag">
+          {ready ? <ShoppingBag aria-hidden="true" size={20} strokeWidth={1.75} /> : null}
+          {cta}
         </button>
       </div>
 
@@ -182,19 +219,23 @@ export function VariantPicker({ lang, productName, variants, sizes, measurements
           {message?.text ?? ""}
         </p>
         {message && !message.error ? (
-          <Link href={`${root}/${lang}/cart`} className="inline-flex min-h-11 shrink-0 items-center font-semibold underline underline-offset-4">
-            {t.viewBag}
-          </Link>
+          <span className="flex shrink-0 gap-4">
+            <Link href={`${root}/${lang}/cart`} className="inline-flex min-h-11 items-center font-semibold underline underline-offset-4">
+              {t.viewBag}
+            </Link>
+            <Link href={`${root}/${lang}/checkout`} className="inline-flex min-h-11 items-center font-semibold underline underline-offset-4">
+              {t.toCheckout}
+            </Link>
+          </span>
         ) : null}
       </div>
-      <p className="sf-hint">{t.notInCart}</p>
 
       <div className="sf-bar sf-bar-phone">
         <div className="mx-auto flex h-[var(--sf-bar-h)] max-w-lg items-center gap-3 px-4">
           <BagLink lang={lang} place="bar" />
-          <button type="button" onClick={add} className="sf-btn min-h-[3.25rem] flex-1 justify-between ps-6 pe-5" aria-disabled={out || undefined}>
-            <span>{t.addToCart}</span>
-            <span className="sf-num font-bold">{selected ? formatTaka(selected.pricePaisa, lang) : ""}</span>
+          <button type="button" onClick={add} className={`sf-btn min-h-[3.25rem] flex-1 ps-6 pe-5 ${ready ? "justify-between" : ""}`} aria-disabled={!ready || undefined}>
+            <span>{cta}</span>
+            {ready ? <span className="sf-num font-bold">{formatTaka(selected.pricePaisa, lang)}</span> : null}
           </button>
         </div>
       </div>

@@ -7,7 +7,7 @@ import { SunMark } from "@/app/_design/sun-mark";
 import { dictionary, formatTaka, type Lang, localised, toBnDigits } from "@/modules/storefront/i18n";
 import type { CheckoutResult, Quote } from "@/modules/storefront/service";
 import { useCart } from "./cart-store";
-import { EmptyBag, LineThumb, lineName, TotalsList, useQuote, ZoneChoice } from "./cart-view";
+import { EmptyBag, LineThumb, lineName, TotalsList, useZoneQuote, ZoneChoice } from "./cart-view";
 import { GoogleSignInButton } from "./customer-auth";
 import { useSurface, useWide } from "./frame";
 
@@ -101,6 +101,23 @@ function Summary({ quote, lang, zone }: { quote: Quote | null; lang: Lang; zone:
   );
 }
 
+/** What happens after an order: three numbered steps, the same in the simulation and after a real order. */
+function NextSteps({ lang }: { lang: Lang }) {
+  const t = dictionary(lang);
+  return (
+    <ol className="space-y-3.5">
+      {t.nextSteps.slice(0, 3).map((step, i) => (
+        <li key={step} className="flex gap-3">
+          <span aria-hidden="true" className="sf-step-num" data-state="current">
+            {lang === "bn" ? toBnDigits(i + 1) : i + 1}
+          </span>
+          <span className="pt-0.5">{step}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export function CheckoutForm({ lang }: { lang: Lang }) {
   const t = dictionary(lang);
   const id = useId();
@@ -109,8 +126,8 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
   const shop = surface === "shop";
   const [, setCart] = useCart();
   const heading = useRef<HTMLHeadingElement>(null);
-  const [zone, setZone] = useState("");
-  const { lines, quote, state: quoteState, retry } = useQuote(zone);
+  // The area chosen in the bag carries over; the server prices it again here and at every step.
+  const { zone, setZone, lines, quote, state: quoteState, retry } = useZoneQuote();
   const [values, setValues] = useState<Record<Field, string>>({ name: customer?.name.slice(0, 100) ?? "", phone: "", address: "" });
   // One key per checkout: a retry after a lost answer sends the same key and gets the same order back.
   const key = useRef<string | null>(null);
@@ -206,9 +223,9 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
       <section aria-labelledby={`${id}-placed`} className="mx-auto max-w-2xl space-y-8" data-testid="order-placed">
         <div className="sf-enter flex flex-col items-center gap-4 pt-2 text-center">
           <SunMark className="sf-rays h-14 w-24 text-sf-sun" />
-          <h2 id={`${id}-placed`} ref={heading} tabIndex={-1} className="sf-display text-[2.125rem] focus:outline-none lg:text-[2.75rem]">
+          <h1 id={`${id}-placed`} ref={heading} tabIndex={-1} className="sf-display text-[2.125rem] focus:outline-none lg:text-[2.75rem]">
             {t.orderReceivedTitle}
-          </h2>
+          </h1>
           <p className="sf-badge px-4 py-1.5 text-[0.9375rem]" data-tone="sun">
             {t.orderReference}: <span className="sf-num font-bold" lang="en" data-testid="order-reference">{o.reference}</span>
           </p>
@@ -219,16 +236,7 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
           <h3 id={`${id}-next`} className="sf-plain text-lg">
             {t.nextTitle}
           </h3>
-          <ol className="space-y-3.5">
-            {t.nextSteps.slice(0, 3).map((step, i) => (
-              <li key={step} className="flex gap-3">
-                <span aria-hidden="true" className="sf-step-num" data-state="current">
-                  {i === 0 ? <PhoneCall size={15} strokeWidth={2} /> : count(i + 1)}
-                </span>
-                <span className="pt-0.5">{step}</span>
-              </li>
-            ))}
-          </ol>
+          <NextSteps lang={lang} />
         </section>
         <div className="sf-card space-y-4 p-5 lg:p-7">
           <ul className="space-y-2 text-[0.9375rem]">
@@ -265,7 +273,14 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
     );
   }
 
-  if (lines.length === 0 && stage !== "done") return <EmptyBag lang={lang} message={t.cartEmpty} />;
+  // The page heading belongs to the form: after a confirmation the confirmation's own heading takes its place.
+  const titled = (content: React.ReactNode) => (
+    <div className="space-y-4 lg:space-y-8">
+      <h1 className="sf-display text-[2.125rem] lg:text-[3.25rem]">{t.checkoutTitle}</h1>
+      {content}
+    </div>
+  );
+  if (lines.length === 0 && stage !== "done") return titled(<EmptyBag lang={lang} message={t.cartEmpty} />);
 
   const steps: [Exclude<Stage, "done">, string][] = [["contact", t.stepContact], ["delivery", t.stepDelivery], ["review", t.stepReview]];
   const position = stage === "done" ? steps.length : steps.findIndex(([s]) => s === stage);
@@ -405,9 +420,9 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
       <section aria-labelledby={`${id}-done`} className="mx-auto max-w-2xl space-y-8" data-testid="simulation-result">
         <div className="sf-enter flex flex-col items-center gap-4 pt-2 text-center">
           <SunMark className="sf-rays h-14 w-24 text-sf-sun" />
-          <h2 id={`${id}-done`} ref={heading} tabIndex={-1} className="sf-display text-[2.125rem] focus:outline-none lg:text-[2.75rem]">
+          <h1 id={`${id}-done`} ref={heading} tabIndex={-1} className="sf-display text-[2.125rem] focus:outline-none lg:text-[2.75rem]">
             {t.pendingTitle}
-          </h2>
+          </h1>
           <p role="status" className="sf-badge max-w-full rounded-2xl px-4 py-1.5 text-center text-[0.875rem] whitespace-normal" data-tone="sun">
             {t.simulatedNote}
           </p>
@@ -420,16 +435,7 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
           <h3 id={`${id}-next`} className="sf-plain text-lg">
             {t.nextTitle}
           </h3>
-          <ol className="space-y-3.5">
-            {t.nextSteps.slice(0, 3).map((step, i) => (
-              <li key={step} className="flex gap-3">
-                <span aria-hidden="true" className="sf-step-num" data-state="current">
-                  {i === 0 ? <PhoneCall size={15} strokeWidth={2} /> : count(i + 1)}
-                </span>
-                <span className="pt-0.5">{step}</span>
-              </li>
-            ))}
-          </ol>
+          <NextSteps lang={lang} />
         </section>
         <div className="space-y-3 rounded-[1.25rem] border border-sf-sun-glow bg-sf-sun-soft p-5">
           <p className="flex items-center gap-2 font-bold">
@@ -450,23 +456,16 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
               {q.zone ? ` (${t.deliveryZone[q.zone]})` : ""}
             </dd>
           </dl>
+          {/* One total: the summary's "Total to pay on delivery" already says how it is paid. */}
           <Summary quote={q} lang={lang} zone={q.zone ?? ""} />
-          <p className="sf-num flex items-center justify-between gap-3 border-t border-sf-line pt-3 font-bold">
-            <span className="inline-flex items-center gap-2">
-              <Banknote aria-hidden="true" size={18} strokeWidth={1.75} />
-              {t.cod}
-            </span>
-            <span className="sf-price text-[1.5rem]" data-testid="simulated-total">
-              {q.totalPaisa !== null ? formatTaka(q.totalPaisa, lang) : "—"}
-            </span>
-          </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
           <Link href={`${root}/${lang}/products`} className="sf-btn sf-btn-lg flex-1">
             {t.continueShopping}
           </Link>
+          {/* Only the simulation can go back: nothing was recorded. A real order is never edited from here. */}
           <button type="button" onClick={() => go("contact")} className="sf-btn sf-btn-ghost sf-btn-lg flex-1">
-            {t.edit}
+            {t.simulationEdit}
           </button>
         </div>
       </section>
@@ -480,7 +479,27 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
     </button>
   );
 
-  return (
+  const back = (to: Stage) => (
+    <button type="button" onClick={() => go(to)} className="sf-btn sf-btn-ghost sf-btn-lg">
+      <ArrowLeft aria-hidden="true" size={18} strokeWidth={2} className="rtl:rotate-180" />
+      {t.back}
+    </button>
+  );
+  const actionsRow = (from: Stage | null, label: string) => (
+    <div className="flex flex-col-reverse items-stretch gap-3 lg:flex-row lg:items-center">
+      {from ? (
+        back(from)
+      ) : (
+        <Link href={`${root}/${lang}/cart`} className="sf-btn sf-btn-ghost sf-btn-lg">
+          <ArrowLeft aria-hidden="true" size={18} strokeWidth={2} className="rtl:rotate-180" />
+          {t.backToCart}
+        </Link>
+      )}
+      {button(label)}
+    </div>
+  );
+
+  return titled(
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:gap-12">
       <form
         onSubmit={(e) => {
@@ -517,7 +536,7 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
             {field("name", t.name, { autoComplete: "name" })}
             {field("phone", t.phone, { hint: t.phoneHint, autoComplete: "tel", inputMode: "tel" })}
             {failure}
-            {button(t.continue)}
+            {actionsRow(null, t.continue)}
           </div>
         ) : null}
 
@@ -529,13 +548,7 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
               {errorFor("zone") ? <p className="mt-1.5 text-[0.875rem] font-semibold text-sf-danger">{errorFor("zone")}</p> : null}
             </div>
             {failure}
-            <div className="flex flex-col-reverse items-stretch gap-3 lg:flex-row lg:items-center">
-              <button type="button" onClick={() => go("contact")} className="sf-btn sf-btn-ghost sf-btn-lg">
-                <ArrowLeft aria-hidden="true" size={18} strokeWidth={2} className="rtl:rotate-180" />
-                {t.back}
-              </button>
-              {button(t.continue)}
-            </div>
+            {actionsRow("contact", t.continue)}
           </div>
         ) : null}
 
@@ -576,7 +589,7 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
             {policyNote}
             {notice}
             {failure}
-            {button(shop ? t.placeOrder : t.placeOrderSimulated)}
+            {actionsRow("delivery", shop ? t.placeOrder : t.placeOrderSimulated)}
           </div>
         ) : null}
       </form>

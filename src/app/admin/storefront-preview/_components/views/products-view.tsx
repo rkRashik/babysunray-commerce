@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getDb } from "@/db/client";
 import { DomainError } from "@/modules/domain-error";
 import { dictionary, type Lang, localised } from "@/modules/storefront/i18n";
-import { type CatalogueScope, catalogueFacets, listProductCards, type PreviewFilters } from "@/modules/storefront/service";
+import { type CatalogueScope, catalogueFacets, isSort, listProductCards, type PreviewFilters, SORTS } from "@/modules/storefront/service";
 import { FilterSheet } from "../filter-sheet";
 import { base, listQuery, Localised, ProductGrid, type Surface } from "../parts";
 
@@ -11,10 +11,10 @@ type Props = { lang: Lang; surface: Surface; scope: CatalogueScope; query: Recor
 
 const one = (v: string | string[] | undefined) => (typeof v === "string" && v.trim() !== "" ? v.trim().slice(0, 100) : undefined);
 
-// Product list with search and filters, all in the URL (a plain GET form, so it works without script and pages can be
-// shared). Categories are chips above the list; size, colour and stock are in the filter sheet; each
-// active filter is a chip that removes it. 24 per page, featured first, then newest. The service offers no other order,
-// so there is no sort control.
+// Product list with search, filters and order, all in the URL (a plain GET form, so it works without script and pages can
+// be shared). Categories are chips above the list; the order, size, colour and stock are in the "Filter & sort" sheet; each
+// active choice is a chip that removes it. 24 per page; featured first, then newest, unless another order is chosen (the
+// database sorts every page, so a price order holds across pages).
 export async function ProductsView({ lang, surface, scope, query }: Props) {
   const t = dictionary(lang);
   const db = getDb();
@@ -25,6 +25,7 @@ export async function ProductsView({ lang, surface, scope, query }: Props) {
     colour: one(query.colour),
     inStock: query.stock === "in",
     page: /^[0-9]{1,3}$/.test(one(query.page) ?? "") ? Number(query.page) : 1,
+    sort: isSort(query.sort) ? query.sort : undefined,
   };
   const facets = await catalogueFacets(db, scope);
   const result = await listProductCards(db, filters, scope).catch((error: unknown) => {
@@ -35,16 +36,17 @@ export async function ProductsView({ lang, surface, scope, query }: Props) {
   const category = facets.categories.find((c) => c.slug === filters.category);
   const categoryName = category ? (localised(lang, category.nameEn, category.nameBn) ?? localised(lang === "en" ? "bn" : "en", category.nameEn, category.nameBn) ?? category.slug) : null;
   const title = filters.q ? t.searchResults(filters.q) : (categoryName ?? t.shopAll);
-  const current = { q: filters.q, category: filters.category, size: filters.size, colour: filters.colour, stock: filters.inStock ? "in" : undefined };
+  const current = { q: filters.q, category: filters.category, size: filters.size, colour: filters.colour, stock: filters.inStock ? "in" : undefined, sort: filters.sort };
   const href = (changes: Partial<typeof current> & { page?: number }) => {
     const next = new URLSearchParams();
     for (const [k, v] of Object.entries({ ...current, ...changes })) if (v && k !== "page") next.set(k, String(v));
     if (changes.page && changes.page > 1) next.set("page", String(changes.page));
     return `${base(lang, surface)}/products${next.size ? `?${next}` : ""}`;
   };
-  const sheetFilters = [filters.size, filters.colour, filters.inStock ? "in" : undefined].filter(Boolean).length;
+  const sheetFilters = [filters.size, filters.colour, filters.inStock ? "in" : undefined, filters.sort].filter(Boolean).length;
   const chips = [
     filters.q ? { label: `“${filters.q}”`, href: href({ q: undefined }) } : null,
+    filters.sort ? { label: t.chosen(t.sortBy, t.sorts[filters.sort]), href: href({ sort: undefined }) } : null,
     filters.size ? { label: t.chosen(t.size, filters.size), href: href({ size: undefined }) } : null,
     filters.colour ? { label: t.chosen(t.colour, filters.colour), href: href({ colour: undefined }) } : null,
     filters.inStock ? { label: t.inStockOnly, href: href({ stock: undefined }) } : null,
@@ -68,12 +70,24 @@ export async function ProductsView({ lang, surface, scope, query }: Props) {
         </ul>
       ) : null}
 
-      <div className="sticky top-16 z-20 -mx-4 mt-3 flex items-center justify-between gap-3 border-b border-sf-line bg-sf-paper/95 px-4 py-2.5 backdrop-blur-md lg:top-20 lg:mx-0 lg:px-0">
+      {/* Solid, like the other bars: the products scrolling under it must not show through. */}
+      <div className="sticky top-16 z-20 -mx-4 mt-3 flex items-center justify-between gap-3 border-b border-sf-line bg-sf-paper px-4 py-2.5 lg:top-20 lg:mx-0 lg:px-0">
         <FilterSheet lang={lang} active={sheetFilters}>
           <form method="get" action={`${base(lang, surface)}/products`} aria-label={t.filters} className="flex min-h-0 flex-1 flex-col">
             {filters.q ? <input type="hidden" name="q" value={filters.q} /> : null}
             {filters.category ? <input type="hidden" name="category" value={filters.category} /> : null}
             <div className="sf-sheet-body space-y-7">
+              <fieldset>
+                <legend className={legend}>{t.sortBy}</legend>
+                <div className="flex flex-wrap gap-2">
+                  {(["", ...SORTS] as const).map((s) => (
+                    <label key={s || "featured"} className="sf-chip">
+                      <input type="radio" name="sort" value={s} defaultChecked={(filters.sort ?? "") === s} className="sr-only" />
+                      {t.sorts[s || "featured"]}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
               {facets.sizes.length ? (
                 <fieldset>
                   <legend className={legend}>{t.size}</legend>
@@ -106,7 +120,7 @@ export async function ProductsView({ lang, surface, scope, query }: Props) {
               </label>
             </div>
             <div className="sf-sheet-foot">
-              <Link href={href({ size: undefined, colour: undefined, stock: undefined })} className="sf-btn sf-btn-ghost flex-1">
+              <Link href={href({ size: undefined, colour: undefined, stock: undefined, sort: undefined })} className="sf-btn sf-btn-ghost flex-1">
                 {t.clearFilters}
               </Link>
               <button type="submit" className="sf-btn flex-[1.4]">

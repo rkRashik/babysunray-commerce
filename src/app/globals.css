@@ -119,6 +119,11 @@
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   caret-color: var(--color-sf-ink);
+  /* No lone last word on its own line (short promises, notes; Bangla's sentence-final words). The browser decides; no forced spaces. */
+  text-wrap: pretty;
+}
+.sf :is(h1, h2, h3) {
+  text-wrap: balance;
 }
 .sf:lang(bn),
 .sf :lang(bn) {
@@ -606,9 +611,24 @@
   font-weight: 650;
   color: var(--color-sf-ink-2);
 }
-.sf .sf-seg > [aria-current="true"] {
+.sf .sf-seg > [aria-current="true"],
+.sf .sf-seg > [aria-pressed="true"] {
   background: var(--color-sf-ink);
   color: var(--color-sf-paper);
+}
+/* The size guide: centimetres unless inches are chosen (variant-picker.tsx), and the chosen size's row marked. */
+.sf [data-unit-in],
+.sf [data-units="in"] [data-unit-cm] {
+  display: none;
+}
+.sf [data-units="in"] [data-unit-in] {
+  display: inline;
+}
+.sf tr[data-current] {
+  background: var(--color-sf-sun-soft);
+}
+.sf tr[data-current] > th {
+  box-shadow: inset 3px 0 0 var(--color-sf-sun);
 }
 .sf .sf-seg > a:hover {
   color: var(--color-sf-ink);
@@ -622,10 +642,10 @@
   bottom: 0;
   z-index: 40;
   border-top: 1px solid var(--color-sf-line);
-  background: rgb(255 253 249 / 0.95);
+  /* Solid, not translucent: text scrolling underneath must never show through the buttons and prices. */
+  background: rgb(255 253 249);
+  box-shadow: 0 -6px 18px -12px rgb(51 41 35 / 0.35);
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  backdrop-filter: blur(14px) saturate(1.4);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
 }
 @media (max-width: 1023.98px) {
   .sf:has(.sf-bar) > footer {
@@ -1169,9 +1189,10 @@
     bottom: 0;
     z-index: 30;
     border-top: 1px solid var(--color-gray-300);
-    background: rgb(255 253 249 / 0.97);
+    /* Solid: page text must not show through the tabs. */
+    background: rgb(255 253 249);
+    box-shadow: 0 -6px 18px -12px rgb(51 41 35 / 0.3);
     padding-bottom: env(safe-area-inset-bottom, 0px);
-    backdrop-filter: blur(12px);
   }
   .of .of-tab {
     position: relative;
@@ -1499,6 +1520,10 @@
   .of dialog.of-drawer::backdrop {
     background: rgb(43 33 28 / 0.45);
     animation: of-fade 200ms ease;
+  }
+  /* While a modal drawer is open the page behind it stays put (a native modal dialog does not lock scrolling itself). */
+  html:has(.of dialog[open]:modal) {
+    overflow: hidden;
   }
   @keyframes of-slide {
     from {

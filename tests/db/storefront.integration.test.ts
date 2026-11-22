@@ -109,6 +109,29 @@ describe("preview reads", () => {
     expect(new Set([...first.items, ...second.items].map((i) => i.id)).size).toBe(25);
   });
 
+  it("sorts by newest or by the lowest active price (the card's From price), the same order on every page", async () => {
+    const word = `Sortfictional${Date.now().toString(36)}`;
+    // Created in this order; the from-prices are 300, 100 (its dearer SKU is inactive) and 200, the featured one first by default.
+    const a = await product(`${word} a`, [["0-3M", "Ivory", 30_000, 1]], { featured: true });
+    const b = await product(`${word} b`, [["0-3M", "Ivory", 10_000, 1], ["3-6M", "Ivory", 90_000, 1]]);
+    const c = await product(`${word} c`, [["0-3M", "Ivory", 20_000, 1], ["3-6M", "Ivory", 5_000, 1]]);
+    await deactivateVariant(db, c.variants[1].id);
+    const ids = async (sort?: "newest" | "price_asc" | "price_desc") => (await listPreviewProducts(db, owner, { q: word, sort })).items.map((i) => i.id);
+    expect(await ids()).toEqual([a.product.id, c.product.id, b.product.id]);
+    expect(await ids("newest")).toEqual([c.product.id, b.product.id, a.product.id]);
+    expect(await ids("price_asc")).toEqual([b.product.id, c.product.id, a.product.id]);
+    expect(await ids("price_desc")).toEqual([a.product.id, c.product.id, b.product.id]);
+
+    // Across a page break the database orders every page: 25 products, cheapest first, no repeats and no gaps.
+    const many = `Sortpages${Date.now().toString(36)}`;
+    for (let i = 0; i < 25; i += 1) await product(`${many} ${i}`, [["0-3M", "Ivory", 10_000 + ((i * 7) % 25) * 100, 1]]);
+    const first = await listPreviewProducts(db, owner, { q: many, sort: "price_asc" });
+    const second = await listPreviewProducts(db, owner, { q: many, sort: "price_asc", page: 2 });
+    const prices = [...first.items, ...second.items].map((i) => i.minPricePaisa);
+    expect(prices).toEqual([...prices].sort((x, y) => x - y));
+    expect(new Set([...first.items, ...second.items].map((i) => i.id)).size).toBe(25);
+  });
+
   it("refuses anyone but a verified Owner session", async () => {
     const forged = Object.freeze({ userId: randomUUID(), role: "owner" as const });
     expect(await errorCodeOf(listPreviewProducts(db, forged, {}))).toBe("UNAUTHENTICATED");

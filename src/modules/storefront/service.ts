@@ -19,7 +19,14 @@ import { type CartLine, validateCartLines } from "./cart";
 const SNAPSHOT = { isolationLevel: "repeatable read", accessMode: "read only" } as const;
 export const PREVIEW_PAGE_SIZE = 24;
 
-export type PreviewFilters = { q?: string; category?: string; size?: string; colour?: string; inStock?: boolean; page?: number };
+/**
+ * The list's order. Absent: featured first, then newest (the default). Prices sort by each product's lowest active
+ * variant price, the "From" price its card shows; ties fall back to newest, then the id, so pages never overlap.
+ */
+export const SORTS = ["newest", "price_asc", "price_desc"] as const;
+export type Sort = (typeof SORTS)[number];
+export const isSort = (value: unknown): value is Sort => SORTS.includes(value as Sort);
+export type PreviewFilters = { q?: string; category?: string; size?: string; colour?: string; inStock?: boolean; page?: number; sort?: Sort };
 export type StockState = "in" | "partial" | "out";
 export type PhotoRef = { id: string; width: number; height: number; altEn: string | null; altBn: string | null; cdnPublicId?: string | null };
 export type ProductCard = {
@@ -68,12 +75,21 @@ export async function listPreviewProducts(db: Db, principal: Principal, filters:
 /** One page of product cards in `scope`. */
 export async function listProductCards(db: Db, filters: PreviewFilters, scope: CatalogueScope): Promise<{ items: ProductCard[]; hasMore: boolean; page: number }> {
   const page = Number.isSafeInteger(filters.page) && (filters.page ?? 0) >= 1 && (filters.page ?? 0) <= 500 ? (filters.page as number) : 1;
+  const fromPrice = sql`(select min(sv.price_paisa) from ${variants} sv where sv.product_id = ${products.id} and sv.status = 'active')`;
+  const order =
+    filters.sort === "price_asc"
+      ? [sql`${fromPrice} asc`, desc(products.createdAt), desc(products.id)]
+      : filters.sort === "price_desc"
+        ? [sql`${fromPrice} desc`, desc(products.createdAt), desc(products.id)]
+        : filters.sort === "newest"
+          ? [desc(products.createdAt), desc(products.id)]
+          : [desc(products.featured), desc(products.createdAt), desc(products.id)];
   return db.transaction(async (tx) => {
     const rows = await tx
       .select({ id: products.id, slug: products.slug, nameEn: products.nameEn, nameBn: products.nameBn, featured: products.featured })
       .from(products)
       .where(filterCondition(filters, scope))
-      .orderBy(desc(products.featured), desc(products.createdAt), desc(products.id))
+      .orderBy(...order)
       .limit(PREVIEW_PAGE_SIZE + 1)
       .offset((page - 1) * PREVIEW_PAGE_SIZE);
     const pageRows = rows.slice(0, PREVIEW_PAGE_SIZE);
