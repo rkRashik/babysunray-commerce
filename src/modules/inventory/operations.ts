@@ -60,11 +60,12 @@ export async function adjustStockOnce(
 }
 
 // Physical stock counts (src/modules/inventory/counts.ts). Every step is an idempotent operation with the
-// verified user as the actor; applying also releases overdue reservations first, like an adjustment.
+// verified user as the actor; applying also releases overdue reservations first, like an adjustment. Counting (start,
+// record, discard) needs stock:count; applying changes stock and needs stock:adjust (ADR-0013).
 const loadCount = (db: Db, ref: { countId: string }) => getStockCount(db, ref.countId);
 
 export async function startStockCountOnce(db: Db, principal: Principal, key: string, input: { scope: "all" | "selected"; skus?: string[] }): Promise<Once<CountDetail>> {
-  const user = assertPermission(principal, "stock:adjust");
+  const user = assertPermission(principal, "stock:count");
   const request = { scope: input.scope, skus: input.scope === "selected" ? parseSkuList((input.skus ?? []).join("\n")) : [] };
   return runOnce(
     db,
@@ -75,7 +76,7 @@ export async function startStockCountOnce(db: Db, principal: Principal, key: str
 }
 
 export async function recordCountsOnce(db: Db, principal: Principal, key: string, input: { countId: string; expectedVersion: number; entries: CountEntry[] }): Promise<Once<CountDetail>> {
-  const user = assertPermission(principal, "stock:adjust");
+  const user = assertPermission(principal, "stock:count");
   const request = { countId: input.countId, expectedVersion: input.expectedVersion, entries: input.entries.map((e) => ({ variantId: e.variantId, counted: e.counted, recounted: Boolean(e.recounted) })) };
   return runOnce(
     db,
@@ -98,7 +99,7 @@ export async function applyStockCountOnce(db: Db, principal: Principal, key: str
 }
 
 export async function discardStockCountOnce(db: Db, principal: Principal, key: string, input: { countId: string; expectedVersion: number }): Promise<Once<CountDetail>> {
-  const user = assertPermission(principal, "stock:adjust");
+  const user = assertPermission(principal, "stock:count");
   const request = { countId: input.countId, expectedVersion: input.expectedVersion };
   return runOnce(
     db,

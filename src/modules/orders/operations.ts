@@ -2,6 +2,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import type { Db } from "@/db/database";
 import { deliveryZones } from "@/db/schema";
+import { roleHasPermission } from "../auth/permissions";
 import { actorFor, assertPermission, type Principal } from "../auth/principal";
 import { DomainError } from "../domain-error";
 import { type Once, runOnce } from "../idempotency/service";
@@ -36,7 +37,7 @@ const loadOrder = (db: Db, ref: { orderId: string }) => getOrderDetail(db, ref.o
 export async function submitOrderOnce(db: Db, principal: Principal, idempotencyKey: string, input: NewOrder): Promise<Once<OrderDetail>> {
   const user = assertPermission(principal, "orders:write");
   await releaseOverdue(db);
-  const request = { ...input, note: input.note ?? null, items: input.items.map((i) => ({ sku: i.sku, quantity: i.quantity })) };
+  const request = { ...input, note: input.note ?? null, paymentMethod: input.paymentMethod ?? "cod", items: input.items.map((i) => ({ sku: i.sku, quantity: i.quantity })) };
   const run = () =>
     runOnce(
       db,
@@ -75,7 +76,12 @@ function transition(operation: string, permission: "orders:write", act: Transiti
 // No sweep before confirming: confirmOrder handles an overdue order itself (release, then reserve again), and a
 // sweep would change the version the Owner just saw.
 export const confirmOrderOnce = transition("orders.confirm", "orders:write", confirmOrder);
-export const cancelOrderOnce = transition("orders.cancel", "orders:write", cancelOrder);
+export async function cancelOrderOnce(db: Db, principal: Principal, idempotencyKey: string, input: { orderId: string; expectedVersion: number }): Promise<Once<OrderDetail>> {
+  // Cancelling an order that holds verified advance money makes a refund due: that also needs payments:verify, checked by
+  // the service on the locked order.
+  const mayCancelPaid = Boolean(principal) && roleHasPermission(principal.role, "payments:verify");
+  return transition("orders.cancel", "orders:write", (tx, orderId, version, actor) => cancelOrder(tx, orderId, version, actor, { mayCancelPaid }))(db, principal, idempotencyKey, input);
+}
 export const packOrderOnce = transition("orders.pack", "orders:write", packOrder);
 export const dispatchOrderOnce = transition("orders.dispatch", "orders:write", dispatchOrder);
 export const deliverOrderOnce = transition("orders.deliver", "orders:write", deliverOrder);
@@ -95,7 +101,7 @@ export async function reviewCancellationOnce(
     db,
     { userId: user.userId, operation: "orders.cancellation.review", key, request },
     async (tx) => {
-      await reviewCancellation(tx, request.orderId, request.expectedVersion, request.decision, actorFor(user));
+      await reviewCancellation(tx, request.orderId, request.expectedVersion, request.decision, actorFor(user), { mayCancelPaid: roleHasPermission(user.role, "payments:verify") });
       return { orderId: request.orderId };
     },
     loadOrder,
@@ -161,14 +167,17 @@ type ReturnStep =
   | { step: "complete" }
   | { step: "refund"; amountPaisa: number; method: "bkash" | "nagad" | "bank_transfer"; occurredOn: string; reference?: string | null };
 
-/** One step of a return: receive into quarantine, decide, refund (payments:record) or complete. */
+/** The permission one return step needs: deciding approves a refund (returns:decide), refunding moves money. */
+export const returnStepPermission = (step: ReturnStep["step"]) => (step === "refund" ? "payments:record" : step === "approve" || step === "reject" ? "returns:decide" : "orders:write");
+
+/** One step of a return: receive into quarantine, decide (returns:decide), refund (payments:record) or complete. */
 export async function returnStepOnce(
   db: Db,
   principal: Principal,
   key: string,
   input: { orderId: string; returnId: string; expectedVersion: number } & ReturnStep,
 ): Promise<Once<OrderDetail>> {
-  const user = assertPermission(principal, input.step === "refund" ? "payments:record" : "orders:write");
+  const user = assertPermission(principal, returnStepPermission(input.step));
   const request = { ...input };
   return runOnce(
     db,

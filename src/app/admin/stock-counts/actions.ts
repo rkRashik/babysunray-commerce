@@ -16,7 +16,7 @@ const countRef = (form: FormData) => ({ countId: text(form, "countId"), expected
 const back = (countId: string, done: string) => redirect(`/admin/stock-counts/${encodeURIComponent(countId)}?done=${done}`);
 
 export async function startCountAction(_: FormState, form: FormData): Promise<FormState> {
-  const principal = await requireAdmin("stock:adjust");
+  const principal = await requireAdmin("stock:count");
   let countId: string;
   try {
     const scope = text(form, "scope");
@@ -31,7 +31,7 @@ export async function startCountAction(_: FormState, form: FormData): Promise<Fo
 }
 
 export async function recordCountsAction(_: FormState, form: FormData): Promise<FormState> {
-  const principal = await requireAdmin("stock:adjust");
+  const principal = await requireAdmin("stock:count");
   const ref = countRef(form);
   try {
     const entries = [];
@@ -62,7 +62,7 @@ export async function applyCountAction(_: FormState, form: FormData): Promise<Fo
 }
 
 export async function discardCountAction(_: FormState, form: FormData): Promise<FormState> {
-  const principal = await requireAdmin("stock:adjust");
+  const principal = await requireAdmin("stock:count");
   const ref = countRef(form);
   try {
     await discardStockCountOnce(getDb(), principal, text(form, "idempotencyKey"), ref);

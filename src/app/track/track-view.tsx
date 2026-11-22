@@ -1,7 +1,8 @@
 "use client";
 
 import { Check, Home, Link2, Package, PhoneCall, Truck } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { PaymentInstructions } from "@/app/admin/storefront-preview/_components/payment-instructions";
 import type { GuestView } from "@/modules/orders/tracking";
 import { formatTaka, type Lang, toBnDigits } from "@/modules/storefront/i18n";
 
@@ -37,6 +38,26 @@ const TEXT = {
     items: "Items",
     deliveryCharge: "Delivery",
     toPay: "To pay on delivery",
+    payState: {
+      awaiting_payment: "Waiting for your advance payment",
+      reference_submitted: "Transaction ID received: awaiting the shop's verification",
+      reference_problem: "There is a problem with your payment. Please contact the shop.",
+      part_paid: "Part of the payment is verified. The rest is still due.",
+      paid: "Payment verified by the shop",
+      refund_due: "Your payment is recorded. The shop will contact you about it.",
+      refunded: "The shop recorded a refund of your payment.",
+      not_needed: "No payment is needed for this order.",
+    } as Record<string, string>,
+    paymentLabel: "Payment",
+    method: { bkash: "bKash", nagad: "Nagad", bank_transfer: "Bank transfer" } as Record<string, string>,
+    verified: "Verified by the shop",
+    stillDue: "Still to pay",
+    refTitle: "Sent the money? Give us the transaction ID",
+    refLabel: "Transaction ID",
+    refHint: "As shown in your app's confirmation message, for example 9A7B6C5D4E. Never type your PIN or OTP here.",
+    refSend: "Send transaction ID",
+    refSent: "Thank you. The shop will check its account. Your payment shows as verified only after that.",
+    refNote: "Sending an ID does not mean the payment is done: the shop checks that the money arrived.",
     cancel: "Cancel order",
     ask: "Ask the shop to cancel",
     sending: "Sending…",
@@ -84,6 +105,26 @@ const TEXT = {
     items: "পণ্য",
     deliveryCharge: "ডেলিভারি চার্জ",
     toPay: "ডেলিভারির সময় মোট দেবেন",
+    payState: {
+      awaiting_payment: "আপনার অগ্রিম পেমেন্টের অপেক্ষায়",
+      reference_submitted: "ট্রানজেকশন আইডি পেয়েছি: দোকানের যাচাইয়ের অপেক্ষায়",
+      reference_problem: "আপনার পেমেন্টে একটি সমস্যা আছে। দোকানে যোগাযোগ করুন।",
+      part_paid: "পেমেন্টের একটি অংশ যাচাই হয়েছে। বাকিটা এখনো দিতে হবে।",
+      paid: "দোকান পেমেন্ট যাচাই করেছে",
+      refund_due: "আপনার পেমেন্ট সংরক্ষিত আছে। দোকান এ বিষয়ে আপনার সঙ্গে যোগাযোগ করবে।",
+      refunded: "দোকান আপনার পেমেন্ট ফেরতের তথ্য সংরক্ষণ করেছে।",
+      not_needed: "এই অর্ডারের জন্য কোনো পেমেন্ট লাগবে না।",
+    } as Record<string, string>,
+    paymentLabel: "পেমেন্ট",
+    method: { bkash: "বিকাশ", nagad: "নগদ", bank_transfer: "ব্যাংক ট্রান্সফার" } as Record<string, string>,
+    verified: "দোকান যাচাই করেছে",
+    stillDue: "এখনো দিতে হবে",
+    refTitle: "টাকা পাঠিয়েছেন? ট্রানজেকশন আইডি দিন",
+    refLabel: "ট্রানজেকশন আইডি",
+    refHint: "অ্যাপের নিশ্চিতকরণ মেসেজে যেমন আছে, যেমন 9A7B6C5D4E। এখানে কখনো পিন বা ওটিপি লিখবেন না।",
+    refSend: "ট্রানজেকশন আইডি পাঠান",
+    refSent: "ধন্যবাদ। দোকান নিজের অ্যাকাউন্ট দেখবে। তারপরই পেমেন্ট যাচাই হয়েছে দেখাবে।",
+    refNote: "আইডি পাঠালেই পেমেন্ট সম্পন্ন হয় না: টাকা এসেছে কিনা দোকান দেখে নেবে।",
     cancel: "অর্ডার বাতিল করুন",
     ask: "দোকানকে বাতিল করতে বলুন",
     sending: "পাঠানো হচ্ছে…",
@@ -144,7 +185,8 @@ export function TrackView({ logo, className, style }: { logo: React.ReactNode; c
   // The cancel question, asked in the page (in the chosen language, readable by a screen reader) instead of a browser dialog.
   const [asking, setAsking] = useState<"cancel" | "request" | null>(null);
   const askRef = useRef<HTMLDivElement>(null);
-  const [notice, setNotice] = useState<"cancelled" | "requested" | "sendFailed" | { raw: string } | null>(null);
+  const [notice, setNotice] = useState<"cancelled" | "requested" | "sendFailed" | "refSent" | { raw: string } | null>(null);
+  const refId = useId();
 
   useEffect(() => {
     let live = true;
@@ -191,6 +233,26 @@ export function TrackView({ logo, className, style }: { logo: React.ReactNode; c
       if (r.ok && r.data) {
         setState({ kind: "ready", view: r.data });
         setNotice(action === "cancel" ? "cancelled" : "requested");
+      } else {
+        setNotice({ raw: r.message! });
+      }
+    } catch {
+      setNotice("sendFailed");
+    }
+    setBusy(false);
+  }
+
+  async function sendReference(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token.current) return;
+    const reference = String(new FormData(event.currentTarget).get("reference") ?? "");
+    setBusy(true);
+    setNotice(null);
+    try {
+      const r = await post("/api/track/payment", { token: token.current, reference });
+      if (r.ok && r.data) {
+        setState({ kind: "ready", view: r.data });
+        setNotice("refSent");
       } else {
         setNotice({ raw: r.message! });
       }
@@ -327,10 +389,54 @@ export function TrackView({ logo, className, style }: { logo: React.ReactNode; c
           <dl className="sf-num mt-3 grid grid-cols-[1fr_auto] gap-y-2 border-t border-sf-line pt-3">
             <dt className="text-sf-ink-2">{t.deliveryCharge}</dt>
             <dd className="text-end">{money(v.deliveryChargePaisa)}</dd>
-            <dt className="font-bold">{t.toPay}</dt>
+            <dt className="font-bold">{v.payment.method === "cod" ? t.toPay : t.paymentLabel}</dt>
             <dd className="sf-price text-end text-[1.5rem]">{money(v.totalPaisa)}</dd>
+            {v.payment.method !== "cod" && v.payment.verifiedPaisa > 0 ? (
+              <>
+                <dt className="text-sf-ink-2">{t.verified}</dt>
+                <dd className="text-end" data-testid="guest-verified">
+                  {money(v.payment.verifiedPaisa)}
+                </dd>
+                <dt className="text-sf-ink-2">{t.stillDue}</dt>
+                <dd className="text-end">{money(v.payment.dueNowPaisa)}</dd>
+              </>
+            ) : null}
           </dl>
         </section>
+
+        {v.payment.method !== "cod" ? (
+          <section className="sf-card space-y-4 p-5" data-testid="guest-payment">
+            <div>
+              <p className="text-[0.8125rem] font-semibold text-sf-ink-2">
+                {t.paymentLabel}: {t.method[v.payment.method] ?? v.payment.method}
+              </p>
+              <p className="mt-0.5 text-lg font-bold" data-testid="guest-payment-state">
+                {t.payState[v.payment.state] ?? v.payment.state}
+              </p>
+            </div>
+            {v.payment.canSubmitReference || v.payment.details ? (
+              <PaymentInstructions lang={lang} details={v.payment.details} amountPaisa={v.payment.dueNowPaisa} method={v.payment.method} />
+            ) : null}
+            {v.payment.canSubmitReference ? (
+              <form onSubmit={sendReference} className="space-y-3" data-testid="reference-form">
+                <p className="font-bold">{t.refTitle}</p>
+                <div>
+                  <label htmlFor={refId} className="sf-label">
+                    {t.refLabel}
+                  </label>
+                  <input id={refId} name="reference" required minLength={4} maxLength={40} autoComplete="off" autoCapitalize="characters" spellCheck={false} className="sf-field" aria-describedby={`${refId}-hint`} />
+                  <p id={`${refId}-hint`} className="sf-hint mt-1.5">
+                    {t.refHint}
+                  </p>
+                </div>
+                <button type="submit" disabled={busy} className="sf-btn sf-btn-lg w-full sm:w-auto">
+                  {busy ? t.sending : t.refSend}
+                </button>
+                <p className="sf-hint">{t.refNote}</p>
+              </form>
+            ) : null}
+          </section>
+        ) : null}
 
         {noticeText ? (
           <p role="status" className="sf-note font-semibold" data-tone="sun">

@@ -169,6 +169,20 @@
       "when": 1795300220181,
       "tag": "0023_store_social_links",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795342378703,
+      "tag": "0024_staff_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1795342738081,
+      "tag": "0025_manual_payments",
+      "breakpoints": true
     }
   ]
 }

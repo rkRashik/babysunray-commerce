@@ -31,6 +31,7 @@ export const POST = apiPost("orders:write", { body: createOrderRequest, status: 
     deliveryZone: body.deliveryZone,
     note: body.note ?? null,
     items: body.items,
+    paymentMethod: body.paymentMethod,
   });
   return { value: toOrderDto(value), replayed };
 });

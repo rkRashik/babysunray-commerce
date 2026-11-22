@@ -20,7 +20,7 @@ export type SurfaceActions = {
 export type ShopCustomer = { name: string } | null;
 export type PolicyLink = { kind: string; href: string };
 
-type SurfaceValue = { surface: Surface; root: string; actions: SurfaceActions; customer: ShopCustomer; policies: PolicyLink[]; signIn: boolean };
+type SurfaceValue = { surface: Surface; root: string; actions: SurfaceActions; customer: ShopCustomer; policies: PolicyLink[]; signIn: boolean; payments: string[] };
 const SurfaceContext = createContext<SurfaceValue | null>(null);
 
 export function SfFrame({
@@ -32,6 +32,7 @@ export function SfFrame({
   customer = null,
   policies = [],
   signIn = false,
+  payments = [],
   children,
 }: {
   lang: string;
@@ -43,12 +44,14 @@ export function SfFrame({
   policies?: PolicyLink[];
   /** Whether "Continue with Google" is offered (shop only, when configured). */
   signIn?: boolean;
+  /** The manual advance payment methods the Owner has enabled (ADR-0013); cash on delivery is always offered. */
+  payments?: string[];
   children: React.ReactNode;
 }) {
   const portal = useRef<HTMLDivElement>(null);
   return (
     <div lang={lang} className={className} style={style}>
-      <SurfaceContext value={{ surface, root: rootOf(surface), actions, customer, policies, signIn }}>
+      <SurfaceContext value={{ surface, root: rootOf(surface), actions, customer, policies, signIn, payments }}>
         <PortalContext value={portal}>{children}</PortalContext>
       </SurfaceContext>
       <div ref={portal} />

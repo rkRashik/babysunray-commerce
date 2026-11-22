@@ -71,7 +71,7 @@ export function ActionForm({ action, idempotencyKey, hidden = {}, submitLabel, c
           {state.error}
         </p>
       ) : null}
-      {state.link ? <OneTimeLink link={state.link} /> : null}
+      {state.link ? <OneTimeLink link={state.link} note={state.linkNote} /> : null}
       {cancel ? (
         <div className="flex flex-wrap gap-2">
           <Submit label={submitLabel} variant={variant} compact={compact} />
@@ -166,13 +166,13 @@ export function Field({ name, label, hint, required, multiline, inputMode, maxLe
   );
 }
 
-/** A link that exists only in this answer (a tracking link): shown once, never stored by the page. */
-function OneTimeLink({ link }: { link: string }) {
+/** A link that exists only in this answer (a tracking or staff link): shown once, never stored by the page. */
+function OneTimeLink({ link, note }: { link: string; note?: string }) {
   const id = useId();
   return (
-    <div role="status" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+    <div role="status" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950" data-testid="one-time-link">
       <label htmlFor={id} className="block font-semibold">
-        New tracking link. Send it to the customer now: it is shown only once and cannot be shown again.
+        {note ?? "New tracking link. Send it to the customer now: it is shown only once and cannot be shown again."}
       </label>
       <input id={id} readOnly value={link} className={`${INPUT} font-mono text-sm`} onFocus={(e) => e.currentTarget.select()} />
     </div>
@@ -236,7 +236,9 @@ export function SelectField({ name, label, options, defaultValue, hint }: { name
       <label htmlFor={id} className="block text-sm font-semibold">
         {label}
       </label>
-      <select id={id} name={name} defaultValue={value} aria-describedby={hint ? `${id}-hint` : undefined} className={INPUT}>
+      {/* Keyed by the value to show: a select takes its default only when mounted, and React resets the form after an answer,
+          so without a fresh mount a choice made before an error would fall back to the first option. */}
+      <select key={value} id={id} name={name} defaultValue={value} aria-describedby={hint ? `${id}-hint` : undefined} className={INPUT}>
         {options.map((o) => (
           <option key={o.value} value={o.value} lang={o.lang}>
             {o.label}

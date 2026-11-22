@@ -88,7 +88,7 @@ test("delivery charges, an assisted order, reservation, verification, packing, d
 
   await page.goto(orderUrl);
   await step(page, "Record delivery");
-  await expect(dimension(page, "payment")).toHaveText("Nothing collected");
+  await expect(dimension(page, "payment")).toHaveText("Nothing received");
   const cod = page.getByRole("region", { name: "Cash on delivery" });
   await openPanel(page, "Record a payment");
   await cod.getByLabel("Courier collected").check();

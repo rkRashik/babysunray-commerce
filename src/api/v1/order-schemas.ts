@@ -17,6 +17,9 @@ const paymentStatus = z.enum(["unpaid", "partially_collected", "collected", "set
 const returnStatus = z.enum(["none", "requested", "in_progress", "resolved"]);
 const zone = z.enum(["dhaka_city", "outside_dhaka"]);
 const source = z.enum(["website", "messenger", "whatsapp", "other"]);
+const paymentMethod = z.enum(["cod", "bkash", "nagad", "bank_transfer"]).meta({
+  description: "How the customer pays (since 1.7.0): cash on delivery, or a manual advance transfer to the store's bKash, Nagad or bank account, verified by hand by the Owner. No payment gateway is connected.",
+});
 const actor = z.object({
   type: z.enum(["system", "user", "customer"]),
   ref: z.string().meta({ description: "A system label, the user's immutable id, or `tracking-link` for a customer. Never a name or contact detail." }),
@@ -31,6 +34,7 @@ export const orderSummarySchema = z
     fulfilmentStatus,
     paymentStatus,
     returnStatus,
+    paymentMethod,
     customer: z.object({ name: z.string(), phone: z.string().meta({ description: "Bangladesh mobile number, 01XXXXXXXXX." }) }),
     deliveryZone: zone,
     totalPaisa: paisa("Expected COD: subtotal plus delivery charge."),
@@ -51,6 +55,8 @@ export const orderSchema = orderSummarySchema
     codSettledPaisa: paisa(),
     codDeductedPaisa: paisa("Kept by the courier from the collected COD, as the Owner recorded it (since 1.5.0)."),
     refundedPaisa: paisa(),
+    advanceReceivedPaisa: paisa("Advance money the Owner verified as received in the store's account, net of undone verifications (since 1.7.0). A customer-submitted reference alone is never counted."),
+    advanceRefundedPaisa: paisa("Advance money paid back by hand for a cancelled order (since 1.7.0)."),
     rtoChargePaisa: z.int().min(0).nullable(),
     confirmedAt: timestamp.nullable(),
     deliveredAt: timestamp.nullable(),
@@ -108,7 +114,7 @@ export const orderSchema = orderSummarySchema
     payments: z.array(
       z.object({
         id: z.int().min(1),
-        kind: z.enum(["collected", "settled", "deducted", "refunded"]),
+        kind: z.enum(["collected", "settled", "deducted", "refunded", "advance_received", "advance_reversed", "advance_refunded"]).meta({ description: "The advance kinds were added in 1.7.0; the list may grow." }),
         amountPaisa: paisa(),
         occurredOn: z.iso.date(),
         method: z.enum(["bkash", "nagad", "bank_transfer"]).nullable(),
@@ -171,6 +177,7 @@ export const createOrderRequest = z
     deliveryZone: zone,
     note: z.string().max(1000).nullable().optional(),
     items: z.array(z.strictObject({ sku: text(64), quantity: z.int().min(1).max(1000) })).min(1).max(20).meta({ description: "Lines for the same SKU are merged." }),
+    paymentMethod: paymentMethod.optional().meta({ description: "Cash on delivery when absent (since 1.7.0). A manual method only while the Owner has it enabled; otherwise 409 PAYMENT_METHOD_UNAVAILABLE." }),
   })
   .meta({ description: "No price or total is accepted: the server computes them from the catalogue and the zone's configured charge." })
   .register(apiRegistry, { id: "CreateOrderRequest" });
@@ -243,6 +250,7 @@ export const toOrderSummaryDto = (o: Order): z.infer<typeof orderSummarySchema> 
   fulfilmentStatus: o.fulfilmentStatus,
   paymentStatus: o.paymentStatus,
   returnStatus: o.returnStatus,
+  paymentMethod: o.paymentMethod,
   customer: { name: o.customerName, phone: o.customerPhone },
   deliveryZone: o.deliveryZone,
   totalPaisa: o.totalPaisa,
@@ -262,6 +270,8 @@ export const toOrderDto = (o: OrderDetail): z.infer<typeof orderSchema> => ({
   codSettledPaisa: o.codSettledPaisa,
   codDeductedPaisa: o.codDeductedPaisa,
   refundedPaisa: o.refundedPaisa,
+  advanceReceivedPaisa: o.advanceReceivedPaisa,
+  advanceRefundedPaisa: o.advanceRefundedPaisa,
   rtoChargePaisa: o.rtoChargePaisa,
   confirmedAt: isoOrNull(o.confirmedAt),
   deliveredAt: isoOrNull(o.deliveredAt),

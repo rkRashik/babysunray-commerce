@@ -6,6 +6,9 @@ import { invalidInput } from "../domain-error";
 export const ORDER_SOURCES = ["website", "messenger", "whatsapp", "other"] as const;
 export type OrderSource = (typeof ORDER_SOURCES)[number];
 export const DELIVERY_ZONES = ["dhaka_city", "outside_dhaka"] as const;
+/** How a customer pays: cash on delivery, or a manual advance transfer (ADR-0013). */
+export const ORDER_PAYMENT_METHODS = ["cod", "bkash", "nagad", "bank_transfer"] as const;
+export type OrderPaymentMethod = (typeof ORDER_PAYMENT_METHODS)[number];
 export type DeliveryZone = (typeof DELIVERY_ZONES)[number];
 export const ZONE_LABELS: Record<DeliveryZone, string> = { dhaka_city: "Dhaka City", outside_dhaka: "Outside Dhaka" };
 
@@ -127,6 +130,12 @@ export type OrderState = {
   codSettledPaisa: number;
   /** Kept by the courier from the collected money, as the Owner recorded it (migration 0016). */
   codDeductedPaisa: number;
+  /** Refunds recorded for returns (founder rule M). */
+  refundedPaisa: number;
+  /** The customer's chosen payment method and the advance money verified and refunded (migration 0025). */
+  paymentMethod: OrderPaymentMethod;
+  advanceReceivedPaisa: number;
+  advanceRefundedPaisa: number;
   openCancellationRequest: boolean;
   openReturn: boolean;
   awaitingInspection: boolean;
@@ -149,6 +158,10 @@ export const ORDER_ACTIONS = [
   "create_return",
   "customer_cancel",
   "customer_request_cancellation",
+  // Manual advance payments (ADR-0013): verify money received, undo a mistaken verification, pay advance money back.
+  "record_advance",
+  "reverse_advance",
+  "refund_advance",
 ] as const;
 export type OrderAction = (typeof ORDER_ACTIONS)[number];
 
@@ -180,29 +193,54 @@ export function allowedActions(s: OrderState, now: Date): Set<OrderAction> {
     if (s.fulfilmentStatus === "dispatched") allowed.add("deliver").add("mark_rto");
     if (s.fulfilmentStatus === "rto") allowed.add("receive_rto");
     if (s.fulfilmentStatus === "rto" || s.fulfilmentStatus === "rto_received") allowed.add("record_rto_charge");
-    if ((s.fulfilmentStatus === "dispatched" || s.fulfilmentStatus === "delivered") && s.codCollectedPaisa < s.totalPaisa) allowed.add("record_collection");
+    // The courier can only collect what the customer has not already paid in advance.
+    if ((s.fulfilmentStatus === "dispatched" || s.fulfilmentStatus === "delivered") && s.codCollectedPaisa + s.advanceReceivedPaisa < s.totalPaisa) allowed.add("record_collection");
     const windowOpen = s.deliveredAt !== null && now.getTime() <= returnWindowEnd(s.deliveredAt).getTime();
     if (s.fulfilmentStatus === "delivered" && !s.openReturn && windowOpen) allowed.add("create_return");
     // A delivered order is closed only after its return window, so closing (or settling) never ends the
     // customer's right to ask for a return (engineering default, order-policy-decisions.md section 3).
     const closable = s.fulfilmentStatus === "rto_received" || (s.fulfilmentStatus === "delivered" && s.deliveredAt !== null && !windowOpen);
-    if (closable && accounted(s) === s.codCollectedPaisa && !s.openReturn && !s.awaitingInspection) allowed.add("close");
+    // A parcel that came back holds the customer's advance money: it is not closed until the refund is recorded.
+    const advanceHeld = s.fulfilmentStatus === "rto_received" && refundableAdvance(s) > 0;
+    if (closable && accounted(s) === s.codCollectedPaisa && !s.openReturn && !s.awaitingInspection && !advanceHeld) allowed.add("close");
   }
   // Collected money still with the courier: neither settled to the Owner nor recorded as deducted.
   if (accounted(s) < s.codCollectedPaisa && s.orderStatus !== "cancelled") allowed.add("record_settlement").add("record_deduction");
+  // Advance money is a fact once it reached the store's account, whatever the order's status (a late transfer after
+  // expiry or cancellation included), so it can be recorded until the order is closed. Recording it never confirms the
+  // order or reserves stock again.
+  if (s.paymentMethod !== "cod" && s.orderStatus !== "closed") {
+    if (s.codCollectedPaisa + s.advanceReceivedPaisa < s.totalPaisa) allowed.add("record_advance");
+    if (s.advanceReceivedPaisa > 0) allowed.add("reverse_advance");
+  }
+  // Money received for an order that will not be delivered (cancelled, or returned to the shop undelivered) must be paid
+  // back by hand, never automatically.
+  if (advanceRefundDue(s)) allowed.add("refund_advance");
   return allowed;
 }
+
+/** True when the order will not be delivered (cancelled, or the parcel came back) but still holds verified advance money. */
+export const advanceRefundDue = (s: Pick<OrderState, "orderStatus" | "fulfilmentStatus" | "codCollectedPaisa" | "refundedPaisa" | "advanceReceivedPaisa" | "advanceRefundedPaisa">) =>
+  (s.orderStatus === "cancelled" || (s.orderStatus === "confirmed" && s.fulfilmentStatus === "rto_received")) && refundableAdvance(s) > 0;
+
+/** Verified advance money not yet paid back (by an advance refund or a return refund). */
+export const refundableAdvance = (s: Pick<OrderState, "codCollectedPaisa" | "refundedPaisa" | "advanceReceivedPaisa" | "advanceRefundedPaisa">) =>
+  Math.min(s.advanceReceivedPaisa - s.advanceRefundedPaisa, s.codCollectedPaisa + s.advanceReceivedPaisa - s.refundedPaisa - s.advanceRefundedPaisa);
+
+/** What the customer still owes: the total less COD collected and verified advance money. */
+export const amountDue = (s: Pick<OrderState, "totalPaisa" | "codCollectedPaisa" | "advanceReceivedPaisa">) => Math.max(0, s.totalPaisa - s.codCollectedPaisa - s.advanceReceivedPaisa);
 
 /** Collected money the courier has accounted for: settled to the Owner or recorded as deducted. */
 const accounted = (s: Pick<OrderState, "codSettledPaisa" | "codDeductedPaisa">) => s.codSettledPaisa + s.codDeductedPaisa;
 
 /**
- * Payment status is a function of the amounts (the database checks the same rule). 'settled' means every collected
- * taka is settled to the Owner or recorded as deducted by the courier.
+ * Payment status is a function of the amounts (the database checks the same rule): money received (COD collected plus
+ * verified advance) against the total. 'settled' means every COD taka collected is settled to the Owner or recorded as
+ * deducted by the courier (verified advance money is already the Owner's).
  */
-export function paymentStatusFor(totalPaisa: number, collected: number, settled: number, deducted: number) {
-  if (collected === 0) return "unpaid" as const;
-  if (collected < totalPaisa) return "partially_collected" as const;
+export function paymentStatusFor(totalPaisa: number, collected: number, settled: number, deducted: number, advance = 0) {
+  if (collected + advance === 0) return "unpaid" as const;
+  if (collected + advance < totalPaisa) return "partially_collected" as const;
   return settled + deducted < collected ? ("collected" as const) : ("settled" as const);
 }
 

@@ -46,6 +46,7 @@ const BUSINESS: Partial<Record<DomainError["code"], [number, string, string]>> =
   VARIANT_NOT_ORDERABLE: [409, "unavailable", "An item in your cart can no longer be ordered. Your order was not placed."],
   DELIVERY_ZONE_UNAVAILABLE: [409, "zone_unavailable", "Delivery to this area cannot be ordered online right now. Your order was not placed."],
   QUOTE_CHANGED: [409, "quote_changed", "A price or the delivery charge changed. Please review your cart. Your order was not placed."],
+  PAYMENT_METHOD_UNAVAILABLE: [409, "payment_unavailable", "This payment method is not offered now. Choose another one. Your order was not placed."],
   IDEMPOTENCY_KEY_REUSED: [422, "key_reused", "This checkout was already used for a different order. Start the checkout again."],
 };
 

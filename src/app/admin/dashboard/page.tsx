@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, BarChart3, CheckCircle2, CircleX, type LucideIcon, PackageCheck, PackageX, PhoneCall, Plus, Printer, SearchCheck, Truck } from "lucide-react";
+import { AlertTriangle, ArrowRight, BarChart3, CheckCircle2, CircleX, type LucideIcon, PackageCheck, PackageX, PhoneCall, Plus, Printer, SearchCheck, Truck, Wallet } from "lucide-react";
 import { Suspense } from "react";
 import Link from "next/link";
 import { getDb } from "@/db/client";
@@ -17,7 +17,7 @@ import { bdt, relative } from "../orders/_components/labels";
 export const metadata = { title: "Dashboard · Admin" };
 
 // Queues where the Owner must act now (a call, a decision), in that order.
-const URGENT: OrderQueue[] = ["overdue", "cancellation_requests", "pending"];
+const URGENT: OrderQueue[] = ["overdue", "cancellation_requests", "payment_to_verify", "refund_due", "pending"];
 // The rest of the day's work, in the order it happens.
 const FLOW: OrderQueue[] = ["to_pack", "to_dispatch", "in_transit", "returning", "awaiting_collection", "unsettled"];
 const TITLES: Record<OrderQueue, string> = {
@@ -30,13 +30,16 @@ const TITLES: Record<OrderQueue, string> = {
   returning: "Returning (RTO)",
   awaiting_collection: "COD to collect",
   unsettled: "Not settled by courier",
+  payment_to_verify: "Payments to verify",
+  refund_due: "Advance refunds due",
 };
 
 type Queue = Dashboard["queues"][number];
 
 function detail(queue: OrderQueue, o: Queue["oldest"][number], now: Date) {
   if (queue === "pending" || queue === "overdue") return `deadline ${relative(o.verificationExpiresAt, now)}`;
-  if (queue === "awaiting_collection") return `${bdt(o.totalPaisa - o.codCollectedPaisa)} to collect`;
+  if (queue === "awaiting_collection") return `${bdt(o.totalPaisa - o.codCollectedPaisa - o.advanceReceivedPaisa)} to collect`;
+  if (queue === "refund_due") return `${bdt(o.advanceReceivedPaisa - o.advanceRefundedPaisa)} to refund`;
   if (queue === "unsettled") return `${bdt(o.codCollectedPaisa - o.codSettledPaisa - o.codDeductedPaisa)} with courier`;
   return o.createdAt.getTime() >= now.getTime() - 60_000 ? "placed just now" : `placed ${relative(o.createdAt, now)}`;
 }
@@ -46,6 +49,15 @@ const WHY: Partial<Record<OrderQueue, { why: string; action: string }>> = {
   overdue: { why: "Past the 24-hour verification window. Call, then confirm (stock is checked again) or cancel.", action: "Review overdue" },
   cancellation_requests: { why: "Approve or reject each request; a packed order cannot be dispatched until you decide.", action: "Review requests" },
   pending: { why: "Verify each with the customer before its 24-hour deadline, then confirm.", action: "Verify orders" },
+  payment_to_verify: { why: "A customer sent a transfer reference. Check your bKash, Nagad or bank account, then verify or reject it. Nothing counts as paid until you do.", action: "Check payments" },
+  refund_due: { why: "These cancelled orders hold advance money you verified. Pay it back by hand, then record the refund.", action: "Review refunds" },
+};
+const URGENT_TITLE: Partial<Record<OrderQueue, (n: number, plural: (n: number, word: string) => string) => string>> = {
+  overdue: (n, p) => `${p(n, "order")} past the verification deadline`,
+  pending: (n, p) => `${p(n, "order")} to verify`,
+  cancellation_requests: (n, p) => p(n, "cancellation request"),
+  payment_to_verify: (n, p) => `${p(n, "order")} with a payment reference to verify`,
+  refund_due: (n, p) => `${p(n, "cancelled order")} with an advance to refund`,
 };
 
 type Attention = { key: string; tone: "bad" | "wait"; icon: LucideIcon; count: number; title: string; why: string; href: string; action: string; queue?: OrderQueue; orders?: React.ReactNode };
@@ -237,9 +249,9 @@ async function DashboardBody({ principal, rawLow }: { principal: Principal; rawL
           key: q.queue,
           queue: q.queue,
           tone: q.queue === "pending" ? "wait" : "bad",
-          icon: q.queue === "pending" ? PhoneCall : q.queue === "overdue" ? AlertTriangle : CircleX,
+          icon: q.queue === "pending" ? PhoneCall : q.queue === "overdue" ? AlertTriangle : q.queue === "payment_to_verify" || q.queue === "refund_due" ? Wallet : CircleX,
           count: q.count,
-          title: q.queue === "overdue" ? `${plural(q.count, "order")} past the verification deadline` : q.queue === "pending" ? `${plural(q.count, "order")} to verify` : plural(q.count, "cancellation request"),
+          title: URGENT_TITLE[q.queue]!(q.count, plural),
           why: WHY[q.queue]!.why,
           href: `/admin/orders?queue=${q.queue}`,
           action: WHY[q.queue]!.action,

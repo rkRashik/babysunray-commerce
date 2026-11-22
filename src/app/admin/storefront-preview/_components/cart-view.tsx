@@ -180,7 +180,7 @@ export function ZoneChoice({ quote, lang, zone, onZone, invalid }: { quote: Quot
 }
 
 /** Subtotal, delivery and total, from the server's quote. */
-export function TotalsList({ quote, lang, zone }: { quote: Quote | null; lang: Lang; zone: string }) {
+export function TotalsList({ quote, lang, zone, totalLabel }: { quote: Quote | null; lang: Lang; zone: string; totalLabel?: string }) {
   const t = dictionary(lang);
   return (
     <dl className="sf-num grid grid-cols-[1fr_auto] gap-y-2 text-[0.9375rem]" data-testid="totals">
@@ -192,7 +192,7 @@ export function TotalsList({ quote, lang, zone }: { quote: Quote | null; lang: L
       <dd className="text-end" data-testid="delivery">
         {quote?.deliveryChargePaisa != null ? formatTaka(quote.deliveryChargePaisa, lang) : zone ? t.chargeNotSet : t.chooseZone}
       </dd>
-      <dt className="mt-2 border-t border-sf-line pt-3 font-bold">{t.total}</dt>
+      <dt className="mt-2 border-t border-sf-line pt-3 font-bold">{totalLabel ?? t.total}</dt>
       <dd className="sf-price mt-2 self-end border-t border-sf-line pt-3 text-end text-[1.5rem]" data-testid="total">
         {quote?.totalPaisa != null ? formatTaka(quote.totalPaisa, lang) : "—"}
       </dd>

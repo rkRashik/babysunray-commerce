@@ -12,7 +12,7 @@ export const metadata = { title: "Stock counts · Admin" };
 // Physical stock counts: start one, resume a draft, review the history. The rules are in
 // src/modules/inventory/counts.ts; how often to count is the Owner's decision (none is set here).
 export default async function StockCountsPage() {
-  await requireAdmin("stock:read", "stock:adjust");
+  await requireAdmin("stock:read", "stock:count");
   const counts = await listStockCounts(getDb());
   const drafts = counts.filter((c) => c.status === "draft");
 

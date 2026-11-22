@@ -76,7 +76,10 @@ export async function healthReport(db: Db): Promise<HealthReport> {
        o.cod_collected_paisa <> coalesce((select sum(amount_paisa) from payment_entries p where p.order_id = o.id and p.kind = 'collected'), 0)
        or o.cod_settled_paisa <> coalesce((select sum(amount_paisa) from payment_entries p where p.order_id = o.id and p.kind = 'settled'), 0)
        or o.cod_deducted_paisa <> coalesce((select sum(amount_paisa) from payment_entries p where p.order_id = o.id and p.kind = 'deducted'), 0)
-       or o.refunded_paisa <> coalesce((select sum(amount_paisa) from payment_entries p where p.order_id = o.id and p.kind = 'refunded'), 0))::int as cod_mismatch,
+       or o.refunded_paisa <> coalesce((select sum(amount_paisa) from payment_entries p where p.order_id = o.id and p.kind = 'refunded'), 0)
+       -- Manual advance payments (migration 0025): verified less undone, and paid back.
+       or o.advance_received_paisa <> coalesce((select sum(case when p.kind = 'advance_received' then amount_paisa else -amount_paisa end) from payment_entries p where p.order_id = o.id and p.kind in ('advance_received', 'advance_reversed')), 0)
+       or o.advance_refunded_paisa <> coalesce((select sum(amount_paisa) from payment_entries p where p.order_id = o.id and p.kind = 'advance_refunded'), 0))::int as cod_mismatch,
     (select count(*) from idempotency_records)::int as idempotency_records,
     (select min(created_at)::text from idempotency_records) as oldest_idempotency_record,
     (select count(*) from guest_checkout_submissions)::int as guest_submissions,

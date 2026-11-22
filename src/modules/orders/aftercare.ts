@@ -17,6 +17,10 @@ export type Return = typeof returns.$inferSelect;
 
 const optionalReference = (raw: string | null | undefined) => optionalNote(raw, "reference", 100);
 
+/** Money received from the customer (COD collected plus verified advance) not yet refunded in any way. */
+export const refundableReceived = (o: Pick<Order, "codCollectedPaisa" | "advanceReceivedPaisa" | "refundedPaisa" | "advanceRefundedPaisa">) =>
+  o.codCollectedPaisa + o.advanceReceivedPaisa - o.refundedPaisa - o.advanceRefundedPaisa;
+
 async function lockVersioned(tx: Db, orderId: string, expectedVersion: number): Promise<LockedOrder> {
   const locked = await lockOrder(tx, orderId);
   if (!locked) throw new DomainError("ORDER_NOT_FOUND", "Order not found.");
@@ -46,7 +50,9 @@ export async function recordPayment(
   const collected = order.codCollectedPaisa + (input.kind === "collected" ? amount : 0);
   const settled = order.codSettledPaisa + (input.kind === "settled" ? amount : 0);
   const deducted = order.codDeductedPaisa + (input.kind === "deducted" ? amount : 0);
-  if (collected > order.totalPaisa) throw new DomainError("PAYMENT_LIMIT_EXCEEDED", "That would record more collected than the order's expected COD.");
+  if (collected + order.advanceReceivedPaisa > order.totalPaisa) {
+    throw new DomainError("PAYMENT_LIMIT_EXCEEDED", "That would record more collected than the order's expected COD (the total less any verified advance payment).");
+  }
   if (settled + deducted > collected) throw new DomainError("PAYMENT_LIMIT_EXCEEDED", "That would record more settled and deducted than the courier has collected.");
   const [entry] = await tx
     .insert(paymentEntries)
@@ -56,7 +62,7 @@ export async function recordPayment(
     codCollectedPaisa: collected,
     codSettledPaisa: settled,
     codDeductedPaisa: deducted,
-    paymentStatus: paymentStatusFor(order.totalPaisa, collected, settled, deducted),
+    paymentStatus: paymentStatusFor(order.totalPaisa, collected, settled, deducted, order.advanceReceivedPaisa),
   });
   await addEvent(tx, orderId, `cod_${input.kind}`, actor, { amountPaisa: amount, paymentEntryId: entry.id });
   return { order: updated, entry };
@@ -218,8 +224,9 @@ async function returnValue(tx: Db, returnId: string): Promise<number> {
 }
 
 /**
- * A manual refund for an approved return (rule M), paid by bKash, Nagad or bank transfer. At most the money
- * actually collected minus earlier refunds, and at most the returned goods' value. Completes the return.
+ * A manual refund for an approved return (rule M), paid by bKash, Nagad or bank transfer. At most the money actually
+ * received (COD collected plus verified advance) minus earlier refunds, and at most the returned goods' value.
+ * Completes the return.
  */
 export async function recordRefund(
   tx: Db,
@@ -234,8 +241,8 @@ export async function recordRefund(
   const amount = validateAmountPaisa(input.amountPaisa);
   const occurredOn = validatePastDate(input.occurredOn, "occurredOn");
   const order = locked.order;
-  if (amount > order.codCollectedPaisa - order.refundedPaisa) {
-    throw new DomainError("PAYMENT_LIMIT_EXCEEDED", "A refund cannot be more than the money actually collected and not yet refunded.");
+  if (amount > refundableReceived(order)) {
+    throw new DomainError("PAYMENT_LIMIT_EXCEEDED", "A refund cannot be more than the money actually received and not yet refunded.");
   }
   if (amount > (await returnValue(tx, returnId))) throw new DomainError("PAYMENT_LIMIT_EXCEEDED", "A refund cannot be more than the returned goods' value.");
   const [entry] = await tx
@@ -255,8 +262,8 @@ export async function recordRefund(
 export async function completeReturn(tx: Db, returnId: string, expectedVersion: number, actor: Actor): Promise<Return> {
   const { ret, locked } = await lockReturn(tx, returnId, expectedVersion);
   if (ret.status !== "approved") throw wrongState("completed (it must be approved first)");
-  if (ret.kind === "return" && locked.order.codCollectedPaisa - locked.order.refundedPaisa > 0) {
-    throw new DomainError("INVALID_TRANSITION", "Money was collected for this order: record the refund instead.");
+  if (ret.kind === "return" && refundableReceived(locked.order) > 0) {
+    throw new DomainError("INVALID_TRANSITION", "Money was received for this order: record the refund instead.");
   }
   const [updated] = await tx.update(returns).set({ status: "completed", completedAt: sql`now()` }).where(eq(returns.id, returnId)).returning();
   await updateOrder(tx, ret.orderId, { returnStatus: await computeReturnStatus(tx, ret.orderId) });

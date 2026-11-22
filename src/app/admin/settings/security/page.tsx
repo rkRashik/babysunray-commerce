@@ -6,9 +6,22 @@ import { RecoveryCodes } from "./recovery-codes";
 
 export const metadata = { title: "Account security · Admin" };
 
-// The signed-in Owner's recovery codes: how many are left, and a new set (the old ones stop working).
+// The signed-in Owner's recovery codes: how many are left, and a new set (the old ones stop working). Recovery codes exist
+// for the Owner only; a staff member who forgets a password gets a new set-password link from the Owner (Staff & access).
 export default async function SecurityPage() {
   const principal = await requireAdmin();
+  if (principal.role !== "owner") {
+    return (
+      <AdminShell title="Account security" current="security">
+        <Section title="Your password">
+          <p className="text-sm" data-testid="staff-security">
+            You sign in with your own email and password. If you forget your password, ask the Owner to send you a new set-password link from Staff &amp; access.
+            Never share your password; the Owner never needs it.
+          </p>
+        </Section>
+      </AdminShell>
+    );
+  }
   const left = await recoveryCodesLeft(getDb(), principal.userId).catch(() => null);
   return (
     <AdminShell title="Account security" current="security">

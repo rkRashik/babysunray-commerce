@@ -44,7 +44,7 @@ function grantMatches(env: Env, given: unknown): boolean {
 /** Whether an Owner with active access exists; and whether this database has the setup tables (migration 0021). */
 export async function setupState(db: Db): Promise<{ ownerExists: boolean; schemaReady: boolean }> {
   const { rows } = await db.execute<{ owners: number; ready: boolean }>(sql`select
-    (select count(*) from user_access where disabled_at is null)::int as owners,
+    (select count(*) from user_access where role = 'owner' and disabled_at is null)::int as owners,
     to_regclass('public.owner_recovery_codes') is not null as ready`);
   return { ownerExists: rows[0].owners > 0, schemaReady: rows[0].ready };
 }
@@ -108,7 +108,7 @@ export async function completeSetup(
   try {
     const userId = await db.transaction(async (tx) => {
       await tx.execute(sql`lock table auth_users, user_access in exclusive mode`);
-      const { rows: active } = await tx.execute<{ n: number }>(sql`select count(*)::int as n from user_access where disabled_at is null`);
+      const { rows: active } = await tx.execute<{ n: number }>(sql`select count(*)::int as n from user_access where role = 'owner' and disabled_at is null`);
       if (active[0].n > 0) throw refused(CLOSED);
       if (deps.emailRequired) {
         const digest = sha256(`${owner.email}:${String(input.code ?? "").trim()}`);
@@ -166,7 +166,7 @@ export async function recoverOwner(db: Db, input: { email: unknown; code: unknow
   await db.transaction(async (tx) => {
     const { rows } = await tx.execute<{ user_id: string }>(sql`
       update owner_recovery_codes c set used_at = now()
-        from auth_users u join user_access a on a.user_id = u.id and a.disabled_at is null
+        from auth_users u join user_access a on a.user_id = u.id and a.role = 'owner' and a.disabled_at is null
        where c.user_id = u.id and u.email = ${email} and c.code_sha256 = ${digest} and c.used_at is null
       returning c.user_id`);
     if (rows.length !== 1) throw wrong;

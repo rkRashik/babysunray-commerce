@@ -55,7 +55,7 @@ export function headersWith(cookie: string): Headers {
 /** A further test user with a Better Auth credential. role null means no access row. */
 export async function createTestUser(
   pool: Pool,
-  user: { email: string; name?: string; password: string; role: "owner" | null },
+  user: { email: string; name?: string; password: string; role: "owner" | "manager" | "orders" | "catalogue" | "inventory" | null },
 ): Promise<string> {
   const hash = await hashPassword(user.password);
   const { rows } = await pool.query<{ id: string }>(
@@ -94,7 +94,9 @@ export async function clearAuthState(pool: Pool): Promise<void> {
        and not exists (select 1 from courier_statement_checks where actor_user_id = u.id)
        and not exists (select 1 from policy_drafts where updated_by_user_id = u.id or reviewed_by_user_id = u.id)
        and not exists (select 1 from policy_draft_events where actor_user_id = u.id)
-       and not exists (select 1 from policy_publications where actor_user_id = u.id)`,
+       and not exists (select 1 from policy_publications where actor_user_id = u.id)
+       and not exists (select 1 from advance_payments where decided_by_user_id = u.id)
+       and not exists (select 1 from payment_methods where updated_by_user_id = u.id or approved_by_user_id = u.id)`,
   );
 }
 

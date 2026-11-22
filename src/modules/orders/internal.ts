@@ -50,6 +50,10 @@ export async function lockOrder(tx: Db, orderId: string, options: { skipLocked?:
       codCollectedPaisa: o.codCollectedPaisa,
       codSettledPaisa: o.codSettledPaisa,
       codDeductedPaisa: o.codDeductedPaisa,
+      refundedPaisa: o.refundedPaisa,
+      paymentMethod: o.paymentMethod,
+      advanceReceivedPaisa: o.advanceReceivedPaisa,
+      advanceRefundedPaisa: o.advanceRefundedPaisa,
       openCancellationRequest: Boolean(flags.openRequest),
       openReturn: Boolean(flags.openReturn),
       awaitingInspection: Boolean(flags.awaiting),
@@ -85,6 +89,9 @@ const LABEL: Record<OrderAction, string> = {
   create_return: "given a return request",
   customer_cancel: "cancelled here",
   customer_request_cancellation: "given a cancellation request",
+  record_advance: "given an advance payment",
+  reverse_advance: "given an undone advance payment",
+  refund_advance: "given an advance refund",
 };
 
 export function assertAllowed(locked: LockedOrder, action: OrderAction): void {

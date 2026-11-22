@@ -13,6 +13,8 @@ import {
   LayoutDashboard,
   ListChecks,
   type LucideIcon,
+  Users,
+  Wallet,
   PackageCheck,
   Rocket,
   Shirt,
@@ -24,62 +26,68 @@ import { BrandMark } from "@/app/_design/brand";
 import { flFontVariables } from "@/app/_design/fonts";
 import { currentStoreIdentity } from "@/app/_design/identity";
 import { DEFAULT_STORE_NAME } from "@/config/installation";
+import { type Permission, ROLE_INFO, roleHasPermission } from "@/modules/auth/permissions";
+import { currentPrincipal } from "../_lib/session";
 import { stagingDatabase } from "../_lib/staging";
 import { SignOutButton } from "./auth-forms";
 import { Toast } from "./toast";
 import { AdminMenu } from "./admin-menu";
 
 type Crumb = { href: string; label: string; lang?: string };
-type Current = "dashboard" | "products" | "preparation" | "reviews" | "categories" | "orders" | "delivery" | "reports" | "counts" | "exports" | "media" | "preview" | "policies" | "launch" | "acceptance" | "onboarding" | "store" | "publication" | "security";
+type Current = "dashboard" | "products" | "preparation" | "reviews" | "categories" | "orders" | "delivery" | "payments" | "reports" | "counts" | "exports" | "media" | "preview" | "policies" | "launch" | "acceptance" | "onboarding" | "store" | "publication" | "staff" | "security";
 
 // Admin's navigation, grouped by the work it serves, the daily pages first. Every Admin screen is reachable from here.
 // Groups used now and then (`fold`) are folded in the desktop sidebar unless the current page is in them, so the daily
-// groups fit a laptop screen without scrolling; the phone's Menu always lists every page.
-const NAV: { group: string; fold?: true; items: { key: Current; href: string; label: string; icon: LucideIcon }[] }[] = [
+// groups fit a laptop screen without scrolling; the phone's Menu always lists every page. Each link names the permission
+// its page checks, and the signed-in role sees only the pages it may open (the pages and actions check again themselves).
+type NavItem = { key: Current; href: string; label: string; icon: LucideIcon; permission: Permission | null };
+const NAV: { group: string; fold?: true; items: NavItem[] }[] = [
   {
     group: "Daily work",
     items: [
-      { key: "dashboard", href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { key: "orders", href: "/admin/orders", label: "Orders", icon: ClipboardList },
-      { key: "products", href: "/admin", label: "Products", icon: Shirt },
-      { key: "counts", href: "/admin/stock-counts", label: "Stock counts", icon: PackageCheck },
+      { key: "dashboard", href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, permission: "reports:read" },
+      { key: "orders", href: "/admin/orders", label: "Orders", icon: ClipboardList, permission: "orders:read" },
+      { key: "products", href: "/admin", label: "Products", icon: Shirt, permission: "catalog:read" },
+      { key: "counts", href: "/admin/stock-counts", label: "Stock counts", icon: PackageCheck, permission: "stock:count" },
     ],
   },
   {
     group: "Catalogue",
     items: [
-      { key: "preparation", href: "/admin/catalogue-preparation", label: "Catalogue checklist", icon: ListChecks },
-      { key: "reviews", href: "/admin/product-reviews", label: "Product reviews", icon: ClipboardCheck },
-      { key: "categories", href: "/admin/categories", label: "Categories", icon: FolderTree },
-      { key: "media", href: "/admin/media-health", label: "Photo storage", icon: ImageIcon },
+      { key: "preparation", href: "/admin/catalogue-preparation", label: "Catalogue checklist", icon: ListChecks, permission: "catalog:read" },
+      { key: "reviews", href: "/admin/product-reviews", label: "Product reviews", icon: ClipboardCheck, permission: "catalog:read" },
+      { key: "categories", href: "/admin/categories", label: "Categories", icon: FolderTree, permission: "catalog:write" },
+      { key: "media", href: "/admin/media-health", label: "Photo storage", icon: ImageIcon, permission: "catalog:read" },
     ],
   },
   {
     group: "Money and records",
     items: [
-      { key: "reports", href: "/admin/reports", label: "Reports", icon: BarChart3 },
-      { key: "exports", href: "/admin/exports", label: "Exports", icon: FileDown },
+      { key: "reports", href: "/admin/reports", label: "Reports", icon: BarChart3, permission: "reports:read" },
+      { key: "exports", href: "/admin/exports", label: "Exports", icon: FileDown, permission: "exports:create" },
     ],
   },
   {
     group: "Opening the shop",
     fold: true,
     items: [
-      { key: "preview", href: "/admin/storefront-preview", label: "Storefront preview", icon: Eye },
-      { key: "policies", href: "/admin/policies", label: "Policies", icon: FileText },
-      { key: "acceptance", href: "/admin/acceptance", label: "Shop acceptance", icon: Store },
-      { key: "launch", href: "/admin/launch-readiness", label: "Launch readiness", icon: Rocket },
+      { key: "preview", href: "/admin/storefront-preview", label: "Storefront preview", icon: Eye, permission: "storefront:preview" },
+      { key: "policies", href: "/admin/policies", label: "Policies", icon: FileText, permission: "policies:read" },
+      { key: "acceptance", href: "/admin/acceptance", label: "Shop acceptance", icon: Store, permission: "acceptance:run" },
+      { key: "launch", href: "/admin/launch-readiness", label: "Launch readiness", icon: Rocket, permission: "launch:read" },
     ],
   },
   {
     group: "Settings",
     fold: true,
     items: [
-      { key: "onboarding", href: "/admin/onboarding", label: "Store setup", icon: ListChecks },
-      { key: "store", href: "/admin/settings/store", label: "Store settings", icon: Store },
-      { key: "delivery", href: "/admin/settings/delivery", label: "Delivery charges", icon: Truck },
-      { key: "publication", href: "/admin/settings/publication", label: "Publication requirements", icon: ClipboardCheck },
-      { key: "security", href: "/admin/settings/security", label: "Account security", icon: KeyRound },
+      { key: "onboarding", href: "/admin/onboarding", label: "Store setup", icon: ListChecks, permission: "settings:write" },
+      { key: "store", href: "/admin/settings/store", label: "Store settings", icon: Store, permission: "settings:write" },
+      { key: "delivery", href: "/admin/settings/delivery", label: "Delivery charges", icon: Truck, permission: "settings:write" },
+      { key: "payments", href: "/admin/settings/payments", label: "Payment methods", icon: Wallet, permission: "settings:write" },
+      { key: "publication", href: "/admin/settings/publication", label: "Publication requirements", icon: ClipboardCheck, permission: "settings:write" },
+      { key: "staff", href: "/admin/staff", label: "Staff & access", icon: Users, permission: "users:manage" },
+      { key: "security", href: "/admin/settings/security", label: "Account security", icon: KeyRound, permission: null },
     ],
   },
 ];
@@ -116,7 +124,9 @@ export async function AdminShell({
   /** Buttons or links beside the title (the page's main actions). */
   actions?: React.ReactNode;
 }) {
-  const [identity, staging] = await Promise.all([currentStoreIdentity(), stagingDatabase()]);
+  const [identity, staging, principal] = await Promise.all([currentStoreIdentity(), stagingDatabase(), currentPrincipal().catch(() => null)]);
+  const nav = NAV.map((g) => ({ ...g, items: g.items.filter((i) => principal && (i.permission === null || roleHasPermission(principal.role, i.permission))) })).filter((g) => g.items.length > 0);
+  const quick = nav.flatMap((g) => g.items).filter((i) => QUICK.includes(i.key)).sort((a, b) => QUICK.indexOf(a.key) - QUICK.indexOf(b.key));
   // The installation's own name (Store settings, else STORE_NAME). Only a store with no name at all shows a neutral
   // placeholder and a link to set it, never a made-up brand.
   const named = identity.storeName !== DEFAULT_STORE_NAME;
@@ -139,8 +149,10 @@ export async function AdminShell({
           </span>
           <div className="min-w-0 flex-1 leading-tight">
             <p className="truncate font-bold text-white">{storeName}</p>
-            {named ? (
-              <p className="text-[0.8125rem] text-[#bfae9b]">Admin</p>
+            {named || !principal || !roleHasPermission(principal.role, "settings:write") ? (
+              <p className="text-[0.8125rem] text-[#bfae9b]" data-testid="admin-role">
+                {principal && principal.role !== "owner" ? ROLE_INFO[principal.role].label : "Admin"}
+              </p>
             ) : (
               <Link href="/admin/settings/store" className="text-[0.8125rem] whitespace-nowrap text-[#e3c77e] underline underline-offset-2">
                 Set store name
@@ -151,7 +163,7 @@ export async function AdminShell({
         </div>
         <nav aria-label="Admin" className="of-scroll hidden lg:block lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:px-3 lg:pb-5">
           <ul className="space-y-4">
-            {NAV.map(({ group, fold, items }) => {
+            {nav.map(({ group, fold, items }) => {
               const links = (
                 <ul className="space-y-0.5">
                   {items.map(({ key, href, label, icon: Icon }) => (
@@ -188,11 +200,8 @@ export async function AdminShell({
         </div>
       </aside>
       <nav aria-label="Quick links" className="of-bar lg:hidden">
-        <ul className="mx-auto grid h-[var(--of-bar-h)] max-w-lg grid-cols-4">
-          {NAV.flatMap((g) => g.items)
-            .filter((i) => QUICK.includes(i.key))
-            .sort((a, b) => QUICK.indexOf(a.key) - QUICK.indexOf(b.key))
-            .map(({ key, href, label, icon: Icon }) => (
+        <ul className="mx-auto grid h-[var(--of-bar-h)] max-w-lg" style={{ gridTemplateColumns: `repeat(${quick.length + 1}, minmax(0, 1fr))` }}>
+          {quick.map(({ key, href, label, icon: Icon }) => (
               <li key={key}>
                 <Link href={href} aria-current={current === key ? "page" : undefined} className="of-tab">
                   <Icon aria-hidden="true" size={24} strokeWidth={1.75} />
@@ -203,7 +212,7 @@ export async function AdminShell({
           <li>
             <AdminMenu title="All pages" closeLabel="Close menu" label="Menu" highlighted={current !== undefined && !QUICK.includes(current)}>
               <nav aria-label="Admin">
-                {NAV.map(({ group, items }) => (
+                {nav.map(({ group, items }) => (
                   <div key={group} className="pb-2">
                     <p className="px-3 pt-3 pb-1 text-[0.8125rem] font-semibold text-gray-600">{group}</p>
                     <ul className="grid grid-cols-2 gap-1">
@@ -320,6 +329,10 @@ const NOTICES: Record<string, string> = {
   "request-approved": "Cancellation request approved. The order is cancelled.",
   "request-rejected": "Cancellation request rejected.",
   payment: "Payment recorded.",
+  "advance-verified": "Payment verified as received. The order itself is not confirmed by this.",
+  "advance-rejected": "Reference rejected. The customer is asked to contact you.",
+  "advance-reversed": "Verification undone. That amount no longer counts as received.",
+  "advance-refunded": "Advance refund recorded.",
   "rto-charge": "RTO charge recorded.",
   "return-created": "Return request recorded.",
   "return-step": "Return updated.",

@@ -120,7 +120,7 @@ describe("the shop is reachable only through the access check", () => {
     expect(imports.filter((i) => /auth|principal|operations|actor/.test(i))).toEqual([]);
   });
 
-  it("the anonymous endpoints are tracking, the probes, the maintenance call, and the shop's gated routes; public pages are the status page, tracking and the gated shop", () => {
+  it("the anonymous endpoints are tracking (with its payment reference), the probes, the maintenance call, and the shop's gated routes; public pages are the status page, tracking and the gated shop", () => {
     const app = files("src/app");
     const routes = app.filter((f) => /\/route\.ts$/.test(f) && !f.startsWith("src/app/admin/") && !f.startsWith("src/app/api/v1/") && !(f.startsWith("src/app/api/auth/") && f !== "src/app/api/auth/callback/google/route.ts"));
     expect(routes.sort()).toEqual([
@@ -132,6 +132,7 @@ describe("the shop is reachable only through the access check", () => {
       "src/app/api/public/media/[mediaId]/route.ts",
       "src/app/api/shop/checkout/route.ts",
       "src/app/api/track/cancel/route.ts",
+      "src/app/api/track/payment/route.ts",
       "src/app/api/track/route.ts",
       "src/app/brand/logo/route.ts",
     ]);

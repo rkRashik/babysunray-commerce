@@ -77,6 +77,7 @@ describe("destructive reset statements", () => {
     const [tables, fn, history, , marker] = DROP_MANAGED_STATEMENTS;
     const tableList = tables.replace(/^drop table if exists /, "").replace(/ restrict;$/, "").split(", ");
     expect(tableList.sort()).toEqual([
+      '"public"."advance_payments"',
       '"public"."api_rate_limits"',
       '"public"."auth_accounts"',
       '"public"."auth_events"',
@@ -104,6 +105,7 @@ describe("destructive reset statements", () => {
       '"public"."orders"',
       '"public"."owner_recovery_codes"',
       '"public"."payment_entries"',
+      '"public"."payment_methods"',
       '"public"."policy_draft_events"',
       '"public"."policy_drafts"',
       '"public"."policy_publications"',
@@ -116,6 +118,7 @@ describe("destructive reset statements", () => {
       '"public"."quarantine_items"',
       '"public"."return_items"',
       '"public"."returns"',
+      '"public"."staff_invitations"',
       '"public"."stock_count_lines"',
       '"public"."stock_counts"',
       '"public"."stock_movements"',

@@ -47,6 +47,8 @@ export const PROBLEM_CODES = [
   "PAYMENT_LIMIT_EXCEEDED",
   // Added in 1.4.0 with product content and categories.
   "CATEGORY_NOT_FOUND",
+  // Added in 1.7.0 with manual advance payments.
+  "PAYMENT_METHOD_UNAVAILABLE",
 ] as const;
 export type ProblemCode = (typeof PROBLEM_CODES)[number];
 

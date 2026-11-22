@@ -24,13 +24,16 @@ import {
   recordPaymentOnce,
   recordRtoChargeOnce,
   returnStepOnce,
+  returnStepPermission,
   revokeTrackingLinkOnce,
   reviewCancellationOnce,
   setDeliveryZoneOnce,
   submitOrderOnce,
 } from "@/modules/orders/operations";
+import { refundAdvanceOnce, rejectReferenceOnce, reverseAdvanceOnce, verifyAdvanceOnce } from "@/modules/orders/advance";
+import { METHOD_LABELS } from "@/modules/settings/payments";
 import { getOrderDetail } from "@/modules/orders/queries";
-import { DELIVERY_ZONES, type DeliveryZone, MAX_ORDER_LINES, verificationOverdue, ZONE_LABELS } from "@/modules/orders/rules";
+import { DELIVERY_ZONES, type DeliveryZone, MAX_ORDER_LINES, ORDER_PAYMENT_METHODS, verificationOverdue, ZONE_LABELS } from "@/modules/orders/rules";
 import { formError, type FormState, optional, taka, text, wholeNumber } from "../_lib/form";
 import { requireAdmin } from "../_lib/session";
 import { SEARCH_COOKIE, SEARCH_TTL_SECONDS, sealSearch } from "./_lib/search-cookie";
@@ -69,6 +72,7 @@ export async function createOrderAction(_: FormState, form: FormData): Promise<F
       deliveryZone: oneOf(text(form, "deliveryZone"), DELIVERY_ZONES, "delivery zone"),
       note: optional(form, "note"),
       items,
+      paymentMethod: oneOf(text(form, "paymentMethod") || "cod", ORDER_PAYMENT_METHODS, "payment method"),
     });
     orderId = value.id;
   } catch (error) {
@@ -177,6 +181,9 @@ export type QuickView = {
   codCollectedPaisa: number;
   codSettledPaisa: number;
   codDeductedPaisa: number;
+  paymentMethod: string;
+  paymentMethodLabel: string;
+  advanceReceivedPaisa: number;
   events: { event: string; at: string }[];
 };
 
@@ -209,6 +216,9 @@ export async function orderQuickViewAction(orderId: string): Promise<QuickView |
       codCollectedPaisa: o.codCollectedPaisa,
       codSettledPaisa: o.codSettledPaisa,
       codDeductedPaisa: o.codDeductedPaisa,
+      paymentMethod: o.paymentMethod,
+      paymentMethodLabel: o.paymentMethod === "cod" ? "Cash on delivery" : METHOD_LABELS[o.paymentMethod].en,
+      advanceReceivedPaisa: o.advanceReceivedPaisa,
       events: o.events.slice(-5).map((e) => ({ event: e.event, at: e.createdAt.toISOString() })),
     };
   } catch (error) {
@@ -268,6 +278,71 @@ export async function recordPaymentAction(_: FormState, form: FormData): Promise
   return {};
 }
 
+// Manual advance payments (src/modules/orders/advance.ts). Verifying, rejecting and undoing need payments:verify; an
+// advance refund needs payments:record. Each operation checks again.
+
+export async function verifyAdvanceAction(_: FormState, form: FormData): Promise<FormState> {
+  const principal = await requireAdmin("payments:verify");
+  const orderId = text(form, "orderId");
+  try {
+    const submission = text(form, "advancePaymentId");
+    await verifyAdvanceOnce(getDb(), principal, text(form, "idempotencyKey"), {
+      ...orderRef(form),
+      advancePaymentId: submission || null,
+      method: submission ? null : text(form, "method"),
+      reference: submission ? null : text(form, "reference"),
+      amountPaisa: taka(form, "amountTaka", "Amount received"),
+      receivedOn: text(form, "receivedOn"),
+    });
+  } catch (error) {
+    return formError(error, form);
+  }
+  back(orderId, "advance-verified");
+  return {};
+}
+
+export async function rejectReferenceAction(_: FormState, form: FormData): Promise<FormState> {
+  const principal = await requireAdmin("payments:verify");
+  const orderId = text(form, "orderId");
+  try {
+    await rejectReferenceOnce(getDb(), principal, text(form, "idempotencyKey"), { ...orderRef(form), advancePaymentId: text(form, "advancePaymentId"), note: text(form, "note") });
+  } catch (error) {
+    return formError(error, form);
+  }
+  back(orderId, "advance-rejected");
+  return {};
+}
+
+export async function reverseAdvanceAction(_: FormState, form: FormData): Promise<FormState> {
+  const principal = await requireAdmin("payments:verify");
+  const orderId = text(form, "orderId");
+  try {
+    await reverseAdvanceOnce(getDb(), principal, text(form, "idempotencyKey"), { ...orderRef(form), advancePaymentId: text(form, "advancePaymentId"), note: text(form, "note") });
+  } catch (error) {
+    return formError(error, form);
+  }
+  back(orderId, "advance-reversed");
+  return {};
+}
+
+export async function refundAdvanceAction(_: FormState, form: FormData): Promise<FormState> {
+  const principal = await requireAdmin("payments:record");
+  const orderId = text(form, "orderId");
+  try {
+    await refundAdvanceOnce(getDb(), principal, text(form, "idempotencyKey"), {
+      ...orderRef(form),
+      amountPaisa: taka(form, "amountTaka", "Refund amount"),
+      method: oneOf(text(form, "method"), ["bkash", "nagad", "bank_transfer"] as const, "refund method"),
+      occurredOn: text(form, "occurredOn"),
+      reference: optional(form, "reference"),
+    });
+  } catch (error) {
+    return formError(error, form);
+  }
+  back(orderId, "advance-refunded");
+  return {};
+}
+
 export async function rtoChargeAction(_: FormState, form: FormData): Promise<FormState> {
   const principal = await requireAdmin("payments:record");
   const orderId = text(form, "orderId");
@@ -308,7 +383,7 @@ export async function createReturnAction(_: FormState, form: FormData): Promise<
 
 export async function returnStepAction(_: FormState, form: FormData): Promise<FormState> {
   const step = text(form, "step");
-  const principal = await requireAdmin(step === "refund" ? "payments:record" : "orders:write");
+  const principal = await requireAdmin(step === "refund" || step === "approve" || step === "reject" ? returnStepPermission(step) : "orders:write");
   const orderId = text(form, "orderId");
   try {
     const ref = { ...orderRef(form), returnId: text(form, "returnId") };

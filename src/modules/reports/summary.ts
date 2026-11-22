@@ -28,7 +28,8 @@ export type PeriodReport = {
     byFulfilmentStatus: Record<string, Bucket>;
     byPaymentStatus: Record<string, Bucket>;
   };
-  money: { collected: Bucket; settled: Bucket; deducted: Bucket; refunded: Bucket };
+  /** COD money (collected, settled, deducted), return refunds, and manual advance payments (ADR-0013), each kept apart. */
+  money: { collected: Bucket; settled: Bucket; deducted: Bucket; refunded: Bucket; advanceReceived: Bucket; advanceReversed: Bucket; advanceRefunded: Bucket };
   costs: { rtoCharges: Bucket; returnShippingBusiness: Bucket; returnShippingCustomer: Bucket };
   stock: { receipts: Bucket; dispatches: Bucket; adjustmentsIn: Bucket; adjustmentsOut: Bucket; returnRestocks: Bucket };
   outstanding: Outstanding;
@@ -37,13 +38,15 @@ export type PeriodReport = {
 export type Outstanding = {
   /** Verified (confirmed) orders not dispatched yet: their totals are expected COD, not money. */
   verifiedNotDispatched: Bucket;
-  /** Dispatched or delivered confirmed orders: total minus collected. */
+  /** Dispatched or delivered confirmed orders: total minus collected and minus verified advance payments. */
   awaitingCollection: Bucket;
+  /** Cancelled or returned (RTO) orders holding verified advance money not yet paid back (a manual refund is due). */
+  advanceRefundDue: Bucket;
   /** Collected by the courier and not yet accounted for: collected minus settled minus deducted, every order. */
   heldByCourier: Bucket;
   /** All-time sums of the payment entries, and the same sums from the orders' running totals. */
-  ledger: { collectedPaisa: number; settledPaisa: number; deductedPaisa: number; refundedPaisa: number };
-  orderTotals: { collectedPaisa: number; settledPaisa: number; deductedPaisa: number; refundedPaisa: number };
+  ledger: { collectedPaisa: number; settledPaisa: number; deductedPaisa: number; refundedPaisa: number; advanceReceivedPaisa: number; advanceRefundedPaisa: number };
+  orderTotals: { collectedPaisa: number; settledPaisa: number; deductedPaisa: number; refundedPaisa: number; advanceReceivedPaisa: number; advanceRefundedPaisa: number };
   /** True when the entries and the running totals agree (they are written in one transaction). */
   reconciled: boolean;
 };
@@ -62,26 +65,47 @@ export async function getOutstanding(tx: Db): Promise<Outstanding> {
     select
       count(*) filter (where order_status = 'confirmed' and fulfilment_status in ('unfulfilled', 'packed')) as vnd_count,
       coalesce(sum(total_paisa) filter (where order_status = 'confirmed' and fulfilment_status in ('unfulfilled', 'packed')), 0) as vnd_amount,
-      count(*) filter (where order_status = 'confirmed' and fulfilment_status in ('dispatched', 'delivered') and cod_collected_paisa < total_paisa) as ac_count,
-      coalesce(sum(total_paisa - cod_collected_paisa) filter (where order_status = 'confirmed' and fulfilment_status in ('dispatched', 'delivered')), 0) as ac_amount,
+      count(*) filter (where order_status = 'confirmed' and fulfilment_status in ('dispatched', 'delivered') and cod_collected_paisa + advance_received_paisa < total_paisa) as ac_count,
+      coalesce(sum(total_paisa - cod_collected_paisa - advance_received_paisa) filter (where order_status = 'confirmed' and fulfilment_status in ('dispatched', 'delivered')), 0) as ac_amount,
+      count(*) filter (where (order_status = 'cancelled' or (order_status = 'confirmed' and fulfilment_status = 'rto_received')) and advance_received_paisa > advance_refunded_paisa) as rd_count,
+      coalesce(sum(advance_received_paisa - advance_refunded_paisa) filter (where order_status = 'cancelled' or (order_status = 'confirmed' and fulfilment_status = 'rto_received')), 0) as rd_amount,
       count(*) filter (where cod_settled_paisa + cod_deducted_paisa < cod_collected_paisa) as held_count,
       coalesce(sum(cod_collected_paisa - cod_settled_paisa - cod_deducted_paisa), 0) as held_amount,
       coalesce(sum(cod_collected_paisa), 0) as o_collected,
       coalesce(sum(cod_settled_paisa), 0) as o_settled,
       coalesce(sum(cod_deducted_paisa), 0) as o_deducted,
       coalesce(sum(refunded_paisa), 0) as o_refunded,
+      coalesce(sum(advance_received_paisa), 0) as o_advance,
+      coalesce(sum(advance_refunded_paisa), 0) as o_advance_refunded,
+      (select coalesce(sum(amount_paisa) filter (where kind = 'advance_received'), 0) - coalesce(sum(amount_paisa) filter (where kind = 'advance_reversed'), 0) from payment_entries) as l_advance,
+      (select coalesce(sum(amount_paisa) filter (where kind = 'advance_refunded'), 0) from payment_entries) as l_advance_refunded,
       (select coalesce(sum(amount_paisa) filter (where kind = 'collected'), 0) from payment_entries) as l_collected,
       (select coalesce(sum(amount_paisa) filter (where kind = 'settled'), 0) from payment_entries) as l_settled,
       (select coalesce(sum(amount_paisa) filter (where kind = 'deducted'), 0) from payment_entries) as l_deducted,
       (select coalesce(sum(amount_paisa) filter (where kind = 'refunded'), 0) from payment_entries) as l_refunded
     from orders`);
   const r = rows[0];
-  const ledger = { collectedPaisa: exactInteger(r.l_collected), settledPaisa: exactInteger(r.l_settled), deductedPaisa: exactInteger(r.l_deducted), refundedPaisa: exactInteger(r.l_refunded) };
-  const orderTotals = { collectedPaisa: exactInteger(r.o_collected), settledPaisa: exactInteger(r.o_settled), deductedPaisa: exactInteger(r.o_deducted), refundedPaisa: exactInteger(r.o_refunded) };
+  const ledger = {
+    collectedPaisa: exactInteger(r.l_collected),
+    settledPaisa: exactInteger(r.l_settled),
+    deductedPaisa: exactInteger(r.l_deducted),
+    refundedPaisa: exactInteger(r.l_refunded),
+    advanceReceivedPaisa: exactInteger(r.l_advance),
+    advanceRefundedPaisa: exactInteger(r.l_advance_refunded),
+  };
+  const orderTotals = {
+    collectedPaisa: exactInteger(r.o_collected),
+    settledPaisa: exactInteger(r.o_settled),
+    deductedPaisa: exactInteger(r.o_deducted),
+    refundedPaisa: exactInteger(r.o_refunded),
+    advanceReceivedPaisa: exactInteger(r.o_advance),
+    advanceRefundedPaisa: exactInteger(r.o_advance_refunded),
+  };
   return {
     verifiedNotDispatched: bucket({ count: r.vnd_count, amount: r.vnd_amount }),
     awaitingCollection: bucket({ count: r.ac_count, amount: r.ac_amount }),
     heldByCourier: bucket({ count: r.held_count, amount: r.held_amount }),
+    advanceRefundDue: bucket({ count: r.rd_count, amount: r.rd_amount }),
     ledger,
     orderTotals,
     reconciled:
@@ -89,6 +113,8 @@ export async function getOutstanding(tx: Db): Promise<Outstanding> {
       ledger.settledPaisa === orderTotals.settledPaisa &&
       ledger.deductedPaisa === orderTotals.deductedPaisa &&
       ledger.refundedPaisa === orderTotals.refundedPaisa &&
+      ledger.advanceReceivedPaisa === orderTotals.advanceReceivedPaisa &&
+      ledger.advanceRefundedPaisa === orderTotals.advanceRefundedPaisa &&
       exactInteger(r.held_amount) === ledger.collectedPaisa - ledger.settledPaisa - ledger.deductedPaisa,
   };
 }
@@ -144,7 +170,15 @@ export async function getPeriodReport(db: Db, range: DateRange): Promise<PeriodR
         byFulfilmentStatus: breakdown("fulfilment_status"),
         byPaymentStatus: breakdown("payment_status"),
       },
-      money: { collected: pick("money", "collected"), settled: pick("money", "settled"), deducted: pick("money", "deducted"), refunded: pick("money", "refunded") },
+      money: {
+        collected: pick("money", "collected"),
+        settled: pick("money", "settled"),
+        deducted: pick("money", "deducted"),
+        refunded: pick("money", "refunded"),
+        advanceReceived: pick("money", "advance_received"),
+        advanceReversed: pick("money", "advance_reversed"),
+        advanceRefunded: pick("money", "advance_refunded"),
+      },
       costs: {
         rtoCharges: pick("rto", "rto"),
         returnShippingBusiness: pick("shipping", "business"),

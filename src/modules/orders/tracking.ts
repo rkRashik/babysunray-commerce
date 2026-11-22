@@ -1,13 +1,15 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type { Db } from "@/db/database";
-import { orderItems, orders, orderTrackingTokens } from "@/db/schema";
+import { advancePayments, orderItems, orders, orderTrackingTokens } from "@/db/schema";
 import type { Actor } from "../actor";
 import { DomainError } from "../domain-error";
 import { consumePublicLimit } from "../rate-limit/service";
+import { type PaymentDetails, paymentDetails } from "../settings/payments";
+import { MAX_OPEN_REFERENCES, MAX_REFERENCES, submitReference } from "./advance";
 import { addEvent, lockOrder, type OrderActor } from "./internal";
-import { allowedActions, formatOrderNumber, maskName, maskPhone, trackingLinkLive, ZONE_LABELS } from "./rules";
+import { advanceRefundDue, allowedActions, amountDue, formatOrderNumber, maskName, maskPhone, trackingLinkLive, ZONE_LABELS } from "./rules";
 import { customerCancel, requestCancellation } from "./service";
 
 // Guest order tracking (founder rule K, S-15). A link carries a 256-bit random token; only its SHA-256 digest
@@ -85,7 +87,22 @@ export type GuestView = {
   cancellationRequested: boolean;
   canCancel: boolean;
   canRequestCancellation: boolean;
+  /**
+   * How the order is paid. For a manual advance payment: what is still due, where to send it (the store's current
+   * receiving details, null when the method is no longer offered), and the state of the customer's references. A
+   * reference submitted is never "paid": only the shop's verification is (`verifiedPaisa`).
+   */
+  payment: {
+    method: string;
+    dueNowPaisa: number;
+    verifiedPaisa: number;
+    state: "cod" | "awaiting_payment" | "reference_submitted" | "reference_problem" | "part_paid" | "paid" | "refund_due" | "refunded" | "not_needed";
+    details: PaymentDetails | null;
+    canSubmitReference: boolean;
+  };
 };
+
+type PaymentState = GuestView["payment"]["state"];
 
 /** The minimal, masked view a tracking link shows: no address, phone or name in full, no notes, no ids. */
 export async function guestView(db: Db, token: unknown): Promise<GuestView | null> {
@@ -101,6 +118,29 @@ export function viewOf(db: Db, orderId: string): Promise<GuestView | null> {
     const { order, state, now } = locked;
     const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, orderId)).orderBy(asc(orderItems.sku));
     const actions = allowedActions(state, now);
+    const references = order.paymentMethod === "cod" ? [] : await tx.select({ status: advancePayments.status, source: advancePayments.source }).from(advancePayments).where(eq(advancePayments.orderId, orderId)).orderBy(desc(advancePayments.createdAt));
+    const fromCustomer = references.filter((r) => r.source === "customer");
+    const due = amountDue(order);
+    const latest = references.find((r) => r.status !== "reversed")?.status;
+    const paymentState: PaymentState =
+      order.paymentMethod === "cod"
+        ? "cod"
+        : advanceRefundDue(order)
+          ? "refund_due"
+          : order.advanceRefundedPaisa > 0
+            ? "refunded"
+            : order.orderStatus === "cancelled"
+              ? "not_needed"
+              : due === 0
+            ? "paid"
+            : references.some((r) => r.status === "submitted")
+              ? "reference_submitted"
+              : latest === "rejected"
+                ? "reference_problem"
+                : order.advanceReceivedPaisa > 0
+                  ? "part_paid"
+                  : "awaiting_payment";
+    const open = order.paymentMethod !== "cod" && due > 0 && order.orderStatus !== "closed" && order.orderStatus !== "cancelled" && order.fulfilmentStatus !== "rto" && order.fulfilmentStatus !== "rto_received";
     return {
       reference: formatOrderNumber(order.number),
       placedAt: order.createdAt.toISOString(),
@@ -116,8 +156,22 @@ export function viewOf(db: Db, orderId: string): Promise<GuestView | null> {
       cancellationRequested: state.openCancellationRequest,
       canCancel: actions.has("customer_cancel"),
       canRequestCancellation: actions.has("customer_request_cancellation"),
+      payment: {
+        method: order.paymentMethod,
+        dueNowPaisa: due,
+        verifiedPaisa: order.advanceReceivedPaisa,
+        state: paymentState,
+        details: open ? await paymentDetails(tx, order.paymentMethod) : null,
+        canSubmitReference: open && fromCustomer.filter((r) => r.status === "submitted").length < MAX_OPEN_REFERENCES && fromCustomer.length < MAX_REFERENCES,
+      },
     };
   });
+}
+
+/** The customer's transfer reference through the link (the caller checked the link). Never marks anything paid. */
+export async function referenceFor(db: Db, orderId: string, reference: unknown): Promise<GuestView | null> {
+  await submitReference(db, orderId, reference);
+  return viewOf(db, orderId);
 }
 
 /**

@@ -6,8 +6,8 @@ import { parseTakaToPaisa } from "@/modules/money";
 // Form handling shared by Admin Server Actions: read only the expected fields, turn service errors
 // into safe messages with the labels the Owner sees, and never show or log anything else.
 
-/** An action's answer to its form: a safe message, the typed values to show again, or a one-time link. */
-export type FormState = { error?: string; values?: Record<string, string>; link?: string };
+/** An action's answer to its form: a safe message, the typed values to show again, or a one-time link (and what it is). */
+export type FormState = { error?: string; values?: Record<string, string>; link?: string; linkNote?: string };
 
 /** Field names a form may send back (letters and digits, never the idempotency key). */
 export const isFieldName = (name: string) => /^[a-zA-Z][a-zA-Z0-9]*$/.test(name) && name !== "idempotencyKey";
@@ -70,6 +70,16 @@ const LABELS: Record<string, string> = {
   bodyEn: "English text",
   bodyBn: "Bangla text",
   contentSha256: "Reviewed content",
+  email: "Email",
+  role: "Role",
+  accountName: "Account name",
+  accountNumber: "Account number",
+  bankName: "Bank name",
+  branchName: "Branch",
+  routingNumber: "Routing number",
+  instructionsEn: "Instructions (English)",
+  instructionsBn: "Instructions (Bangla)",
+  receivedOn: "Date received",
 };
 
 function readable(message: string): string {

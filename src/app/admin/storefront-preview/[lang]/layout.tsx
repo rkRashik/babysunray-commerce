@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { flFontVariables } from "@/app/_design/fonts";
 import { currentStoreIdentity } from "@/app/_design/identity";
 import { getDb } from "@/db/client";
+import { enabledPaymentMethods } from "@/modules/settings/payments";
 import { dictionary, isLang } from "@/modules/storefront/i18n";
 import { previewFacets } from "@/modules/storefront/service";
 import { requireAdmin } from "../../_lib/session";
@@ -24,13 +25,20 @@ export default async function PreviewLayout({ children, params }: { children: Re
   const { lang } = await params;
   if (!isLang(lang)) notFound();
   const principal = await requireAdmin("storefront:preview");
-  const facets = await previewFacets(getDb(), principal);
+  const [facets, payments] = await Promise.all([previewFacets(getDb(), principal), enabledPaymentMethods(getDb())]);
   const t = dictionary(lang);
   const identity = await currentStoreIdentity();
   // The installation's colours (validated for contrast) replace ink, sun and paper for this subtree.
   const theme = { "--color-sf-ink": identity.theme.ink, "--color-sf-sun": identity.theme.accent, "--color-sf-paper": identity.theme.paper } as React.CSSProperties;
   return (
-    <SfFrame lang={lang} className={`sf ${flFontVariables} flex min-h-dvh flex-col`} style={theme} surface="preview" actions={{ quote: quoteCartAction, check: simulateCheckoutAction }}>
+    <SfFrame
+      lang={lang}
+      className={`sf ${flFontVariables} flex min-h-dvh flex-col`}
+      style={theme}
+      surface="preview"
+      actions={{ quote: quoteCartAction, check: simulateCheckoutAction }}
+      payments={payments.map((p) => p.method)}
+    >
       <a href="#sf-main" className="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-50 focus:rounded-full focus:bg-sf-card focus:px-5 focus:py-3 focus:shadow-lg">
         {t.skip}
       </a>

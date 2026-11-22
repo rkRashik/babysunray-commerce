@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { getDb } from "@/db/client";
 import { regenerateRecoveryCodes } from "@/modules/auth/setup";
+import { DomainError } from "@/modules/domain-error";
 import { approvePublicationRuleOnce, updateSocialLinksOnce, updateStoreIdentityOnce } from "@/modules/settings/store";
 import { formError, type FormState, text, wholeNumber } from "../_lib/form";
 import { requireAdmin } from "../_lib/session";
@@ -60,5 +61,7 @@ export async function approvePublicationRuleAction(_: FormState, form: FormData)
 /** New recovery codes for the signed-in Owner, returned once to the page (never in a URL). */
 export async function regenerateRecoveryCodesAction(): Promise<string[]> {
   const principal = await requireAdmin();
+  // Recovery codes recover the Owner's account only (ADR-0012); staff get set-password links from the Owner (ADR-0013).
+  if (principal.role !== "owner") throw new DomainError("FORBIDDEN", "Recovery codes are for the Owner.");
   return regenerateRecoveryCodes(getDb(), principal.userId);
 }

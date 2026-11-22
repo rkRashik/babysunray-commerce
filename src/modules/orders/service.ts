@@ -1,7 +1,7 @@
 import "server-only";
 import { and, asc, eq, inArray, lte, sql } from "drizzle-orm";
 import type { Db } from "@/db/database";
-import { cancellationRequests, deliveryZones, orderItems, orders, products, quarantineItems, variants } from "@/db/schema";
+import { cancellationRequests, deliveryZones, orderItems, orders, paymentMethods, products, quarantineItems, variants } from "@/db/schema";
 import type { Actor } from "../actor";
 import { normalizeSku } from "../catalogue/rules";
 import { DomainError, invalidInput } from "../domain-error";
@@ -14,6 +14,8 @@ import {
   MAX_ORDER_LINES,
   normalizeBdPhone,
   optionalNote,
+  ORDER_PAYMENT_METHODS,
+  type OrderPaymentMethod,
   ORDER_SOURCES,
   type OrderSource,
   requiredText,
@@ -34,6 +36,8 @@ export type NewOrder = {
   deliveryZone: DeliveryZone;
   note?: string | null;
   items: { sku: string; quantity: number }[];
+  /** Cash on delivery when absent; a manual method only while the Owner has it enabled (ADR-0013). */
+  paymentMethod?: OrderPaymentMethod;
 };
 
 /** Validates and merges lines: one line per SKU, quantities added up. */
@@ -57,6 +61,8 @@ function normaliseItems(items: NewOrder["items"]): { sku: string; quantity: numb
 export async function submitOrder(tx: Db, input: NewOrder, actor: OrderActor): Promise<Order> {
   if (!ORDER_SOURCES.includes(input.source)) throw invalidInput("source", "must be website, messenger, whatsapp or other");
   if (!DELIVERY_ZONES.includes(input.deliveryZone)) throw invalidInput("deliveryZone", "must be dhaka_city or outside_dhaka");
+  const paymentMethod = input.paymentMethod ?? "cod";
+  if (!ORDER_PAYMENT_METHODS.includes(paymentMethod)) throw invalidInput("paymentMethod", "must be cod, bkash, nagad or bank_transfer");
   const values = {
     source: input.source,
     customerName: requiredText(input.customerName, "customerName", 100),
@@ -72,6 +78,11 @@ export async function submitOrder(tx: Db, input: NewOrder, actor: OrderActor): P
     throw new DomainError("DELIVERY_ZONE_UNAVAILABLE", "No active delivery charge is configured for this zone, so the order cannot be taken.");
   }
   const deliveryChargePaisa = validateAmountPaisa(zone.chargePaisa, "deliveryCharge", { allowZero: true, max: MAX_DELIVERY_CHARGE_PAISA });
+  if (paymentMethod !== "cod") {
+    // Read in the order's transaction: a method the Owner turned off a moment ago is not offered any more.
+    const [method] = await tx.select({ enabled: paymentMethods.enabled }).from(paymentMethods).where(eq(paymentMethods.method, paymentMethod));
+    if (!method?.enabled) throw new DomainError("PAYMENT_METHOD_UNAVAILABLE", "This payment method is not offered now. Choose another one.");
+  }
 
   const catalogue = await tx
     .select({ variant: variants, productStatus: products.status, nameEn: products.nameEn, nameBn: products.nameBn })
@@ -114,13 +125,14 @@ export async function submitOrder(tx: Db, input: NewOrder, actor: OrderActor): P
       fulfilmentStatus: "unfulfilled",
       paymentStatus: "unpaid",
       returnStatus: "none",
+      paymentMethod,
       verificationExpiresAt: sql`now() + make_interval(hours => ${VERIFICATION_WINDOW_HOURS})`,
       createdByUserId: actor.type === "user" ? actor.ref : null,
     })
     .returning();
   await tx.insert(orderItems).values(snapshot.map((l) => ({ ...l, orderId: order.id })));
   await reserveStock(tx, order.id, snapshot.map((l) => ({ variantId: l.variantId, quantity: l.quantity })));
-  await addEvent(tx, order.id, "submitted", actor, { source: order.source, lines: snapshot.length, totalPaisa, deliveryChargePaisa });
+  await addEvent(tx, order.id, "submitted", actor, { source: order.source, lines: snapshot.length, totalPaisa, deliveryChargePaisa, paymentMethod });
   return order;
 }
 
@@ -187,17 +199,31 @@ export async function releaseOverdue(db: Db): Promise<void> {
   if (due) await expireOverdueVerifications(db);
 }
 
-/** Effective cancellation (rule C): releases any active hold exactly once and closes the order. */
+/**
+ * Effective cancellation (rule C): releases any active hold exactly once and closes the order. Verified advance money is
+ * never settled or returned by this: the order then shows that a manual refund is due (refund_advance), recorded by hand.
+ */
 async function cancel(tx: Db, order: Order, actor: OrderActor, event: string) {
   const released = await releaseReservations(tx, order.id, "cancelled");
   const updated = await updateOrder(tx, order.id, { orderStatus: "cancelled", closedAt: sql`now()` });
-  await addEvent(tx, order.id, event, actor, { releasedUnits: released, from: order.orderStatus, fulfilment: order.fulfilmentStatus });
+  const held = order.advanceReceivedPaisa - order.advanceRefundedPaisa;
+  await addEvent(tx, order.id, event, actor, { releasedUnits: released, from: order.orderStatus, fulfilment: order.fulfilmentStatus, ...(held > 0 ? { refundDuePaisa: held } : {}) });
   return updated;
 }
 
+/** Whether the person cancelling may cancel an order that holds verified advance money (its cancellation makes a refund due). */
+export type CancelAuthority = { mayCancelPaid: boolean };
+
+function assertMayCancel(order: Order, authority: CancelAuthority) {
+  if (order.advanceReceivedPaisa - order.advanceRefundedPaisa > 0 && !authority.mayCancelPaid) {
+    throw new DomainError("FORBIDDEN", "This order holds a verified advance payment. Only someone who can verify payments can cancel it, because the money must then be refunded.");
+  }
+}
+
 /** Owner cancellation: pending, expired, or confirmed before dispatch. An open customer request is approved with it. */
-export async function cancelOrder(tx: Db, orderId: string, expectedVersion: number, actor: Actor): Promise<Order> {
+export async function cancelOrder(tx: Db, orderId: string, expectedVersion: number, actor: Actor, authority: CancelAuthority = { mayCancelPaid: false }): Promise<Order> {
   const { order } = await lockForAction(tx, orderId, "cancel", expectedVersion);
+  assertMayCancel(order, authority);
   if (await settleOpenRequest(tx, orderId, "approved", actor)) await addEvent(tx, orderId, "cancellation_request_approved", actor);
   return cancel(tx, order, actor, "cancelled_by_owner");
 }
@@ -217,9 +243,17 @@ export async function requestCancellation(tx: Db, orderId: string, reason?: stri
 }
 
 /** The Owner's decision on an open request: approve cancels (once); reject leaves the order as it is. */
-export async function reviewCancellation(tx: Db, orderId: string, expectedVersion: number, decision: "approve" | "reject", actor: Actor): Promise<Order> {
+export async function reviewCancellation(
+  tx: Db,
+  orderId: string,
+  expectedVersion: number,
+  decision: "approve" | "reject",
+  actor: Actor,
+  authority: CancelAuthority = { mayCancelPaid: false },
+): Promise<Order> {
   const { order } = await lockForAction(tx, orderId, "review_cancellation", expectedVersion);
   if (decision === "approve") {
+    assertMayCancel(order, authority);
     await settleOpenRequest(tx, orderId, "approved", actor);
     await addEvent(tx, orderId, "cancellation_request_approved", actor);
     return cancel(tx, order, actor, "cancelled_on_request");

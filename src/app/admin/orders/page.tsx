@@ -17,6 +17,7 @@ import { requireAdmin } from "../_lib/session";
 import { clearOrderSearchAction, orderTransitionAction } from "./actions";
 import { openSearch, SEARCH_COOKIE } from "./_lib/search-cookie";
 import { BulkBar } from "./_components/bulk-bar";
+import { METHOD_LABELS } from "@/modules/settings/payments";
 import { bdt, label, overdueBy, relative, StatusPill } from "./_components/labels";
 import { OrderFilters } from "./_components/order-filters";
 import { OrderQuickView } from "./_components/quick-view";
@@ -36,12 +37,14 @@ const CHIPS: { label: string; queue?: OrderQueue; attention?: true }[] = [
   { label: "All orders" },
   { label: "Needs attention", attention: true },
   { label: "To verify", queue: "pending" },
+  { label: "Payments to verify", queue: "payment_to_verify" },
   { label: "To pack", queue: "to_pack" },
   { label: "To dispatch", queue: "to_dispatch" },
   { label: "In transit", queue: "in_transit" },
   { label: "COD to collect", queue: "awaiting_collection" },
   { label: "Not settled", queue: "unsettled" },
   { label: "Returning (RTO)", queue: "returning" },
+  { label: "Refunds due", queue: "refund_due" },
 ];
 const QUEUE_TITLES: Record<OrderQueue, string> = {
   pending: "Waiting for verification",
@@ -53,6 +56,8 @@ const QUEUE_TITLES: Record<OrderQueue, string> = {
   returning: "Returning to sender (RTO)",
   awaiting_collection: "COD not fully collected",
   unsettled: "Collected, not fully settled to you",
+  payment_to_verify: "Advance payment references to verify",
+  refund_due: "Cancelled with advance money to refund",
 };
 const PAGE_SIZE = 25;
 
@@ -107,6 +112,31 @@ function Deadline({ order, now }: { order: Row; now: Date }) {
 /** Payment, without "nothing collected" noise before there is anything to collect; COD that is due or not settled stands out. */
 function PaymentCell({ order, hideEmpty = false, labelled = false }: { order: Row; hideEmpty?: boolean; labelled?: boolean }) {
   const none = hideEmpty ? null : <span className="text-sm text-gray-500">—</span>;
+  const prefixed = (pill: React.ReactNode) => (
+    <>
+      {labelled ? <span className="sr-only">Payment: </span> : null}
+      {pill}
+    </>
+  );
+  // A manual advance payment: never "paid" until the Owner verified the money (ADR-0013).
+  if (order.paymentMethod !== "cod") {
+    const name = METHOD_LABELS[order.paymentMethod].en;
+    if (order.orderStatus === "cancelled") {
+      return order.advanceReceivedPaisa > order.advanceRefundedPaisa
+        ? prefixed(
+            <span className="of-pill" data-tone="bad">
+              Refund due
+            </span>,
+          )
+        : none;
+    }
+    const paid = order.advanceReceivedPaisa >= order.totalPaisa;
+    return prefixed(
+      <span className="of-pill" data-tone={paid ? "ok" : "wait"} data-testid="advance-pill">
+        {paid ? `${name} verified` : order.advanceReceivedPaisa > 0 ? `${name} part paid` : `${name} not verified`}
+      </span>,
+    );
+  }
   if (order.orderStatus === "cancelled") return none;
   const dispatched = order.fulfilmentStatus === "dispatched" || order.fulfilmentStatus === "delivered";
   const prefix = labelled ? <span className="sr-only">Payment: </span> : null;

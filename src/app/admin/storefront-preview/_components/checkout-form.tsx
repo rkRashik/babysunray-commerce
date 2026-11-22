@@ -10,6 +10,7 @@ import { useCart } from "./cart-store";
 import { EmptyBag, LineThumb, lineName, TotalsList, useZoneQuote, ZoneChoice } from "./cart-view";
 import { GoogleSignInButton } from "./customer-auth";
 import { useSurface, useWide } from "./frame";
+import { PaymentInstructions } from "./payment-instructions";
 
 // The guest checkout in three steps: contact, delivery, review; then a confirmation. Every step asks the server to validate
 // the details and re-check every line's price and stock exactly as an order would be checked (the surface's check action)
@@ -27,7 +28,16 @@ type Field = "name" | "phone" | "address";
 type Placed = {
   replayed: boolean;
   trackingToken: string | null;
-  order: { reference: string; placedAt: string; deliveryZone: string; items: { sku: string; name: { en: string | null; bn: string | null }; size: string | null; colour: string | null; quantity: number; lineTotalPaisa: number }[]; subtotalPaisa: number; deliveryChargePaisa: number; totalPaisa: number };
+  order: {
+    reference: string;
+    placedAt: string;
+    deliveryZone: string;
+    items: { sku: string; name: { en: string | null; bn: string | null }; size: string | null; colour: string | null; quantity: number; lineTotalPaisa: number }[];
+    subtotalPaisa: number;
+    deliveryChargePaisa: number;
+    totalPaisa: number;
+    payment?: { method: string; amountPaisa: number; details: Parameters<typeof PaymentInstructions>[0]["details"] };
+  };
 };
 
 const newKey = () => crypto.randomUUID();
@@ -77,7 +87,7 @@ type ErrorKey = keyof CheckoutResult["errors"];
 const STEP_FIELDS: Record<Exclude<Stage, "done">, ErrorKey[]> = { contact: ["name", "phone"], delivery: ["address", "zone", "cart"], review: ["name", "phone", "address", "zone", "cart"] };
 const NEXT: Record<Exclude<Stage, "done">, Stage> = { contact: "delivery", delivery: "review", review: "done" };
 
-function Summary({ quote, lang, zone }: { quote: Quote | null; lang: Lang; zone: string }) {
+function Summary({ quote, lang, zone, totalLabel }: { quote: Quote | null; lang: Lang; zone: string; totalLabel?: string }) {
   const count = (n: number) => (lang === "bn" ? toBnDigits(n) : String(n));
   return (
     <div className="space-y-5">
@@ -96,7 +106,7 @@ function Summary({ quote, lang, zone }: { quote: Quote | null; lang: Lang; zone:
           </li>
         ))}
       </ul>
-      <TotalsList quote={quote} lang={lang} zone={zone} />
+      <TotalsList quote={quote} lang={lang} zone={zone} totalLabel={totalLabel} />
     </div>
   );
 }
@@ -122,13 +132,17 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
   const t = dictionary(lang);
   const id = useId();
   const wide = useWide();
-  const { surface, root, actions, customer, policies, signIn } = useSurface();
+  const { surface, root, actions, customer, policies, signIn, payments } = useSurface();
   const shop = surface === "shop";
   const [, setCart] = useCart();
   const heading = useRef<HTMLHeadingElement>(null);
   // The area chosen in the bag carries over; the server prices it again here and at every step.
   const { zone, setZone, lines, quote, state: quoteState, retry } = useZoneQuote();
   const [values, setValues] = useState<Record<Field, string>>({ name: customer?.name.slice(0, 100) ?? "", phone: "", address: "" });
+  // Cash on delivery unless the customer picks one of the advance methods the Owner enabled.
+  const [payment, setPayment] = useState("cod");
+  const method = payment === "cod" || payments.includes(payment) ? payment : "cod";
+  const totalLabel = method === "cod" ? undefined : t.totalAdvance;
   // One key per checkout: a retry after a lost answer sends the same key and gets the same order back.
   const key = useRef<string | null>(null);
   const [placed, setPlaced] = useState<Placed | null>(null);
@@ -196,6 +210,7 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
           items: q.lines.map((l) => ({ sku: l.sku, quantity: l.quantity, unitPricePaisa: l.unitPricePaisa })),
           deliveryChargePaisa: q.deliveryChargePaisa,
           totalPaisa: q.totalPaisa,
+          paymentMethod: method,
         }),
       });
     } catch {
@@ -231,6 +246,12 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
           </p>
           <p className="max-w-prose text-sf-ink-2">{t.orderReceivedBody}</p>
         </div>
+        {o.payment && o.payment.method !== "cod" ? (
+          <div className="space-y-3">
+            <PaymentInstructions lang={lang} details={o.payment.details} amountPaisa={o.payment.amountPaisa} method={o.payment.method} />
+            <p className="text-[0.9375rem]">{t.payAfterSend}</p>
+          </div>
+        ) : null}
         {placed.trackingToken ? <TrackingLink lang={lang} token={placed.trackingToken} /> : <p className="sf-note" data-tone="sun">{t.replayedNote}</p>}
         <section aria-labelledby={`${id}-next`} className="sf-card space-y-4 p-5" data-testid="next-steps">
           <h3 id={`${id}-next`} className="sf-plain text-lg">
@@ -259,7 +280,7 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
             <dd className="text-end">{formatTaka(o.deliveryChargePaisa, lang)}</dd>
             <dt className="flex items-center gap-2 font-bold">
               <Banknote aria-hidden="true" size={18} strokeWidth={1.75} />
-              {t.total}
+              {o.payment && o.payment.method !== "cod" ? t.totalAdvance : t.total}
             </dt>
             <dd className="sf-price text-end text-[1.5rem]" data-testid="placed-total">
               {formatTaka(o.totalPaisa, lang)}
@@ -395,7 +416,7 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
         <span className="sf-num">{total !== null ? formatTaka(total, lang) : ""}</span>
       </summary>
       <div className="pb-5">
-        <Summary quote={quote} lang={lang} zone={zone} />
+        <Summary quote={quote} lang={lang} zone={zone} totalLabel={totalLabel} />
       </div>
     </details>
   );
@@ -410,7 +431,7 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
           {t.retry}
         </button>
       ) : null}
-      <Summary quote={quote} lang={lang} zone={zone} />
+      <Summary quote={quote} lang={lang} zone={zone} totalLabel={totalLabel} />
     </aside>
   );
 
@@ -457,7 +478,8 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
             </dd>
           </dl>
           {/* One total: the summary's "Total to pay on delivery" already says how it is paid. */}
-          <Summary quote={q} lang={lang} zone={q.zone ?? ""} />
+          <Summary quote={q} lang={lang} zone={q.zone ?? ""} totalLabel={totalLabel} />
+          {method !== "cod" ? <p className="text-[0.9375rem] text-sf-ink-2">{t.payAdvanceNote}</p> : null}
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
           <Link href={`${root}/${lang}/products`} className="sf-btn sf-btn-lg flex-1">
@@ -575,12 +597,28 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
                   {t.edit}
                 </button>
               </div>
-              <div className="flex items-center gap-3 p-4 text-[0.9375rem]">
-                <Banknote aria-hidden="true" size={20} strokeWidth={1.75} className="shrink-0" />
-                <p>
-                  <span className="font-semibold">{t.cod}.</span> {t.codNote}
-                </p>
-              </div>
+              {payments.length ? (
+                <fieldset className="space-y-2.5 p-4" data-testid="payment-choice">
+                  <legend className="text-[0.8125rem] font-semibold text-sf-ink-2">{t.payLegend}</legend>
+                  {["cod", ...payments].map((m) => (
+                    <label key={m} className="flex min-h-12 cursor-pointer items-start gap-3 rounded-2xl border-[1.5px] border-sf-line px-3.5 py-3 has-[:checked]:border-sf-ink has-[:checked]:bg-sf-sun-soft">
+                      <input type="radio" name="payment" value={m} checked={method === m} onChange={() => setPayment(m)} className="mt-1 h-4.5 w-4.5 shrink-0" />
+                      <span className="text-[0.9375rem]">
+                        <span className="block font-semibold">{m === "cod" ? t.cod : t.payAdvance(t.methodNames[m] ?? m)}</span>
+                        <span className="block text-sf-ink-2">{m === "cod" ? t.codNote : t.payAdvanceNote}</span>
+                      </span>
+                    </label>
+                  ))}
+                  {method !== "cod" ? <p className="text-[0.875rem] text-sf-ink-2">{t.payNotGateway}</p> : null}
+                </fieldset>
+              ) : (
+                <div className="flex items-center gap-3 p-4 text-[0.9375rem]">
+                  <Banknote aria-hidden="true" size={20} strokeWidth={1.75} className="shrink-0" />
+                  <p>
+                    <span className="font-semibold">{t.cod}.</span> {t.codNote}
+                  </p>
+                </div>
+              )}
             </div>
             <p className="sf-note">
               <PhoneCall aria-hidden="true" size={18} strokeWidth={1.75} />

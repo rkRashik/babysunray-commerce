@@ -63,7 +63,7 @@ export async function bootstrapStagingOwner(client: Client, rawInput: OwnerInput
   await client.query("begin");
   try {
     await client.query("lock table public.auth_users, public.user_access in exclusive mode");
-    const active = await client.query<{ n: number }>("select count(*)::int as n from public.user_access where disabled_at is null");
+    const active = await client.query<{ n: number }>("select count(*)::int as n from public.user_access where role = 'owner' and disabled_at is null");
     if (active.rows[0].n > 0) throw new Error("An Owner with active access already exists on this database. Sign in with it; nothing was changed.");
     const taken = await client.query<{ n: number }>("select count(*)::int as n from public.auth_users where email = $1", [input.email]);
     if (taken.rows[0].n > 0) throw new Error("An account with this email already exists. Use another email; nothing was changed.");

@@ -29,7 +29,7 @@ export function readRateLimits(env: Record<string, string | undefined>): RateLim
 }
 
 /** A counter for anonymous requests: storewide, per tracking link, or per client behind a trusted proxy (tracking_rate_limits). */
-export type PublicBucket = "failure" | "checkout" | "admin-setup" | "admin-recovery" | `link:${string}` | `checkout-client:${string}`;
+export type PublicBucket = "failure" | "checkout" | "admin-setup" | "admin-recovery" | "staff-invite" | `link:${string}` | `checkout-client:${string}`;
 
 /**
  * Counts one anonymous request in `bucket`'s current window (a minute, or an hour; fixed windows, one atomic upsert) and

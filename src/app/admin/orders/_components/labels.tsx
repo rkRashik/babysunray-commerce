@@ -15,8 +15,8 @@ const LABEL: Record<string, string> = {
   delivered: "Delivered",
   rto: "Returning to sender (RTO)",
   rto_received: "RTO received",
-  unpaid: "Nothing collected",
-  partially_collected: "Partly collected",
+  unpaid: "Nothing received",
+  partially_collected: "Partly paid",
   collected: "Collected, not fully settled",
   settled: "Settled",
   none: "No return",
@@ -61,6 +61,11 @@ const EVENTS: Record<string, string> = {
   inspection_rejected: "Inspection failed: kept out of stock",
   tracking_link_created: "Tracking link created",
   tracking_link_revoked: "Tracking link revoked",
+  advance_reference_submitted: "Customer sent a payment transaction ID (not verified)",
+  advance_verified: "Advance payment verified as received",
+  advance_reference_rejected: "Payment transaction ID rejected",
+  advance_reversed: "Advance payment verification undone",
+  advance_refunded: "Advance refund recorded",
 };
 export const eventLabel = (event: string) => EVENTS[event] ?? event.replace(/_/g, " ");
 

@@ -219,6 +219,9 @@ export const DATASETS: Dataset[] = [
       n("cod_settled_paisa"),
       n("cod_deducted_paisa", "Kept by the courier from the collected COD, as recorded from its statement"),
       n("refunded_paisa"),
+      t("payment_method", "cod, or bkash, nagad or bank_transfer for a manual advance payment"),
+      n("advance_received_paisa", "Advance money the Owner verified as received, net of undone verifications"),
+      n("advance_refunded_paisa", "Advance money paid back for a cancelled order"),
       n("rto_charge_paisa"),
       n("item_lines"),
       n("item_units"),
@@ -232,7 +235,8 @@ export const DATASETS: Dataset[] = [
     query: (where) => sql`
       select o.id as order_id, ${ref("o.number")} as order_reference, ${iso("o.created_at")} as created_at, o.source, o.order_status, o.fulfilment_status,
              o.payment_status, o.return_status, o.customer_name, o.customer_phone, o.delivery_address, o.delivery_zone, o.note,
-             o.subtotal_paisa, o.delivery_charge_paisa, o.total_paisa, o.cod_collected_paisa, o.cod_settled_paisa, o.cod_deducted_paisa, o.refunded_paisa, o.rto_charge_paisa,
+             o.subtotal_paisa, o.delivery_charge_paisa, o.total_paisa, o.cod_collected_paisa, o.cod_settled_paisa, o.cod_deducted_paisa, o.refunded_paisa,
+             o.payment_method, o.advance_received_paisa, o.advance_refunded_paisa, o.rto_charge_paisa,
              i.lines as item_lines, i.units as item_units, i.total as items_total_paisa,
              ${iso("o.verification_expires_at")} as verification_expires_at, ${iso("o.confirmed_at")} as confirmed_at,
              ${iso("o.delivered_at")} as delivered_at, ${iso("o.closed_at")} as closed_at, o.version
@@ -285,7 +289,7 @@ export const DATASETS: Dataset[] = [
   },
   {
     name: "payments",
-    title: "COD collection, settlement, courier deductions and refunds (append-only)",
+    title: "COD collection, settlement, courier deductions, refunds and advance payments (append-only)",
     personalData: false,
     dateColumn: { sql: sql`pe.occurred_on`, description: "the date entered for the payment", kind: "date" },
     orderFilters: true,
@@ -293,7 +297,10 @@ export const DATASETS: Dataset[] = [
       n("payment_entry_id"),
       t("order_id"),
       t("order_reference"),
-      t("kind", "collected (by the courier), settled (to the Owner), deducted (kept by the courier from what it collected) or refunded (to the customer)"),
+      t(
+        "kind",
+        "collected (by the courier), settled (to the Owner), deducted (kept by the courier from what it collected), refunded (to the customer, for a return), advance_received (a manual advance payment the Owner verified), advance_reversed (a mistaken verification undone) or advance_refunded (advance money paid back for a cancelled order)",
+      ),
       n("amount_paisa"),
       { key: "occurred_on", type: "date" },
       t("method"),

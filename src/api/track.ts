@@ -43,9 +43,10 @@ export async function trackingRequest<S extends z.ZodType<{ token: string }>>(
   schema: S,
   run: (db: Db, orderId: string, body: z.output<S>) => Promise<GuestView | null>,
   bulkhead: Bulkhead = anonymousDatabaseWork,
+  notAllowed = "This order can no longer be cancelled here. Please contact the shop.",
 ): Promise<Response> {
   const requestId = randomUUID();
-  const response = await track(request, schema, run, requestId, bulkhead);
+  const response = await track(request, schema, run, requestId, bulkhead, notAllowed);
   response.headers.set("x-request-id", requestId);
   return response;
 }
@@ -56,6 +57,7 @@ async function track<S extends z.ZodType<{ token: string }>>(
   run: (db: Db, orderId: string, body: z.output<S>) => Promise<GuestView | null>,
   requestId: string,
   bulkhead: Bulkhead,
+  notAllowed: string,
 ): Promise<Response> {
   try {
     if (request.headers.get("origin") !== getAuth().options.baseURL) return answer(403, { error: "forbidden" });
@@ -82,10 +84,10 @@ async function track<S extends z.ZodType<{ token: string }>>(
     });
     return done.ok ? done.value : BUSY();
   } catch (error) {
-    if (error instanceof DomainError && error.code === "INVALID_TRANSITION") {
-      return answer(409, { error: "not_allowed", message: "This order can no longer be cancelled here. Please contact the shop." });
-    }
-    if (error instanceof DomainError && error.code === "INVALID_INPUT") return answer(400, { error: "bad_request" });
+    if (error instanceof DomainError && error.code === "INVALID_TRANSITION") return answer(409, { error: "not_allowed", message: notAllowed });
+    // Fixed texts: a payment reference that is not shaped like one, or too many waiting for the shop.
+    if (error instanceof DomainError && error.code === "INVALID_INPUT") return answer(400, { error: "bad_request", message: "Please check what you typed and try again." });
+    if (error instanceof DomainError && error.code === "RATE_LIMITED") return answer(429, { error: "rate_limited", message: "The shop is still checking the references you sent. Please contact the shop." });
     // Name and SQL state only: never the message (it can hold query parameters) and never the body (the token).
     console.error(JSON.stringify({ level: "error", event: "tracking_failed", requestId, errorName: error instanceof Error ? error.name : typeof error, sqlState: pgErrorCode(error) ?? null }));
     return answer(500, { error: "internal" });

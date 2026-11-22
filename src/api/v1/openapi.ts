@@ -8,7 +8,7 @@ import { apiRegistry, PROBLEM_CODES, type ProblemCode } from "./schemas";
 // parameters are written out below. tests/db/api*.integration.test.ts check real responses against this
 // document, and tests/api/openapi.test.ts validates it against the OpenAPI 3.1 schema.
 
-export const API_VERSION = "1.6.0";
+export const API_VERSION = "1.7.0";
 
 const ref = (id: string) => ({ $ref: `#/components/schemas/${id}` });
 
@@ -158,7 +158,7 @@ function orderPaths() {
         request: { schemaId: "CreateOrderRequest", required: true },
         ok: { status: "201", description: "The created order.", schemaId: "OrderResponse" },
         notFound: ["VARIANT_NOT_FOUND"],
-        conflict: ["INSUFFICIENT_STOCK", "DELIVERY_ZONE_UNAVAILABLE", "VARIANT_NOT_ORDERABLE"],
+        conflict: ["INSUFFICIENT_STOCK", "DELIVERY_ZONE_UNAVAILABLE", "VARIANT_NOT_ORDERABLE", "PAYMENT_METHOD_UNAVAILABLE"],
         allow: "GET, POST",
       }),
     },
@@ -238,7 +238,7 @@ function orderPaths() {
         operationId: "advanceReturn",
         summary: "Receive, approve, reject, refund or complete a return",
         description:
-          "receive: the goods go into quarantine. approve/reject: only after every returned item is inspected. refund (payments:record): an approved return, bKash, Nagad or bank transfer, at most the money collected and not refunded and at most the goods' value. complete: an exchange, or a return where nothing was collected.",
+          "receive: the goods go into quarantine. approve/reject (returns:decide, since 1.7.0): only after every returned item is inspected. refund (payments:record): an approved return, bKash, Nagad or bank transfer, at most the money received (COD collected plus verified advance payments) and not refunded, and at most the goods' value. complete: an exchange, or a return where nothing was received.",
         permission: "orders:write",
         parameters: [orderId, uuidParameter("returnId")],
         request: { schemaId: "ReturnStepRequest", required: true },

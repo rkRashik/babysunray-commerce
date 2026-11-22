@@ -17,6 +17,8 @@ import { ActionPanel } from "../../_components/panel";
 import { MEASUREMENT_LABELS } from "../../_lib/labels";
 import { AdminShell, Section, formatTime, noticeFor, productTitle, sectionId } from "../../_components/shell";
 import { requireAdmin } from "../../_lib/session";
+import { roleHasPermission } from "@/modules/auth/permissions";
+import { userNames } from "@/modules/auth/staff";
 import { bdt } from "../../orders/_components/labels";
 import { ScrollArea } from "../../_components/scroll-area";
 
@@ -77,7 +79,10 @@ function Step({ n, title, done, children }: { n: number; title: string; done: bo
 }
 
 export default async function ProductPage({ params, searchParams }: Props) {
-  await requireAdmin("catalog:read", "stock:read");
+  const principal = await requireAdmin("catalog:read", "stock:read");
+  // Review and publish buttons only for the roles that hold them (ADR-0013); each action checks again on the server.
+  const canReview = roleHasPermission(principal.role, "catalog:review");
+  const canPublish = roleHasPermission(principal.role, "catalog:publish");
   const { productId } = await params;
   const db = getDb();
   const product = await getProductWithVariants(db, productId).catch((error: unknown) => {
@@ -93,6 +98,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
     searchParams,
   ]);
   const review = reviews.get(product.id);
+  const reviewers = await userNames(db, history.map((h) => h.reviewedByUserId));
   const publication = await publicationState(db, product.id, rule);
   const draft = product.status === "draft";
   const { title, lang } = productTitle(product);
@@ -381,7 +387,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
                   : `Outdated: reviewed on ${formatTime(review.reviewedAt)}, and the content (text, claims, sizes, photos, SKUs or prices) has changed since.`}
             </p>
             <p className="text-xs text-gray-600">A review records that you checked this content as it is now. It does not publish the product or make it visible to anyone.</p>
-            {draft && !review?.current && review ? (
+            {draft && !review?.current && review && canReview ? (
               <ActionForm action={reviewProductAction} idempotencyKey={randomUUID()} hidden={{ productId: product.id, contentSha256: review.contentSha256 }} submitLabel="Mark the current content as reviewed" variant="secondary" />
             ) : null}
             {history.length ? (
@@ -390,7 +396,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
                 <ul className="mt-2 space-y-1">
                   {history.map((h) => (
                     <li key={h.id}>
-                      {formatTime(h.createdAt)} by the Owner{(h.openItems as string[]).length ? ` · open then: ${(h.openItems as string[]).join(", ")}` : " · nothing open"}
+                      {formatTime(h.createdAt)} by {reviewers.get(h.reviewedByUserId) ?? "an Admin user"}{(h.openItems as string[]).length ? ` · open then: ${(h.openItems as string[]).join(", ")}` : " · nothing open"}
                     </li>
                   ))}
                 </ul>
@@ -415,7 +421,12 @@ export default async function ProductPage({ params, searchParams }: Props) {
                 </ul>
               </div>
             ) : null}
-            {draft && publication.blockers.length === 0 ? (
+            {draft && publication.blockers.length === 0 && !canPublish ? (
+              <p className="text-sm text-gray-700" data-testid="publish-needs-owner">
+                Ready to publish. Publishing is for the Owner: ask them to publish it.
+              </p>
+            ) : null}
+            {draft && publication.blockers.length === 0 && canPublish ? (
               <ActionForm
                 action={publishProductAction}
                 idempotencyKey={randomUUID()}
@@ -429,6 +440,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
                 <Link href={`/en/products/${product.slug}`} className={BUTTON_LINK}>
                   Open in the shop
                 </Link>
+                {canPublish ? (
                 <ActionForm
                   action={withdrawProductAction}
                   idempotencyKey={randomUUID()}
@@ -437,6 +449,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
                   variant="secondary"
                   confirm="Withdraw this product? It leaves the shop at once and becomes an editable draft. Orders and stock are not changed."
                 />
+                ) : null}
               </div>
             ) : null}
             {published.length ? (

@@ -122,6 +122,11 @@ export function OutstandingView({ o, charts = false }: { o: Outstanding; charts?
         </tfoot>
       </table>
       <p className="text-xs text-gray-600">Refunds recorded: {bdt(o.ledger.refundedPaisa)}. Refunds are paid by you and are separate from collection and settlement.</p>
+      <p className="text-xs text-gray-600" data-testid="advance-totals">
+        Advance payments verified (bKash, Nagad, bank): {bdt(o.ledger.advanceReceivedPaisa)}, of which paid back for cancelled orders: {bdt(o.ledger.advanceRefundedPaisa)}. Advance money
+        reaches your own account, so the courier never holds it.
+        {o.advanceRefundDue.count ? ` Refunds still due on ${o.advanceRefundDue.count} cancelled order${o.advanceRefundDue.count === 1 ? "" : "s"}: ${bdt(o.advanceRefundDue.amountPaisa)}.` : ""}
+      </p>
       <p className={`text-sm ${o.reconciled ? "text-green-900" : "font-semibold text-red-800"}`} data-testid="reconciled">
         {o.reconciled
           ? "Check passed: the payment entries agree with every order's running totals."
@@ -152,7 +157,15 @@ export function KpiTiles({ r }: { r: PeriodReport }) {
         <dl className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3">
           <Stat term="COD collected by courier" value={bdt(r.money.collected.amountPaisa)} note="Taken from customers by the courier." />
           <Stat term="Settled to you" value={bdt(r.money.settled.amountPaisa)} note="Paid to you by the courier." tone={r.money.settled.amountPaisa > 0 ? "ok" : undefined} />
-          <Stat term="Refunded" value={bdt(r.money.refunded.amountPaisa)} note="Paid back by you to customers." />
+          <Stat term="Refunded" value={bdt(r.money.refunded.amountPaisa + r.money.advanceRefunded.amountPaisa)} note="Paid back by you to customers (returns and cancelled advance payments)." />
+          {r.money.advanceReceived.count ? (
+            <Stat
+              term="Advance payments verified"
+              value={bdt(r.money.advanceReceived.amountPaisa - r.money.advanceReversed.amountPaisa)}
+              note="bKash, Nagad and bank transfers you checked in your account, less undone verifications."
+              tone="ok"
+            />
+          ) : null}
         </dl>
       </div>
     </div>
@@ -203,6 +216,14 @@ export function CodMoneySection({ r }: { r: PeriodReport }) {
           ["Settled to you", r.money.settled],
           ["Kept by the courier (recorded deductions)", r.money.deducted],
           ["Refunded to customers", r.money.refunded],
+        ]}
+      />
+      <Table
+        caption="Advance payments recorded (bKash, Nagad, bank transfer; by the date the money arrived or was paid back)"
+        rows={[
+          ["Verified as received", r.money.advanceReceived],
+          ["Verifications undone (mistakes)", r.money.advanceReversed],
+          ["Paid back for cancelled orders", r.money.advanceRefunded],
         ]}
       />
       <p className="text-xs text-gray-600">Courier fees appear only as the deductions you record from the courier&apos;s statements.</p>

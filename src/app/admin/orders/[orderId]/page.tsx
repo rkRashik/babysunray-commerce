@@ -5,8 +5,12 @@ import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
 import { DomainError } from "@/modules/domain-error";
 import { formatPaisa } from "@/modules/money";
+import { type Permission, roleHasPermission } from "@/modules/auth/permissions";
+import { userNames } from "@/modules/auth/staff";
+import { referencesOnOtherOrders } from "@/modules/orders/advance";
 import { getOrderDetail, type OrderDetail } from "@/modules/orders/queries";
-import { allowedActions, dhakaToday, formatOrderNumber, type OrderAction, returnWindowEnd, verificationOverdue, ZONE_LABELS } from "@/modules/orders/rules";
+import { advanceRefundDue, allowedActions, amountDue, dhakaToday, formatOrderNumber, type OrderAction, refundableAdvance, returnWindowEnd, verificationOverdue, ZONE_LABELS } from "@/modules/orders/rules";
+import { MANUAL_METHODS, METHOD_LABELS } from "@/modules/settings/payments";
 import { ActionForm, Choice, Field } from "../../_components/action-form";
 import { CopyButton } from "../../_components/copy-button";
 import { ActionPanel } from "../../_components/panel";
@@ -19,10 +23,14 @@ import {
   inspectAction,
   orderTransitionAction,
   recordPaymentAction,
+  refundAdvanceAction,
+  rejectReferenceAction,
   returnStepAction,
+  reverseAdvanceAction,
   reviewCancellationAction,
   revokeTrackingLinkAction,
   rtoChargeAction,
+  verifyAdvanceAction,
 } from "../actions";
 import { bdt, Dimensions, eventLabel, label, relative } from "../_components/labels";
 
@@ -46,6 +54,7 @@ const BUTTONS: { action: OrderAction & ("confirm" | "pack" | "dispatch" | "deliv
 const RETURN_STATES: Record<string, string> = { requested: "Requested", received: "Received, decision pending", approved: "Approved", rejected: "Rejected", completed: "Completed" };
 const INSPECTION_STATES: Record<string, string> = { awaiting_inspection: "Awaiting inspection", restocked: "Passed: back in stock", rejected: "Failed: kept out of stock" };
 const words = (map: Record<string, string>, value: string) => map[value] ?? value.replace(/_/g, " ");
+const ADVANCE_STATES: Record<string, string> = { submitted: "Awaiting your check", verified: "Verified", rejected: "Rejected", reversed: "Undone" };
 
 /**
  * Where a normal order is on its way, read only from its recorded statuses. Fulfilment moves one step at a time
@@ -90,7 +99,9 @@ function OrderProgress({ order }: { order: OrderDetail }) {
 const openReturn = (o: OrderDetail) => o.returns.find((r) => r.status === "requested" || r.status === "received" || r.status === "approved");
 
 export default async function OrderPage({ params, searchParams }: Props) {
-  await requireAdmin("orders:read");
+  const principal = await requireAdmin("orders:read");
+  // Buttons show only for what this role may do (ADR-0013); every action checks its permission again on the server.
+  const can = (permission: Permission) => roleHasPermission(principal.role, permission);
   const { orderId } = await params;
   const { done } = await searchParams;
   const order = await getOrderDetail(getDb(), orderId).catch((error: unknown) => {
@@ -105,6 +116,14 @@ export default async function OrderPage({ params, searchParams }: Props) {
     awaitingInspection: order.quarantine.some((q) => q.status === "awaiting_inspection"),
   };
   const allowed = allowedActions(state, now);
+  // Independent reads, side by side (each is a round trip to the database).
+  const [names, duplicates] = await Promise.all([
+    userNames(getDb(), order.events.map((e) => e.actorUserId ?? "")),
+    order.advancePayments.some((a) => a.status === "submitted") ? referencesOnOtherOrders(getDb(), order.id) : Promise.resolve(new Set<string>()),
+  ]);
+  const due = amountDue(order);
+  const refundDue = advanceRefundDue(order) ? refundableAdvance(order) : 0;
+  const paidCancel = order.advanceReceivedPaisa - order.advanceRefundedPaisa > 0;
   const ref = { orderId: order.id, version: String(order.version) };
   const overdue = verificationOverdue(order, now);
   const request = order.cancellationRequests.find((r) => r.status === "open");
@@ -112,14 +131,16 @@ export default async function OrderPage({ params, searchParams }: Props) {
   const itemBy = new Map(order.items.map((i) => [i.id, i]));
   const reservedBy = new Map(order.reservations.filter((r) => r.status === "active").map((r) => [r.variantId, r.quantity]));
   const unsettled = order.codCollectedPaisa - order.codSettledPaisa - order.codDeductedPaisa;
-  const receivable = order.totalPaisa - order.codCollectedPaisa;
+  // Money received from the customer (COD collected plus verified advance) not yet refunded.
+  const received = order.codCollectedPaisa + order.advanceReceivedPaisa - order.refundedPaisa - order.advanceRefundedPaisa;
+  const receivable = order.totalPaisa - order.codCollectedPaisa - order.advanceReceivedPaisa;
   const toCollect = order.fulfilmentStatus === "dispatched" || order.fulfilmentStatus === "delivered" ? receivable : 0;
   const today = dhakaToday(now);
   const windowEnd = order.deliveredAt ? returnWindowEnd(order.deliveredAt) : null;
-  const steps = BUTTONS.filter((b) => allowed.has(b.action));
-  const canRecordMoney = allowed.has("record_collection") || allowed.has("record_settlement");
+  const steps = can("orders:write") ? BUTTONS.filter((b) => allowed.has(b.action) && (b.action !== "cancel" || !paidCancel || can("payments:verify"))) : [];
+  const canRecordMoney = can("payments:record") && (allowed.has("record_collection") || allowed.has("record_settlement"));
   // Status, Next step, Items, Cash on delivery and History, plus the cards that only some orders have.
-  const mainCards = 5 + [request, allowed.has("create_return") || order.returns.length, order.quarantine.length].filter(Boolean).length;
+  const mainCards = 5 + [request, allowed.has("create_return") || order.returns.length, order.quarantine.length, order.paymentMethod !== "cod"].filter(Boolean).length;
 
   return (
     <AdminShell title={`Order ${formatOrderNumber(order.number)}`} current="orders" wide notice={noticeFor(done)} breadcrumbs={[{ href: "/admin/orders", label: "Orders" }]}>
@@ -129,7 +150,9 @@ export default async function OrderPage({ params, searchParams }: Props) {
           <OrderProgress order={order} />
           <Dimensions order={order} />
           <p className="text-sm text-gray-700">
-            Taken on {label(order.source)} · created {formatTime(order.createdAt)} · version <span data-testid="order-version">{order.version}</span>
+            Taken on {label(order.source)}, paid by{" "}
+            <strong data-testid="order-payment-method">{order.paymentMethod === "cod" ? "cash on delivery" : `advance ${METHOD_LABELS[order.paymentMethod].en}`}</strong>, created {formatTime(order.createdAt)}, version{" "}
+            <span data-testid="order-version">{order.version}</span>
           </p>
           {order.orderStatus === "pending_verification" && !overdue ? (
             <p className="text-sm" data-testid="verification">
@@ -144,10 +167,11 @@ export default async function OrderPage({ params, searchParams }: Props) {
           ) : null}
         </Section>
 
-        {request ? (
+        {request && can("orders:write") ? (
           <Section title="Cancellation request">
             <p className="text-sm">
               The customer asked to cancel on {formatTime(request.createdAt)}.{request.reason ? <> Reason: “{request.reason}”</> : null} Stock stays reserved until you decide. Dispatch waits for your decision.
+              {paidCancel ? " This order holds a verified advance payment: approving makes a refund due." : null}
             </p>
             <div className="flex flex-wrap gap-3">
               <ActionForm action={reviewCancellationAction} idempotencyKey={randomUUID()} hidden={{ ...ref, decision: "approve" }} submitLabel="Approve: cancel the order" confirm="Cancel this order as the customer asked? Its stock is released." />
@@ -183,6 +207,12 @@ export default async function OrderPage({ params, searchParams }: Props) {
             </p>
           )}
           {order.fulfilmentStatus === "packed" && request ? <p className="text-sm text-gray-700">Dispatch is blocked until the cancellation request is decided.</p> : null}
+          {order.paymentMethod !== "cod" && due > 0 && allowed.has("dispatch") ? (
+            <p className="text-sm font-semibold text-amber-900" data-testid="dispatch-due-note">
+              {bdt(due)} of the advance payment is not verified yet. If you dispatch now, the courier must collect it as cash on delivery.
+            </p>
+          ) : null}
+          {paidCancel && allowed.has("cancel") && !can("payments:verify") ? <p className="text-xs text-gray-600">This order holds a verified advance payment, so only the Owner can cancel it.</p> : null}
           {allowed.has("deliver") ? (
             <p className="text-xs text-gray-600" data-testid="deliver-note">
               &quot;Record delivery&quot; is your own record, made when you know the parcel arrived (for example from the courier or the customer). No courier system is connected, so nothing
@@ -260,7 +290,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
               {order.trackingLink ? `A link is active (created ${formatTime(order.trackingLink.createdAt)}).` : "No active link."} The link is shown only once, when created; creating a new one stops the old
               one. It works until 30 days after the order is closed.
             </p>
-            <div className="flex flex-wrap items-start gap-3">
+            <div className={`flex flex-wrap items-start gap-3 ${can("orders:write") ? "" : "hidden"}`}>
               <ActionForm action={createTrackingLinkAction} idempotencyKey={randomUUID()} hidden={{ orderId: order.id }} submitLabel={order.trackingLink ? "Create a new link" : "Create link"} confirm={order.trackingLink ? "Create a new link? The current one stops working." : undefined} />
               {order.trackingLink ? <ActionForm action={revokeTrackingLinkAction} idempotencyKey={randomUUID()} hidden={{ orderId: order.id }} submitLabel="Revoke link" variant="secondary" confirm="Revoke the tracking link? It stops working at once." /> : null}
             </div>
@@ -344,15 +374,118 @@ export default async function OrderPage({ params, searchParams }: Props) {
             <dd className="text-right tabular-nums">{bdt(order.subtotalPaisa)}</dd>
             <dt className="text-gray-600">Delivery ({ZONE_LABELS[order.deliveryZone]})</dt>
             <dd className="text-right tabular-nums">{bdt(order.deliveryChargePaisa)}</dd>
-            <dt className="border-t border-gray-200 pt-1 font-semibold">Expected COD</dt>
+            <dt className="border-t border-gray-200 pt-1 font-semibold">{order.paymentMethod === "cod" ? "Expected COD" : "Order total"}</dt>
             <dd className="border-t border-gray-200 pt-1 text-right font-semibold tabular-nums">{bdt(order.totalPaisa)}</dd>
           </dl>
         </Section>
 
+        {order.paymentMethod !== "cod" ? (
+          <Section title="Manual payment">
+            <div className="space-y-3" data-testid="manual-payment">
+              <p className="text-sm">
+                The customer chose to pay in advance by <strong>{METHOD_LABELS[order.paymentMethod].en}</strong>. A transaction ID from the customer proves nothing by itself: check your{" "}
+                {METHOD_LABELS[order.paymentMethod].en} account, then verify only the money that really arrived.
+              </p>
+              <dl className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                <Stat term="Order total" value={bdt(order.totalPaisa)} note="What the customer should pay in advance." />
+                <Stat term="Verified as received" value={bdt(order.advanceReceivedPaisa)} note="Only what you checked in your account." tone={order.advanceReceivedPaisa > 0 ? "ok" : undefined} testId="advance-received" />
+                <Stat term="Still due" value={bdt(due)} note={due > 0 ? "Not paid yet. If dispatched like this, the courier collects it." : "Nothing more to pay."} tone={due > 0 ? "wait" : "ok"} testId="advance-due" />
+                <Stat term="Refunded" value={bdt(order.advanceRefundedPaisa)} note="Advance money paid back by hand." testId="advance-refunded" />
+              </dl>
+              {refundDue > 0 ? (
+                <p role="status" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-900" data-testid="refund-due">
+                  Refund due: {bdt(refundDue)}. This order {order.orderStatus === "cancelled" ? "is cancelled" : "came back undelivered"} but holds advance money you verified. Pay it
+                  back by hand, then record the refund below. Nothing is refunded automatically.{order.orderStatus === "confirmed" ? " The order can be closed once the refund is recorded." : ""}
+                </p>
+              ) : null}
+              {order.advancePayments.length ? (
+                <ul className="space-y-3" aria-label="Payment references">
+                  {order.advancePayments.map((a) => (
+                    <li key={a.id} className="space-y-2 rounded-xl border border-gray-200 p-3 text-sm" data-testid="advance-reference" data-status={a.status}>
+                      <p className="flex flex-wrap items-center justify-between gap-2">
+                        <span>
+                          <span className="font-mono font-semibold">{a.reference}</span> by {METHOD_LABELS[a.method].en}, {a.source === "customer" ? "sent by the customer" : "recorded by you"} {formatTime(a.createdAt)}
+                        </span>
+                        <span className="of-pill" data-tone={a.status === "verified" ? "ok" : a.status === "submitted" ? "wait" : "bad"}>
+                          {ADVANCE_STATES[a.status]}
+                        </span>
+                      </p>
+                      {a.amountPaisa !== null ? (
+                        <p className="text-gray-700">
+                          {bdt(a.amountPaisa)} received on {a.receivedOn}
+                          {a.note ? `. ${a.status === "reversed" ? "Undone" : "Note"}: ${a.note}` : ""}
+                        </p>
+                      ) : a.note ? (
+                        <p className="text-gray-700">Why it was rejected: {a.note}</p>
+                      ) : null}
+                      {duplicates.has(`${a.method}:${a.reference}`) && a.status === "submitted" ? (
+                        <p className="font-semibold text-red-800">This reference was also sent for another order. Check it carefully: one transfer counts once.</p>
+                      ) : null}
+                      {a.status === "submitted" && can("payments:verify") && allowed.has("record_advance") ? (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <ActionForm action={verifyAdvanceAction} idempotencyKey={randomUUID()} hidden={{ ...ref, advancePaymentId: a.id }} submitLabel="Verify: money received">
+                            <Field name="amountTaka" label="Amount that arrived (BDT)" required inputMode="decimal" defaultValue={formatPaisa(due)} hint={`At most ${bdt(due)} still due. Enter less if less arrived.`} />
+                            <Field name="receivedOn" label="Date it arrived" required defaultValue={today} hint="YYYY-MM-DD, as on your statement." />
+                          </ActionForm>
+                          <ActionForm action={rejectReferenceAction} idempotencyKey={randomUUID()} hidden={{ ...ref, advancePaymentId: a.id }} submitLabel="Reject reference" variant="secondary">
+                            <Field name="note" label="Why (for your records)" required maxLength={300} hint="For example: no such transfer in the account. The customer is asked to contact you." />
+                          </ActionForm>
+                        </div>
+                      ) : null}
+                      {a.status === "verified" && can("payments:verify") && allowed.has("reverse_advance") ? (
+                        <ActionPanel key={`undo-${a.id}-${order.version}`} label="Undo this verification">
+                          <ActionForm
+                            action={reverseAdvanceAction}
+                            idempotencyKey={randomUUID()}
+                            hidden={{ ...ref, advancePaymentId: a.id }}
+                            submitLabel="Undo verification"
+                            variant="secondary"
+                            confirm="Undo this verification? Its amount stops counting as received. The record of both stays in the history."
+                          >
+                            <Field name="note" label="Why it was a mistake" required maxLength={300} />
+                          </ActionForm>
+                        </ActionPanel>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-700">No transaction ID yet. The customer sends one from their order page after paying.</p>
+              )}
+              {can("payments:verify") && allowed.has("record_advance") ? (
+                <ActionPanel key={`advance-${order.version}`} label="Record a payment the customer did not send an ID for">
+                  <ActionForm action={verifyAdvanceAction} idempotencyKey={randomUUID()} hidden={ref} submitLabel="Record verified payment">
+                    <Choice name="method" legend="Received by" defaultValue={order.paymentMethod} options={MANUAL_METHODS.map((m) => ({ value: m, label: METHOD_LABELS[m].en }))} />
+                    <Field name="reference" label="Transaction ID from your statement" required maxLength={40} />
+                    <Field name="amountTaka" label="Amount that arrived (BDT)" required inputMode="decimal" defaultValue={formatPaisa(due)} hint={`At most ${bdt(due)} still due.`} />
+                    <Field name="receivedOn" label="Date it arrived" required defaultValue={today} />
+                  </ActionForm>
+                </ActionPanel>
+              ) : null}
+              {refundDue > 0 && can("payments:record") ? (
+                <ActionPanel key={`advance-refund-${order.version}`} label="Record the advance refund" open>
+                  <ActionForm action={refundAdvanceAction} idempotencyKey={randomUUID()} hidden={ref} submitLabel="Record refund paid">
+                    <p className="text-xs text-gray-700">Record what you actually paid back, by hand. At most {bdt(refundDue)}.</p>
+                    <Field name="amountTaka" label="Refund amount (BDT)" required inputMode="decimal" defaultValue={formatPaisa(refundDue)} />
+                    <Choice name="method" legend="Paid by" defaultValue={order.paymentMethod} options={MANUAL_METHODS.map((m) => ({ value: m, label: METHOD_LABELS[m].en }))} />
+                    <Field name="occurredOn" label="Date paid" required defaultValue={today} />
+                    <Field name="reference" label="Transaction reference" maxLength={100} />
+                  </ActionForm>
+                </ActionPanel>
+              ) : null}
+              {!can("payments:verify") ? <p className="text-xs text-gray-600">Only the Owner can verify payments or record refunds.</p> : null}
+            </div>
+          </Section>
+        ) : null}
+
         <Section title="Cash on delivery">
           <div className="space-y-3" data-testid="cod">
             <dl className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-              <Stat term="Expected" value={bdt(order.totalPaisa)} note="The order total the courier should collect. Not money received." />
+              <Stat
+                term="Expected"
+                value={bdt(order.totalPaisa - order.advanceReceivedPaisa)}
+                note={order.advanceReceivedPaisa ? "The order total less the verified advance payment. Not money received." : "The order total the courier should collect. Not money received."}
+              />
               <Stat term="Collected by courier" value={bdt(order.codCollectedPaisa)} note="Everything the courier has taken from the customer so far." />
               <Stat term="Settled to you" value={bdt(order.codSettledPaisa)} note="Paid to you by the courier." tone={order.codSettledPaisa > 0 ? "ok" : undefined} />
               <Stat term="Still to collect" value={bdt(toCollect)} note="Not yet collected from the customer." tone={toCollect > 0 ? "wait" : undefined} />
@@ -391,7 +524,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
               </ActionForm>
             </ActionPanel>
           ) : null}
-          {allowed.has("record_rto_charge") ? (
+          {allowed.has("record_rto_charge") && can("payments:record") ? (
             <ActionPanel key={`rto-${order.version}`} label="Record the RTO charge">
               <ActionForm action={rtoChargeAction} idempotencyKey={randomUUID()} hidden={ref} submitLabel="Save RTO charge" variant="secondary">
                 <Field name="chargeTaka" label="RTO charge billed by the courier (BDT)" required inputMode="decimal" defaultValue={order.rtoChargePaisa === null ? "" : formatPaisa(order.rtoChargePaisa)} />
@@ -428,27 +561,27 @@ export default async function OrderPage({ params, searchParams }: Props) {
                       {r.returnShippingCostPaisa !== null ? ` (${bdt(r.returnShippingCostPaisa)})` : ""} · <span data-testid="return-status">{words(RETURN_STATES, r.status)}</span>
                     </p>
                     <p className="text-gray-700">{r.items.map((i) => `${itemBy.get(i.orderItemId)?.sku} × ${i.quantity}`).join(", ")}</p>
-                    {r.id === current?.id && r.status === "requested" ? (
+                    {r.id === current?.id && r.status === "requested" && can("orders:write") ? (
                       <ActionForm action={returnStepAction} idempotencyKey={randomUUID()} hidden={{ ...ref, returnId: r.id, step: "receive" }} submitLabel="Goods received: send to inspection">
                         <Field name="costTaka" label="Actual return shipping cost (BDT)" inputMode="decimal" hint="Optional; record it when you know it." />
                       </ActionForm>
                     ) : null}
-                    {r.id === current?.id && r.status === "received" ? (
+                    {r.id === current?.id && r.status === "received" && can("returns:decide") ? (
                       <div className="flex flex-wrap gap-3">
                         <ActionForm action={returnStepAction} idempotencyKey={randomUUID()} hidden={{ ...ref, returnId: r.id, step: "approve" }} submitLabel="Approve request" />
                         <ActionForm action={returnStepAction} idempotencyKey={randomUUID()} hidden={{ ...ref, returnId: r.id, step: "reject" }} submitLabel="Reject request" variant="secondary" confirm="Reject this request?" />
                       </div>
                     ) : null}
-                    {r.id === current?.id && r.status === "approved" && r.kind === "return" && order.codCollectedPaisa - order.refundedPaisa > 0 ? (
+                    {r.id === current?.id && r.status === "approved" && r.kind === "return" && received > 0 && can("payments:record") ? (
                       <ActionForm action={returnStepAction} idempotencyKey={randomUUID()} hidden={{ ...ref, returnId: r.id, step: "refund" }} submitLabel="Record refund paid">
-                        <p className="text-xs text-gray-700">Pay within 7 working days of approval, by hand. Never more than was collected ({bdt(order.codCollectedPaisa - order.refundedPaisa)} available).</p>
+                        <p className="text-xs text-gray-700">Pay within 7 working days of approval, by hand. Never more than was received ({bdt(received)} available).</p>
                         <Field name="amountTaka" label="Refund amount (BDT)" required inputMode="decimal" />
                         <Choice name="method" legend="Paid by" options={[{ value: "bkash", label: "bKash" }, { value: "nagad", label: "Nagad" }, { value: "bank_transfer", label: "Bank transfer" }]} />
                         <Field name="occurredOn" label="Date paid" required defaultValue={today} />
                         <Field name="reference" label="Transaction reference" maxLength={100} />
                       </ActionForm>
                     ) : null}
-                    {r.id === current?.id && r.status === "approved" && (r.kind === "exchange" || order.codCollectedPaisa - order.refundedPaisa === 0) ? (
+                    {r.id === current?.id && r.status === "approved" && (r.kind === "exchange" || received === 0) && can("orders:write") ? (
                       <>
                         {r.kind === "exchange" ? <p className="text-xs text-gray-700">Send the replacement as a new assisted order (it reserves stock normally), then complete this request.</p> : null}
                         <ActionForm action={returnStepAction} idempotencyKey={randomUUID()} hidden={{ ...ref, returnId: r.id, step: "complete" }} submitLabel="Mark completed" />
@@ -458,7 +591,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
                 ))}
               </ul>
             ) : null}
-            {allowed.has("create_return") ? (
+            {allowed.has("create_return") && can("orders:write") ? (
               <ActionPanel key={`return-${order.version}`} label="Record a return or exchange">
                 <p className="text-sm text-gray-700">
                   Accepted until {windowEnd ? formatTime(windowEnd) : "—"} (7 days after delivery). Size or preference changes need unused, unwashed goods with tags; wrong or defective goods do not. Who
@@ -494,7 +627,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
                     {itemBy.get(q.orderItemId)?.sku} × {q.quantity} · from {q.source === "rto" ? "RTO" : "a return"} · <span data-testid="inspection-status">{words(INSPECTION_STATES, q.status)}</span>
                     {q.note ? ` · ${q.note}` : ""}
                   </p>
-                  {q.status === "awaiting_inspection" ? (
+                  {q.status === "awaiting_inspection" && can("stock:receive") ? (
                     <div className="grid gap-3 sm:grid-cols-2">
                       <ActionForm action={inspectAction} idempotencyKey={randomUUID()} hidden={{ ...ref, quarantineItemId: q.id, outcome: "restock" }} submitLabel="Passed: back to stock">
                         <Field name="note" label="Inspection note" maxLength={500} />
@@ -517,7 +650,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
                 <p className="font-medium">{eventLabel(e.event)}</p>
                 <p className="text-xs text-gray-600">
                   {formatTime(e.createdAt)} ·{" "}
-                  {e.actorType === "user" ? "Owner" : e.actorType === "customer" ? (e.actorRef === "guest-checkout" ? "Customer (website checkout)" : "Customer (tracking link)") : `System (${e.actorRef})`}
+                  {e.actorType === "user" ? (names.get(e.actorRef) ?? "Staff") : e.actorType === "customer" ? (e.actorRef === "guest-checkout" ? "Customer (website checkout)" : "Customer (tracking link)") : `System (${e.actorRef})`}
                 </p>
               </li>
             ))}

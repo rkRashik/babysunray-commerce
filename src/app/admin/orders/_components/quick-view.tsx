@@ -134,8 +134,14 @@ export function OrderQuickView() {
                   <dd className="text-right">{bdt(order.subtotalPaisa)}</dd>
                   <dt>Delivery</dt>
                   <dd className="text-right">{bdt(order.deliveryChargePaisa)}</dd>
-                  <dt className="font-bold">Total (COD)</dt>
+                  <dt className="font-bold">{order.paymentMethod === "cod" ? "Total (COD)" : `Total (advance ${order.paymentMethodLabel})`}</dt>
                   <dd className="text-right font-bold">{bdt(order.totalPaisa)}</dd>
+                  {order.paymentMethod !== "cod" ? (
+                    <>
+                      <dt className="text-gray-700">Verified as received</dt>
+                      <dd className="text-right">{bdt(order.advanceReceivedPaisa)}</dd>
+                    </>
+                  ) : null}
                   {/* The courier's three amounts once money has moved; before that one line says so. */}
                   {order.codCollectedPaisa || order.codSettledPaisa || order.codDeductedPaisa ? (
                     <>

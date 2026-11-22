@@ -8,6 +8,7 @@ import { normalizeSku } from "../catalogue/rules";
 import { skusNotOrderableByCustomers } from "../catalogue/visibility";
 import { DomainError } from "../domain-error";
 import { canonicalJson } from "../idempotency/service";
+import { type PaymentDetails, paymentDetails } from "../settings/payments";
 import { GUEST_CHECKOUT } from "./internal";
 import {
   checkCustomerDetails,
@@ -18,6 +19,8 @@ import {
   MAX_DELIVERY_CHARGE_PAISA,
   MAX_LINE_QUANTITY,
   MAX_ORDER_LINES,
+  ORDER_PAYMENT_METHODS,
+  type OrderPaymentMethod,
 } from "./rules";
 import { expireOverdueVerifications, releaseOverdue, submitOrder } from "./service";
 import { createTrackingLink } from "./tracking";
@@ -67,6 +70,8 @@ const requestSchema = z.strictObject({
     .max(MAX_ORDER_LINES),
   deliveryChargePaisa: z.number(),
   totalPaisa: z.number(),
+  // Since ADR-0013. Absent means cash on delivery; a manual method is accepted only while the Owner has it enabled.
+  paymentMethod: z.enum(ORDER_PAYMENT_METHODS).optional(),
 });
 
 export type GuestCheckout = {
@@ -75,6 +80,7 @@ export type GuestCheckout = {
   items: { sku: string; quantity: number; unitPricePaisa: number }[];
   deliveryChargePaisa: number;
   totalPaisa: number;
+  paymentMethod: OrderPaymentMethod;
 };
 
 const isAmount = (n: number, min: number, max = Number.MAX_SAFE_INTEGER) => Number.isSafeInteger(n) && n >= min && n <= max;
@@ -106,7 +112,7 @@ export function validateGuestCheckout(raw: unknown): { ok: true; value: GuestChe
   if (!isAmount(r.deliveryChargePaisa, 0, MAX_DELIVERY_CHARGE_PAISA)) errors.push({ field: "deliveryChargePaisa", code: "amount_invalid" });
   if (!isAmount(r.totalPaisa, 1)) errors.push({ field: "totalPaisa", code: "amount_invalid" });
   if (errors.length || !details.values) return { ok: false, errors };
-  return { ok: true, value: { customer: details.values, deliveryZone: r.deliveryZone, items, deliveryChargePaisa: r.deliveryChargePaisa, totalPaisa: r.totalPaisa } };
+  return { ok: true, value: { customer: details.values, deliveryZone: r.deliveryZone, items, deliveryChargePaisa: r.deliveryChargePaisa, totalPaisa: r.totalPaisa, paymentMethod: r.paymentMethod ?? "cod" } };
 }
 
 /** What the customer is shown after submitting: the order as received (never "confirmed"), without contact data. */
@@ -119,6 +125,8 @@ export type GuestOrderSummary = {
   subtotalPaisa: number;
   deliveryChargePaisa: number;
   totalPaisa: number;
+  /** Cash on delivery, or a manual method with where to send the exact total (the store's current details). */
+  payment: { method: OrderPaymentMethod; amountPaisa: number; details: PaymentDetails | null };
 };
 
 export type GuestOrderResult = {
@@ -141,6 +149,7 @@ async function summary(tx: Db, orderId: string): Promise<GuestOrderSummary> {
     subtotalPaisa: order.subtotalPaisa,
     deliveryChargePaisa: order.deliveryChargePaisa,
     totalPaisa: order.totalPaisa,
+    payment: { method: order.paymentMethod, amountPaisa: order.totalPaisa, details: order.paymentMethod === "cod" ? null : await paymentDetails(tx, order.paymentMethod) },
   };
 }
 
@@ -181,7 +190,7 @@ async function attempt(db: Db, key: string, input: GuestCheckout, placer: Checko
     if (refused.length) throw new DomainError("VARIANT_NOT_ORDERABLE", "An item cannot be ordered.");
     const order = await submitOrder(
       tx,
-      { source: "website", ...input.customer, deliveryZone: input.deliveryZone, note: null, items: input.items.map((i) => ({ sku: i.sku, quantity: i.quantity })) },
+      { source: "website", ...input.customer, deliveryZone: input.deliveryZone, note: null, items: input.items.map((i) => ({ sku: i.sku, quantity: i.quantity })), paymentMethod: input.paymentMethod },
       GUEST_CHECKOUT,
     );
     await assertAsShown(tx, order.id, input);

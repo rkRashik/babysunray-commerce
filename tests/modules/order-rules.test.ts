@@ -25,6 +25,10 @@ const base: OrderState = {
   codCollectedPaisa: 0,
   codSettledPaisa: 0,
   codDeductedPaisa: 0,
+  refundedPaisa: 0,
+  paymentMethod: "cod",
+  advanceReceivedPaisa: 0,
+  advanceRefundedPaisa: 0,
   openCancellationRequest: false,
   openReturn: false,
   awaitingInspection: false,
@@ -135,5 +139,31 @@ describe("money, dates, references and masking", () => {
     expect(trackingLinkLive(closed, null, NOW)).toBe(true);
     expect(trackingLinkLive(new Date(NOW.getTime() - 30 * 24 * HOUR), null, NOW)).toBe(false);
     expect(trackingLinkLive(null, new Date(0), NOW)).toBe(false);
+  });
+});
+
+describe("manual advance payments in the rules (ADR-0013)", () => {
+  const prepaid: Partial<OrderState> = { paymentMethod: "bkash", advanceReceivedPaisa: 10_000, orderStatus: "confirmed" };
+  it("the courier may collect only what was not paid in advance", () => {
+    expect(actions({ ...prepaid, fulfilmentStatus: "delivered", deliveredAt: NOW })).not.toContain("record_collection");
+    expect(actions({ ...prepaid, advanceReceivedPaisa: 4_000, fulfilmentStatus: "delivered", deliveredAt: NOW })).toContain("record_collection");
+  });
+  it("a returned parcel holding advance money is refunded before it can close; a COD one closes as before", () => {
+    const back = { ...prepaid, fulfilmentStatus: "rto_received" as const };
+    expect(actions(back)).toContain("refund_advance");
+    expect(actions(back)).not.toContain("close");
+    expect(actions({ ...back, advanceRefundedPaisa: 10_000 })).toContain("close");
+    expect(actions({ orderStatus: "confirmed", fulfilmentStatus: "rto_received" })).toContain("close");
+  });
+  it("advance money is recorded only on a manual-payment order that still owes something", () => {
+    expect(actions({ paymentMethod: "cod" })).not.toContain("record_advance");
+    expect(actions({ paymentMethod: "nagad" })).toContain("record_advance");
+    expect(actions(prepaid)).not.toContain("record_advance");
+    expect(actions({ ...prepaid, orderStatus: "closed", fulfilmentStatus: "delivered" })).not.toContain("reverse_advance");
+  });
+  it("payment status counts verified advance money with COD", () => {
+    expect(paymentStatusFor(10_000, 0, 0, 0, 10_000)).toBe("settled");
+    expect(paymentStatusFor(10_000, 0, 0, 0, 4_000)).toBe("partially_collected");
+    expect(paymentStatusFor(10_000, 6_000, 0, 0, 4_000)).toBe("collected");
   });
 });

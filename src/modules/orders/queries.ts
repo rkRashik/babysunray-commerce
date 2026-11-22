@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import type { Db } from "@/db/database";
 import {
+  advancePayments,
   cancellationRequests,
   orderEvents,
   orderItems,
@@ -29,6 +30,8 @@ export type OrderDetail = Order & {
   returns: ((typeof returns.$inferSelect) & { items: (typeof returnItems.$inferSelect)[] })[];
   quarantine: (typeof quarantineItems.$inferSelect)[];
   payments: (typeof paymentEntries.$inferSelect)[];
+  /** Manual advance payment references and their verification (migration 0025), oldest first. */
+  advancePayments: (typeof advancePayments.$inferSelect)[];
   trackingLink: { createdAt: Date } | null;
 };
 
@@ -52,6 +55,7 @@ export async function getOrderDetail(db: Db, orderId: string): Promise<OrderDeta
       const lines = rets.length ? await tx.select().from(returnItems).where(inArray(returnItems.returnId, rets.map((r) => r.id))) : [];
       const quarantine = await tx.select().from(quarantineItems).where(eq(quarantineItems.orderId, id)).orderBy(asc(quarantineItems.receivedAt));
       const payments = await tx.select().from(paymentEntries).where(eq(paymentEntries.orderId, id)).orderBy(asc(paymentEntries.id));
+      const advance = await tx.select().from(advancePayments).where(eq(advancePayments.orderId, id)).orderBy(asc(advancePayments.createdAt));
       const [link] = await tx
         .select({ createdAt: orderTrackingTokens.createdAt })
         .from(orderTrackingTokens)
@@ -65,6 +69,7 @@ export async function getOrderDetail(db: Db, orderId: string): Promise<OrderDeta
         returns: rets.map((r) => ({ ...r, items: lines.filter((l) => l.returnId === r.id) })),
         quarantine,
         payments,
+        advancePayments: advance,
         trackingLink: link ?? null,
       };
     },
@@ -86,11 +91,17 @@ export const ORDER_QUEUES = {
   returning: "Returning to sender (RTO), not received yet",
   awaiting_collection: "Dispatched or delivered, COD not fully collected",
   unsettled: "Collected by the courier, not fully settled to you",
+  payment_to_verify: "Advance payment reference to verify",
+  refund_due: "Cancelled or returned, with advance money to refund",
 } as const;
 export type OrderQueue = keyof typeof ORDER_QUEUES;
 export const isOrderQueue = (value: unknown): value is OrderQueue => typeof value === "string" && Object.hasOwn(ORDER_QUEUES, value);
 
 const openRequest = sql`exists (select 1 from ${cancellationRequests} where ${cancellationRequests.orderId} = ${orders.id} and ${cancellationRequests.status} = 'open')`;
+// Cancelled, or returned to the shop undelivered, while holding verified advance money not paid back (rules.ts, advanceRefundDue).
+const refundDue = sql`((${orders.orderStatus} = 'cancelled' or (${orders.orderStatus} = 'confirmed' and ${orders.fulfilmentStatus} = 'rto_received'))
+  and ${orders.advanceReceivedPaisa} - ${orders.advanceRefundedPaisa} > 0 and ${orders.codCollectedPaisa} + ${orders.advanceReceivedPaisa} - ${orders.refundedPaisa} - ${orders.advanceRefundedPaisa} > 0)`;
+const referenceToVerify = sql`exists (select 1 from ${advancePayments} where ${advancePayments.orderId} = ${orders.id} and ${advancePayments.status} = 'submitted')`;
 
 export function queueCondition(queue: OrderQueue): SQL {
   const confirmed = sql`${orders.orderStatus} = 'confirmed'`;
@@ -110,16 +121,25 @@ export function queueCondition(queue: OrderQueue): SQL {
     case "returning":
       return sql`(${confirmed} and ${orders.fulfilmentStatus} = 'rto')`;
     case "awaiting_collection":
-      return sql`(${confirmed} and ${orders.fulfilmentStatus} in ('dispatched', 'delivered') and ${orders.codCollectedPaisa} < ${orders.totalPaisa})`;
+      return sql`(${confirmed} and ${orders.fulfilmentStatus} in ('dispatched', 'delivered') and ${orders.codCollectedPaisa} + ${orders.advanceReceivedPaisa} < ${orders.totalPaisa})`;
     case "unsettled":
       return sql`(${orders.codSettledPaisa} + ${orders.codDeductedPaisa} < ${orders.codCollectedPaisa})`;
+    case "payment_to_verify":
+      return referenceToVerify;
+    case "refund_due":
+      return refundDue;
   }
 }
 
-/** Needs the Owner now: past its verification deadline, expired, or with an open cancellation request. */
+/**
+ * Needs the Owner now: past its verification deadline, expired, with an open cancellation request, with a payment
+ * reference to verify, or cancelled with advance money still to refund.
+ */
 const attentionCondition = sql`(${orders.orderStatus} = 'verification_expired'
   or (${orders.orderStatus} = 'pending_verification' and ${orders.verificationExpiresAt} <= now())
-  or ${openRequest})`;
+  or ${openRequest}
+  or ${referenceToVerify}
+  or ${refundDue})`;
 
 /**
  * How many orders each work queue (and "needs attention") holds now: one statement, one pass over the orders, using

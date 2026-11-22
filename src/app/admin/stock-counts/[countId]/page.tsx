@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
+import { roleHasPermission } from "@/modules/auth/permissions";
 import { DomainError } from "@/modules/domain-error";
 import { type CountLineView, formatCountNumber, getStockCount } from "@/modules/inventory/counts";
 import { ActionForm, Checkbox, Field } from "../../_components/action-form";
@@ -18,7 +19,9 @@ const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
 const productName = (l: CountLineView) => [l.nameEn ?? l.nameBn, l.size, l.colour].filter(Boolean).join(" · ");
 
 export default async function StockCountPage({ params, searchParams }: Props) {
-  await requireAdmin("stock:read", "stock:adjust");
+  const principal = await requireAdmin("stock:read", "stock:count");
+  // Applying changes stock: only a role with stock:adjust (Manager, Owner) sees it; the action checks it again.
+  const canApply = roleHasPermission(principal.role, "stock:adjust");
   const { countId } = await params;
   const { done } = await searchParams;
   const count = await getStockCount(getDb(), countId).catch((error: unknown) => {
@@ -95,9 +98,15 @@ export default async function StockCountPage({ params, searchParams }: Props) {
               </ul>
             ) : null}
             <div className="grid gap-6 md:grid-cols-2">
-              <ActionForm action={applyCountAction} idempotencyKey={randomUUID()} hidden={hidden} submitLabel="Apply corrections">
-                <Field name="reason" label="Reason" maxLength={400} hint="Required when any count differs, for example “Monthly shelf count”. Recorded with each correction." />
-              </ActionForm>
+              {canApply ? (
+                <ActionForm action={applyCountAction} idempotencyKey={randomUUID()} hidden={hidden} submitLabel="Apply corrections">
+                  <Field name="reason" label="Reason" maxLength={400} hint="Required when any count differs, for example “Monthly shelf count”. Recorded with each correction." />
+                </ActionForm>
+              ) : (
+                <p className="text-sm text-gray-700" data-testid="apply-needs-manager">
+                  When the counts are saved, ask a Store Manager or the Owner to review and apply them. Your account can count but not change stock.
+                </p>
+              )}
               <ActionForm action={discardCountAction} idempotencyKey={randomUUID()} hidden={hidden} submitLabel="Discard count" variant="secondary" confirm="Discard this count? Nothing in stock changes.">
                 <p className="text-sm text-gray-700">Discarding closes the count without changing any stock.</p>
               </ActionForm>

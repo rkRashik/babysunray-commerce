@@ -20,7 +20,8 @@ export default async function OrderPrintPage({ params }: { params: Promise<{ ord
     if (error instanceof DomainError && (error.code === "ORDER_NOT_FOUND" || error.code === "INVALID_INPUT")) notFound();
     throw error;
   });
-  const toCollect = order.totalPaisa - order.codCollectedPaisa;
+  // The courier collects only what is still due: the total less COD already collected and advance money verified.
+  const toCollect = order.totalPaisa - order.codCollectedPaisa - order.advanceReceivedPaisa;
   return (
     <PrintPage
       title={`Order ${formatOrderNumber(order.number)}`}
@@ -78,14 +79,24 @@ export default async function OrderPrintPage({ params }: { params: Promise<{ ord
           </tr>
           <tr>
             <td colSpan={5} className="font-semibold">
-              Total (cash on delivery)
+              {order.paymentMethod === "cod" ? "Total (cash on delivery)" : "Total"}
             </td>
             <td className="text-right font-semibold tabular-nums">{bdt(order.totalPaisa)}</td>
           </tr>
-          {order.codCollectedPaisa > 0 ? (
+          {order.advanceReceivedPaisa > 0 ? (
             <tr>
-              <td colSpan={5}>Still to collect</td>
-              <td className="text-right tabular-nums">{bdt(toCollect)}</td>
+              <td colSpan={5}>Paid in advance (verified)</td>
+              <td className="text-right tabular-nums">{bdt(order.advanceReceivedPaisa)}</td>
+            </tr>
+          ) : null}
+          {order.codCollectedPaisa > 0 || order.paymentMethod !== "cod" ? (
+            <tr>
+              <td colSpan={5} className="font-semibold">
+                Cash to collect on delivery
+              </td>
+              <td className="text-right font-semibold tabular-nums" data-testid="print-to-collect">
+                {bdt(toCollect)}
+              </td>
             </tr>
           ) : null}
         </tfoot>

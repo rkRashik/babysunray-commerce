@@ -338,21 +338,76 @@ export const authRateLimits = pgTable("auth_rate_limits", {
 });
 
 // Application authorisation state, owned by this project and not by Better Auth. A user without a row, or
-// with disabled_at set, has no permissions and cannot start a session. Only the local Owner bootstrap
-// (scripts/bootstrap-owner.mts) writes it today.
+// with disabled_at set, has no permissions and cannot start a session. Written by the Owner set-up and bootstrap (the
+// Owner role) and, since migration 0024, by Staff & access (src/modules/auth/staff.ts; staff roles only, ADR-0013).
 export const userAccess = pgTable(
   "user_access",
   {
     userId: uuid("user_id")
       .primaryKey()
       .references(() => authUsers.id, { onDelete: "cascade" }),
-    role: text("role", { enum: ["owner"] }).notNull(),
+    role: text("role", { enum: ["owner", "manager", "orders", "catalogue", "inventory"] }).notNull(),
     disabledAt: timestamp("disabled_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [check("user_access_role_valid", sql`${t.role} in ('owner')`)],
+  (t) => [check("user_access_role_valid", sql`${t.role} in ('owner', 'manager', 'orders', 'catalogue', 'inventory')`)],
 );
+
+// Staff invitations and set-password links (migration 0024; src/modules/auth/staff.ts, ADR-0013). The Owner invites an
+// email address with a staff role (kind 'invite'), or sends an existing staff account a link to set a new password
+// (kind 'password'). Only the SHA-256 digest of the random one-time token is stored; a link works once, until it expires
+// or is revoked. At most one open link per address. Who created, revoked or used a link is in auth_events.
+export const staffInvitations = pgTable(
+  "staff_invitations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind", { enum: ["invite", "password"] }).notNull(),
+    email: text("email").notNull(),
+    role: text("role", { enum: ["manager", "orders", "catalogue", "inventory"] }),
+    // The account the link belongs to: set at creation for a password link, on acceptance for an invitation.
+    userId: uuid("user_id").references(() => authUsers.id, { onDelete: "cascade" }),
+    tokenSha256: text("token_sha256").notNull().unique("staff_invitations_token_sha256_key"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("staff_invitations_open_email_key").on(t.email).where(sql`${t.acceptedAt} is null and ${t.revokedAt} is null`),
+    index("staff_invitations_created_at_idx").on(t.createdAt),
+    check("staff_invitations_kind_valid", sql`${t.kind} in ('invite', 'password')`),
+    check("staff_invitations_role_valid", sql`${t.role} in ('manager', 'orders', 'catalogue', 'inventory')`),
+    check("staff_invitations_kind_consistent", sql`(${t.kind} = 'invite') = (${t.role} is not null) and (${t.kind} = 'invite' or ${t.userId} is not null)`),
+    check("staff_invitations_email_valid", sql`${t.email} = lower(${t.email}) and length(${t.email}) between 3 and 254`),
+    check("staff_invitations_token_format", sql`${t.tokenSha256} ~ '^[0-9a-f]{64}$'`),
+    check("staff_invitations_end_consistent", sql`not (${t.acceptedAt} is not null and ${t.revokedAt} is not null) and (${t.acceptedAt} is null or ${t.userId} is not null) and ${t.expiresAt} > ${t.createdAt}`),
+  ],
+);
+
+// The audited events. Staff & access events (migration 0024) name the Owner who acted (or, for staff_joined and
+// staff_password_set, the staff member) and carry ids and roles only, never an email address.
+const AUTH_EVENTS = [
+  "sign_in",
+  "sign_in_failed",
+  "session_ended",
+  "password_changed",
+  "owner_created",
+  "owner_password_reset",
+  "access_changed",
+  "staff_invited",
+  "staff_invitation_revoked",
+  "staff_joined",
+  "staff_role_changed",
+  "staff_disabled",
+  "staff_enabled",
+  "staff_sessions_revoked",
+  "staff_password_link",
+  "staff_password_set",
+] as const;
 
 // Append-only security audit of authentication and access (migration 0017; src/modules/auth/audit.ts). Written by
 // Better Auth hooks (sign-in, failed sign-in, every ended session, password change), the local Owner commands and a
@@ -364,7 +419,7 @@ export const authEvents = pgTable(
   "auth_events",
   {
     id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
-    event: text("event", { enum: ["sign_in", "sign_in_failed", "session_ended", "password_changed", "owner_created", "owner_password_reset", "access_changed"] }).notNull(),
+    event: text("event", { enum: AUTH_EVENTS }).notNull(),
     // user: an authenticated user acted; anonymous: an unauthenticated attempt; operator: a local command with
     // database access; system: the database itself (access trigger) or the library (an expired session).
     actorType: text("actor_type", { enum: ["user", "anonymous", "operator", "system"] }).notNull(),
@@ -381,10 +436,7 @@ export const authEvents = pgTable(
     index("auth_events_subject_user_id_id_idx").on(t.subjectUserId, t.id),
     uniqueIndex("auth_events_sign_in_session_key").on(t.sessionId).where(sql`${t.event} = 'sign_in'`),
     uniqueIndex("auth_events_session_ended_session_key").on(t.sessionId).where(sql`${t.event} = 'session_ended'`),
-    check(
-      "auth_events_event_valid",
-      sql`${t.event} in ('sign_in', 'sign_in_failed', 'session_ended', 'password_changed', 'owner_created', 'owner_password_reset', 'access_changed')`,
-    ),
+    check("auth_events_event_valid", sql`${t.event} in (${sql.raw(AUTH_EVENTS.map((e) => `'${e}'`).join(", "))})`),
     check("auth_events_actor_type_valid", sql`${t.actorType} in ('user', 'anonymous', 'operator', 'system')`),
     check("auth_events_actor_consistent", sql`(${t.actorType} = 'user') = (${t.actorUserId} is not null)`),
     check("auth_events_transport_valid", sql`${t.transport} in ('browser', 'native', 'cli', 'database')`),
@@ -503,6 +555,13 @@ export const orders = pgTable(
     // either settled to the Owner or recorded as deducted.
     codDeductedPaisa: bigint("cod_deducted_paisa", { mode: "number" }).notNull().default(0),
     refundedPaisa: bigint("refunded_paisa", { mode: "number" }).notNull().default(0),
+    // How the customer chose to pay (migration 0025): cash on delivery, or a manual advance transfer to the store's
+    // bKash, Nagad or bank account. Chosen at submission, never changed by the customer.
+    paymentMethod: text("payment_method", { enum: ["cod", "bkash", "nagad", "bank_transfer"] }).notNull().default("cod"),
+    // Advance money the Owner verified as received (net of undone verifications) and paid back for a cancelled or
+    // unfulfillable order (migration 0025; running totals of payment_entries, updated in the same transaction).
+    advanceReceivedPaisa: bigint("advance_received_paisa", { mode: "number" }).notNull().default(0),
+    advanceRefundedPaisa: bigint("advance_refunded_paisa", { mode: "number" }).notNull().default(0),
     rtoChargePaisa: bigint("rto_charge_paisa", { mode: "number" }),
     verificationExpiresAt: timestamp("verification_expires_at", { withTimezone: true }).notNull(),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
@@ -536,17 +595,24 @@ export const orders = pgTable(
       sql`${t.fulfilmentStatus} in ('unfulfilled', 'packed', 'dispatched', 'delivered', 'rto', 'rto_received')`,
     ),
     check("orders_return_status_valid", sql`${t.returnStatus} in ('none', 'requested', 'in_progress', 'resolved')`),
-    // Money actually handled: never more settled and deducted than collected, never more collected than expected,
-    // never more refunded than collected (founder rules J and M; deductions since migration 0016).
+    // Money actually handled: never more settled and deducted than collected, never more received (COD collected plus
+    // verified advance) than the order total, never more refunded than received (founder rules J and M; deductions
+    // since migration 0016; advance payments since 0025).
     check(
       "orders_cod_amounts_valid",
-      sql`${t.codSettledPaisa} >= 0 and ${t.codDeductedPaisa} >= 0 and ${t.codSettledPaisa} + ${t.codDeductedPaisa} <= ${t.codCollectedPaisa} and ${t.codCollectedPaisa} <= ${t.totalPaisa} and ${t.refundedPaisa} >= 0 and ${t.refundedPaisa} <= ${t.codCollectedPaisa}`,
+      sql`${t.codSettledPaisa} >= 0 and ${t.codDeductedPaisa} >= 0 and ${t.codSettledPaisa} + ${t.codDeductedPaisa} <= ${t.codCollectedPaisa} and ${t.codCollectedPaisa} + ${t.advanceReceivedPaisa} <= ${t.totalPaisa} and ${t.refundedPaisa} >= 0 and ${t.refundedPaisa} + ${t.advanceRefundedPaisa} <= ${t.codCollectedPaisa} + ${t.advanceReceivedPaisa}`,
     ),
-    // Payment status is a function of the amounts, so it can never disagree with them. 'settled' means every
-    // collected taka is settled to the Owner or recorded as deducted by the courier.
+    // Advance money exists only on an order that chose a manual payment method, and is never refunded beyond what came in.
+    check(
+      "orders_advance_amounts_valid",
+      sql`${t.paymentMethod} in ('cod', 'bkash', 'nagad', 'bank_transfer') and ${t.advanceReceivedPaisa} >= 0 and ${t.advanceRefundedPaisa} >= 0 and ${t.advanceRefundedPaisa} <= ${t.advanceReceivedPaisa} and (${t.paymentMethod} <> 'cod' or (${t.advanceReceivedPaisa} = 0 and ${t.advanceRefundedPaisa} = 0))`,
+    ),
+    // Payment status is a function of the amounts, so it can never disagree with them: money received from the customer
+    // (COD collected plus verified advance) against the total. 'settled' means every COD taka the courier collected is
+    // settled to the Owner or recorded as deducted (verified advance money is already the Owner's).
     check(
       "orders_payment_status_derived",
-      sql`${t.paymentStatus} = case when ${t.codCollectedPaisa} = 0 then 'unpaid' when ${t.codCollectedPaisa} < ${t.totalPaisa} then 'partially_collected' when ${t.codSettledPaisa} + ${t.codDeductedPaisa} < ${t.codCollectedPaisa} then 'collected' else 'settled' end`,
+      sql`${t.paymentStatus} = case when ${t.codCollectedPaisa} + ${t.advanceReceivedPaisa} = 0 then 'unpaid' when ${t.codCollectedPaisa} + ${t.advanceReceivedPaisa} < ${t.totalPaisa} then 'partially_collected' when ${t.codSettledPaisa} + ${t.codDeductedPaisa} < ${t.codCollectedPaisa} then 'collected' else 'settled' end`,
     ),
     check("orders_rto_charge_valid", sql`${t.rtoChargePaisa} >= 0 and ${t.rtoChargePaisa} <= 1000000`),
     // Cross-dimension consistency: only confirmed orders move physically; cancellation happens before dispatch.
@@ -783,9 +849,10 @@ export const quarantineItems = pgTable(
   ],
 );
 
-// Append-only COD money record (trigger, migration 0008): courier collection, settlement to the Owner, courier
-// deductions from the collected money (migration 0016) and manual refunds (founder rules J and M). orders keeps the
-// running totals, updated in the same transaction.
+// Append-only money record (trigger, migration 0008): courier collection, settlement to the Owner, courier deductions
+// from the collected money (migration 0016), manual refunds for returns (founder rules J and M) and, since migration
+// 0025, manual advance payments: verified as received, a mistaken verification undone (reversed), and advance money
+// paid back for a cancelled or unfulfillable order. orders keeps the running totals, updated in the same transaction.
 export const paymentEntries = pgTable(
   "payment_entries",
   {
@@ -793,7 +860,7 @@ export const paymentEntries = pgTable(
     orderId: uuid("order_id")
       .notNull()
       .references(() => orders.id, { onDelete: "restrict" }),
-    kind: text("kind", { enum: ["collected", "settled", "deducted", "refunded"] }).notNull(),
+    kind: text("kind", { enum: ["collected", "settled", "deducted", "refunded", "advance_received", "advance_reversed", "advance_refunded"] }).notNull(),
     amountPaisa: bigint("amount_paisa", { mode: "number" }).notNull(),
     occurredOn: date("occurred_on", { mode: "string" }).notNull(),
     method: text("method", { enum: ["bkash", "nagad", "bank_transfer"] }),
@@ -804,11 +871,11 @@ export const paymentEntries = pgTable(
   },
   (t) => [
     index("payment_entries_order_id_idx").on(t.orderId),
-    check("payment_entries_kind_valid", sql`${t.kind} in ('collected', 'settled', 'deducted', 'refunded')`),
+    check("payment_entries_kind_valid", sql`${t.kind} in ('collected', 'settled', 'deducted', 'refunded', 'advance_received', 'advance_reversed', 'advance_refunded')`),
     check("payment_entries_amount_valid", sql`${t.amountPaisa} > 0 and ${t.amountPaisa} <= 9007199254740991`),
     check(
       "payment_entries_refund_consistent",
-      sql`(${t.kind} = 'refunded') = (${t.method} is not null) and (${t.kind} = 'refunded') = (${t.returnId} is not null)`,
+      sql`(${t.kind} in ('refunded', 'advance_received', 'advance_reversed', 'advance_refunded')) = (${t.method} is not null) and (${t.kind} = 'refunded') = (${t.returnId} is not null)`,
     ),
     check("payment_entries_method_valid", sql`${t.method} in ('bkash', 'nagad', 'bank_transfer')`),
     check("payment_entries_reference_valid", sql`btrim(${t.reference}) <> '' and length(${t.reference}) <= 100`),
@@ -845,6 +912,98 @@ export const courierStatementChecks = pgTable(
   ],
 );
 
+// Manual advance payments (migration 0025; src/modules/orders/advance.ts, ADR-0013). Each row is one transfer reference:
+// submitted by the customer through the order's private tracking link, or recorded by the Owner. A reference proves
+// nothing by itself: only the Owner's verification against the real receiving account (status 'verified', with the
+// amount actually received) writes money, as an advance_received ledger row. A mistaken verification is undone by an
+// advance_reversed row ('reversed'), never by editing history. One reference counts at most once across all orders.
+export const advancePayments = pgTable(
+  "advance_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "restrict" }),
+    method: text("method", { enum: ["bkash", "nagad", "bank_transfer"] }).notNull(),
+    // The transaction id the sender's app or bank shows, upper case, no spaces.
+    reference: text("reference").notNull(),
+    source: text("source", { enum: ["customer", "owner"] }).notNull(),
+    status: text("status", { enum: ["submitted", "verified", "rejected", "reversed"] }).notNull(),
+    amountPaisa: bigint("amount_paisa", { mode: "number" }),
+    receivedOn: date("received_on", { mode: "string" }),
+    // Why the Owner rejected or undid it (shown to the Owner only).
+    note: text("note"),
+    createdAt: createdAt(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decidedByUserId: userRef("decided_by_user_id"),
+    paymentEntryId: bigint("payment_entry_id", { mode: "number" }).references(() => paymentEntries.id, { onDelete: "restrict" }),
+    reversalEntryId: bigint("reversal_entry_id", { mode: "number" }).references(() => paymentEntries.id, { onDelete: "restrict" }),
+  },
+  (t) => [
+    index("advance_payments_order_id_idx").on(t.orderId, t.createdAt),
+    index("advance_payments_submitted_idx").on(t.createdAt).where(sql`${t.status} = 'submitted'`),
+    uniqueIndex("advance_payments_verified_reference_key").on(t.method, t.reference).where(sql`${t.status} = 'verified'`),
+    uniqueIndex("advance_payments_open_reference_key").on(t.orderId, t.method, t.reference).where(sql`${t.status} = 'submitted'`),
+    check("advance_payments_method_valid", sql`${t.method} in ('bkash', 'nagad', 'bank_transfer')`),
+    check("advance_payments_reference_format", sql`${t.reference} ~ '^[A-Z0-9][A-Z0-9/-]{3,39}$'`),
+    check("advance_payments_source_valid", sql`${t.source} in ('customer', 'owner')`),
+    check("advance_payments_status_valid", sql`${t.status} in ('submitted', 'verified', 'rejected', 'reversed')`),
+    check("advance_payments_note_valid", sql`btrim(${t.note}) <> '' and length(${t.note}) <= 300`),
+    check(
+      "advance_payments_decision_consistent",
+      sql`(${t.status} = 'submitted') = (${t.decidedAt} is null) and (${t.decidedAt} is null) = (${t.decidedByUserId} is null)
+        and (${t.status} in ('verified', 'reversed')) = (${t.paymentEntryId} is not null)
+        and (${t.status} in ('verified', 'reversed')) = (${t.amountPaisa} is not null and ${t.receivedOn} is not null)
+        and (${t.status} = 'reversed') = (${t.reversalEntryId} is not null)
+        and (${t.source} = 'customer' or ${t.status} <> 'submitted')`,
+    ),
+    check("advance_payments_amount_valid", sql`${t.amountPaisa} > 0 and ${t.amountPaisa} <= 9007199254740991`),
+  ],
+);
+
+// The store's manual payment methods (migration 0025; src/modules/settings/payments.ts). One row per method, written only
+// by the Owner. A method is offered to customers only while enabled, which needs its receiving details and the Owner's
+// explicit confirmation that the account may receive the store's payments. Nothing is prefilled; no gateway credential,
+// PIN or customer banking detail is stored.
+export const paymentMethods = pgTable(
+  "payment_methods",
+  {
+    method: text("method", { enum: ["bkash", "nagad", "bank_transfer"] }).primaryKey(),
+    enabled: boolean("enabled").notNull().default(false),
+    accountName: text("account_name"),
+    // bKash or Nagad: the receiving mobile number (01XXXXXXXXX). Bank: the account number.
+    accountNumber: text("account_number"),
+    // bKash or Nagad: merchant (customers use Payment) or personal (customers use Send Money).
+    accountKind: text("account_kind", { enum: ["merchant", "personal"] }),
+    bankName: text("bank_name"),
+    branchName: text("branch_name"),
+    routingNumber: text("routing_number"),
+    instructionsEn: text("instructions_en"),
+    instructionsBn: text("instructions_bn"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvedByUserId: userRef("approved_by_user_id"),
+    version: version(),
+    updatedAt: updatedAt(),
+    updatedByUserId: userRef("updated_by_user_id").notNull(),
+  },
+  (t) => [
+    check("payment_methods_method_valid", sql`${t.method} in ('bkash', 'nagad', 'bank_transfer')`),
+    check("payment_methods_kind_valid", sql`${t.accountKind} in ('merchant', 'personal')`),
+    check(
+      "payment_methods_texts_valid",
+      sql`coalesce(length(${t.accountName}), 1) between 1 and 80 and coalesce(length(${t.accountNumber}), 6) between 6 and 34 and coalesce(length(${t.bankName}), 1) between 1 and 80 and coalesce(length(${t.branchName}), 1) between 1 and 80 and (${t.routingNumber} is null or ${t.routingNumber} ~ '^[0-9]{9}$') and coalesce(length(${t.instructionsEn}), 0) <= 300 and coalesce(length(${t.instructionsBn}), 0) <= 300`,
+    ),
+    check(
+      "payment_methods_enabled_complete",
+      sql`not ${t.enabled} or (${t.accountName} is not null and ${t.accountNumber} is not null and ${t.approvedAt} is not null and ${t.approvedByUserId} is not null
+        and (${t.method} = 'bank_transfer') = (${t.bankName} is not null)
+        and (${t.method} = 'bank_transfer') = (${t.accountKind} is null))`,
+    ),
+    check("payment_methods_wallet_number", sql`${t.method} = 'bank_transfer' or ${t.accountNumber} is null or ${t.accountNumber} ~ '^01[3-9][0-9]{8}$'`),
+    check("payment_methods_version_positive", sql`${t.version} >= 1`),
+  ],
+);
+
 // Guest tracking credentials (founder rule K, S-15). Only the SHA-256 digest of the random token is stored.
 // One active link per order; a revoked link never works again. Lifetime: until 30 days after closed_at.
 export const orderTrackingTokens = pgTable(
@@ -866,8 +1025,9 @@ export const orderTrackingTokens = pgTable(
 
 // Anonymous request counters (src/modules/rate-limit/service.ts, consumePublicLimit). The keys are 'failure' (unknown,
 // revoked or expired tracking tokens, all clients), 'link:<link id>' (one per live tracking link, migration 0010),
-// 'checkout' (guest checkout submissions, all clients, migration 0015) and 'checkout-client:<HMAC of the client
-// address>' (per client and hour, only behind a trusted proxy, migration 0020; the address itself is never stored).
+// 'checkout' (guest checkout submissions, all clients, migration 0015), 'checkout-client:<HMAC of the client
+// address>' (per client and hour, only behind a trusted proxy, migration 0020; the address itself is never stored),
+// 'admin-setup' and 'admin-recovery' (migration 0021) and 'staff-invite' (staff link redemptions, migration 0024).
 export const trackingRateLimits = pgTable(
   "tracking_rate_limits",
   {
@@ -878,7 +1038,7 @@ export const trackingRateLimits = pgTable(
   (t) => [
     check(
       "tracking_rate_limits_bucket_valid",
-      sql`${t.bucket} in ('failure', 'checkout', 'admin-setup', 'admin-recovery') or ${t.bucket} ~ '^link:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' or ${t.bucket} ~ '^checkout-client:[0-9a-f]{64}$'`,
+      sql`${t.bucket} in ('failure', 'checkout', 'admin-setup', 'admin-recovery', 'staff-invite') or ${t.bucket} ~ '^link:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' or ${t.bucket} ~ '^checkout-client:[0-9a-f]{64}$'`,
     ),
     check("tracking_rate_limits_count_positive", sql`${t.count} >= 1`),
   ],

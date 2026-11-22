@@ -11,6 +11,7 @@ import { currentStoreIdentity } from "@/app/_design/identity";
 import { getDb } from "@/db/client";
 import { currentCustomer, customerSignInAvailable } from "@/modules/customers/server";
 import { publishedPolicies } from "@/modules/policies/publication";
+import { enabledPaymentMethods } from "@/modules/settings/payments";
 import { dictionary, isLang } from "@/modules/storefront/i18n";
 import { catalogueFacets, PUBLIC_SCOPE } from "@/modules/storefront/service";
 import { checkShopCheckoutAction, quoteShopCartAction } from "./actions";
@@ -28,7 +29,12 @@ export default async function ShopLayout({ children, params }: { children: React
   if (!isLang(lang)) notFound();
   const access = await requireShop();
   const db = getDb();
-  const [facets, published, customer] = await Promise.all([catalogueFacets(db, PUBLIC_SCOPE), publishedPolicies(db), currentCustomer(await headers()).catch(() => null)]);
+  const [facets, published, customer, payments] = await Promise.all([
+    catalogueFacets(db, PUBLIC_SCOPE),
+    publishedPolicies(db),
+    currentCustomer(await headers()).catch(() => null),
+    enabledPaymentMethods(db),
+  ]);
   const policies = published.map((p) => ({ kind: p.kind, href: `/${lang}/policies/${p.kind}` }));
   const t = dictionary(lang);
   const identity = await currentStoreIdentity();
@@ -43,6 +49,7 @@ export default async function ShopLayout({ children, params }: { children: React
       customer={customer ? { name: customer.name } : null}
       policies={policies}
       signIn={customerSignInAvailable()}
+      payments={payments.map((p) => p.method)}
     >
       <a href="#sf-main" className="sr-only focus:not-sr-only focus:absolute focus:start-2 focus:top-2 focus:z-50 focus:rounded-full focus:bg-sf-card focus:px-5 focus:py-3 focus:shadow-lg">
         {t.skip}

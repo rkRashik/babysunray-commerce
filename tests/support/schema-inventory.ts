@@ -189,6 +189,18 @@ const EXPECTED_DEFAULTS: Record<string, string> = {
   "public.store_settings.updated_at": "now()",
   "public.owner_recovery_codes.id": "gen_random_uuid()",
   "public.owner_recovery_codes.created_at": "now()",
+  // Migration 0024: staff invitations and set-password links.
+  "public.staff_invitations.id": "gen_random_uuid()",
+  "public.staff_invitations.created_at": "now()",
+  // Migration 0025: manual advance payments.
+  "public.orders.payment_method": "'cod'::text",
+  "public.orders.advance_received_paisa": "0",
+  "public.orders.advance_refunded_paisa": "0",
+  "public.advance_payments.id": "gen_random_uuid()",
+  "public.advance_payments.created_at": "now()",
+  "public.payment_methods.enabled": "false",
+  "public.payment_methods.version": "1",
+  "public.payment_methods.updated_at": "now()",
   "drizzle.__drizzle_migrations.id": "nextval('drizzle.__drizzle_migrations_id_seq'::regclass)",
 };
 

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getDb } from "@/db/client";
 import { listDeliveryZones } from "@/modules/orders/delivery";
 import { ZONE_LABELS } from "@/modules/orders/rules";
+import { enabledPaymentMethods, METHOD_LABELS } from "@/modules/settings/payments";
 import { ActionForm, Choice, Field } from "../../_components/action-form";
 import { AdminShell, Section } from "../../_components/shell";
 import { requireAdmin } from "../../_lib/session";
@@ -17,7 +18,8 @@ const LINES = 5;
 // prices and the delivery charge; nothing typed here is trusted as an amount.
 export default async function NewOrderPage() {
   await requireAdmin("orders:write");
-  const zones = (await listDeliveryZones(getDb())).filter((z) => z.active);
+  const [allZones, methods] = await Promise.all([listDeliveryZones(getDb()), enabledPaymentMethods(getDb())]);
+  const zones = allZones.filter((z) => z.active);
   return (
     <AdminShell title="New assisted order" current="orders" breadcrumbs={[{ href: "/admin/orders", label: "Orders" }]}>
       {zones.length === 0 ? (
@@ -48,6 +50,14 @@ export default async function NewOrderPage() {
               legend="Delivery zone"
               options={zones.map((z) => ({ value: z.code, label: `${ZONE_LABELS[z.code]} (${bdt(z.chargePaisa)})` }))}
             />
+            {methods.length ? (
+              <Choice
+                name="paymentMethod"
+                legend="Payment"
+                defaultValue="cod"
+                options={[{ value: "cod", label: "Cash on delivery" }, ...methods.map((m) => ({ value: m.method, label: `Advance by ${METHOD_LABELS[m.method].en}` }))]}
+              />
+            ) : null}
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">Items (SKU and quantity; empty lines are ignored)</legend>
               {Array.from({ length: LINES }, (_, i) => (
