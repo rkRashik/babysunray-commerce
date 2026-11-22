@@ -408,7 +408,7 @@ export function CheckoutForm({ lang }: { lang: Lang }) {
           <h2 id={`${id}-done`} ref={heading} tabIndex={-1} className="sf-display text-[2.125rem] focus:outline-none lg:text-[2.75rem]">
             {t.pendingTitle}
           </h2>
-          <p role="status" className="sf-badge px-4 py-1.5 text-[0.875rem]" data-tone="sun">
+          <p role="status" className="sf-badge max-w-full rounded-2xl px-4 py-1.5 text-center text-[0.875rem] whitespace-normal" data-tone="sun">
             {t.simulatedNote}
           </p>
           <p className="max-w-prose text-sf-ink-2">{t.pendingBody}</p>

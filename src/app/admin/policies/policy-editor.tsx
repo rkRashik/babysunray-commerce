@@ -1,8 +1,9 @@
 "use client";
 
 import { unstable_rethrow } from "next/navigation";
-import { useActionState, useEffect, useId, useState } from "react";
+import { useActionState, useId, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { useLeaveGuard } from "../_components/editable-section";
 import type { FormState } from "../_lib/form";
 import { savePolicyAction } from "./actions";
 
@@ -29,12 +30,8 @@ export function PolicyEditor({ kind, title, version, bodyEn, bodyBn, idempotency
   const [bn, setBn] = useState(bodyBn);
   // The text areas are controlled, so what was typed stays after an error (React resets only uncontrolled fields).
   const dirty = en !== bodyEn || bn !== bodyBn;
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
+  // Closing the tab and following a link (another policy's tab included) ask first while something is unsaved.
+  useLeaveGuard(dirty);
   const id = useId();
   return (
     <form action={action} className="space-y-3" aria-describedby={state.error ? `${id}-error` : undefined} data-testid={`policy-editor-${kind}`}>

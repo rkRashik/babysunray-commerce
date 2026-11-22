@@ -223,7 +223,7 @@ export async function launchReadiness(db: Db, principal: Principal): Promise<Lau
     evidence: POLICY_EVIDENCE[policyStatus(kind)],
     next: policyStatus(kind) === "published" ? null : policyStatus(kind) === "reviewed" ? "If you approve the final text, publish it in Policies." : "Write it in both languages; have it checked where legal review is needed.",
     source: kind === "checkout_notices" ? "S-8, S-17" : "S-17, G-7",
-    href: `/admin/policies#${kind}`,
+    href: `/admin/policies?policy=${kind}#${kind}`,
   }));
   const required = (["delivery", "returns", "privacy"] as const).filter((k) => policyStatus(k) !== "published");
   policies.push({

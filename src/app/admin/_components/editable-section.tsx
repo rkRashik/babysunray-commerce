@@ -65,7 +65,7 @@ export function EditableSection({ title, editLabel, view, children }: { title: s
 }
 
 /** While `active`, closing or reloading the tab and following a link on the page ask before the typed changes are lost. */
-function useLeaveGuard(active: boolean) {
+export function useLeaveGuard(active: boolean) {
   useEffect(() => {
     if (!active) return;
     const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();

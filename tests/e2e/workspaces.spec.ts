@@ -240,3 +240,16 @@ test("on a phone, variants are cards with their stock and actions, and the menu 
   expect(ordersTop).toBeCloseTo(dashboardTop, 0);
   expect(await smallTargets(page)).toEqual([]);
 });
+
+test("policies open on an overview of all four and show one editor at a time, kept after a save", async ({ page }) => {
+  await page.goto("/admin/policies");
+  const choose = page.getByRole("navigation", { name: "Choose a policy" });
+  await expect(choose.getByRole("link")).toHaveCount(4);
+  await expect(page.locator("[data-testid^=policy-editor-]")).toHaveCount(1);
+  await choose.getByTestId("policy-tab-returns").click();
+  await expect(page).toHaveURL(/policy=returns/);
+  await expect(choose.getByTestId("policy-tab-returns")).toHaveAttribute("aria-current", "page");
+  await expect(page.getByTestId("policy-editor-returns")).toBeVisible();
+  await expect(page.locator("[data-testid^=policy-editor-]")).toHaveCount(1);
+  await expectNoAxeViolations(page);
+});

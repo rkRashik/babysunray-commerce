@@ -31,7 +31,7 @@ export async function savePolicyAction(_: FormState, form: FormData): Promise<Fo
   } catch (error) {
     return formError(error, form);
   }
-  redirect(`/admin/policies?done=policy-saved#${kind}`);
+  redirect(`/admin/policies?policy=${kind}&done=policy-saved#${kind}`);
 }
 
 export async function markPolicyReviewedAction(_: FormState, form: FormData): Promise<FormState> {
@@ -43,7 +43,7 @@ export async function markPolicyReviewedAction(_: FormState, form: FormData): Pr
   } catch (error) {
     return formError(error, form);
   }
-  redirect(`/admin/policies?done=policy-reviewed#${kind}`);
+  redirect(`/admin/policies?policy=${kind}&done=policy-reviewed#${kind}`);
 }
 
 /** Publishes the reviewed version to customers: the founder's approval of that exact wording (the box must be ticked). */
@@ -60,7 +60,7 @@ export async function publishPolicyAction(_: FormState, form: FormData): Promise
   } catch (error) {
     return formError(error, form);
   }
-  redirect(`/admin/policies?done=policyPublished#${kind}`);
+  redirect(`/admin/policies?policy=${kind}&done=policyPublished#${kind}`);
 }
 
 export async function withdrawPolicyAction(_: FormState, form: FormData): Promise<FormState> {
@@ -72,5 +72,5 @@ export async function withdrawPolicyAction(_: FormState, form: FormData): Promis
   } catch (error) {
     return formError(error, form);
   }
-  redirect(`/admin/policies?done=policyWithdrawn#${kind}`);
+  redirect(`/admin/policies?policy=${kind}&done=policyWithdrawn#${kind}`);
 }
