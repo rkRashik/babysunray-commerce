@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getDb } from "@/db/client";
 import { UNREFERENCED_GRACE_MS, verifyMediaStore } from "@/modules/media/manifest";
-import { mediaStoreConfig } from "@/modules/media/storage";
+import { configuredMediaStore } from "@/modules/media/provider";
 import { ActionForm, Checkbox } from "../_components/action-form";
 import { AdminShell, Section } from "../_components/shell";
 import { removeUnreferencedAction } from "../content-actions";
@@ -33,7 +33,8 @@ function Keys({ title, keys, testId }: { title: string; keys: string[]; testId: 
 export default async function MediaHealthPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireAdmin("catalog:read");
   const { done, removed } = await searchParams;
-  const config = mediaStoreConfig(process.env, process.cwd());
+  // The configured provider's store (the local folder or the private Supabase bucket), the same one uploads use.
+  const config = configuredMediaStore(process.env, process.cwd());
   const check = config.ok ? await verifyMediaStore(getDb(), config.store) : null;
   const notice = done === "cleanup" ? `${typeof removed === "string" && /^[0-9]+$/.test(removed) ? removed : "0"} unused file(s) deleted.` : undefined;
   return (

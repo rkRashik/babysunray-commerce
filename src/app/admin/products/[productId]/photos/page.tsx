@@ -6,7 +6,7 @@ import { getProductWithVariants } from "@/modules/catalogue/service";
 import { DomainError } from "@/modules/domain-error";
 import { IMAGE_BOUNDS, IMAGE_PROBLEMS, type ImageProblem } from "@/modules/media/images";
 import { MAX_PRODUCT_PHOTOS } from "@/modules/media/service";
-import { mediaStoreConfig } from "@/modules/media/storage";
+import { configuredMediaStore } from "@/modules/media/provider";
 import { ActionForm, Checkbox, Field } from "../../../_components/action-form";
 import { LanguageStatus } from "../../../_components/content";
 import { FilePicker, UploadButton } from "../../../_components/file-picker";
@@ -79,7 +79,8 @@ export default async function PhotosPage({ params, searchParams }: Props) {
     throw error;
   });
   const { done, error } = await searchParams;
-  const storage = mediaStoreConfig(process.env, process.cwd());
+  // The configured provider's store (the local folder or the private Supabase bucket), the same one uploads use.
+  const storage = configuredMediaStore(process.env, process.cwd());
   const draft = product.status === "draft";
   const { title, lang } = productTitle(product);
   const back = `/admin/products/${product.id}`;
@@ -99,7 +100,7 @@ export default async function PhotosPage({ params, searchParams }: Props) {
       ) : null}
       {!storage.ok ? (
         <p role="status" className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          Photos cannot be stored or shown on this server: {storage.problem} Product photos are kept outside the project in a folder you choose (runbook, Product photos).
+          Photos cannot be stored or shown on this server: {storage.problem} Product photos are kept outside the project, in a folder you choose or a private storage bucket (runbook, Product photos).
         </p>
       ) : null}
 
