@@ -9,7 +9,7 @@ import { ActionForm, Field } from "../../_components/action-form";
 import { EditableSection } from "../../_components/editable-section";
 import { AdminShell, Section, formatTime, noticeFor } from "../../_components/shell";
 import { requireAdmin } from "../../_lib/session";
-import { updateStoreIdentityAction } from "../actions";
+import { updateSocialLinksAction, updateStoreIdentityAction } from "../actions";
 import { LogoSection } from "./logo-section";
 
 export const metadata = { title: "Store settings · Admin" };
@@ -34,16 +34,23 @@ function emailStatus(): { state: "ready" | "off" | "broken"; detail?: string } {
 }
 
 /** One saved detail as text: what customers see, or that nothing is shown. */
-function Detail({ label, value, note, lang }: { label: string; value: string | null | undefined; note?: string; lang?: string }) {
+function Detail({ label, value, note, lang, link }: { label: string; value: string | null | undefined; note?: string; lang?: string; link?: boolean }) {
   return (
     <div className="grid gap-0.5 border-b border-gray-200 py-2.5 last:border-b-0 sm:grid-cols-[13rem_1fr] sm:gap-4">
       <dt className="text-sm text-gray-600">{label}</dt>
       <dd className="min-w-0 break-words">
         {value ? (
           <>
-            <span lang={lang} className="font-medium">
-              {value}
-            </span>
+            {link ? (
+              <a href={value} target="_blank" rel="noopener noreferrer" className="font-medium break-all underline underline-offset-4">
+                {value}
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            ) : (
+              <span lang={lang} className="font-medium">
+                {value}
+              </span>
+            )}
             {note ? <span className="text-sm text-gray-600"> · {note}</span> : null}
           </>
         ) : (
@@ -59,7 +66,7 @@ function Detail({ label, value, note, lang }: { label: string; value: string | n
 export default async function StoreSettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const principal = await requireAdmin("settings:write");
   const { done, error } = await searchParams;
-  const { settings, schemaReady } = await storeSettingsForAdmin(getDb(), principal);
+  const { settings, schemaReady, socialReady } = await storeSettingsForAdmin(getDb(), principal);
   const identity = await currentStoreIdentity();
   const version = String(settings?.version ?? 0);
   const installed = (own: string | null | undefined, shown: string | null | undefined) => (!own && shown ? "from the installation settings" : undefined);
@@ -107,6 +114,35 @@ export default async function StoreSettingsPage({ searchParams }: { searchParams
           <Field name="contactMessenger" label="Messenger link" maxLength={200} defaultValue={settings?.contactMessenger ?? ""} hint="For example https://m.me/yourpage" />
         </ActionForm>
       </EditableSection>
+
+      {socialReady ? (
+        <EditableSection
+          key={`social-${version}`}
+          title="Social links"
+          editLabel="Edit social links"
+          view={
+            <div className="space-y-3">
+              <p className="text-sm text-gray-700">Shown in the shop&apos;s footer, beside your contact details. A link that is not set is not shown.</p>
+              <dl data-testid="social-links">
+                <Detail label="Facebook page" value={settings?.socialFacebook} link />
+                <Detail label="Instagram profile" value={settings?.socialInstagram} link />
+              </dl>
+            </div>
+          }
+        >
+          <ActionForm action={updateSocialLinksAction} idempotencyKey={randomUUID()} hidden={{ version }} submitLabel="Save social links">
+            <p className="text-sm text-gray-700">Paste the full address of each profile. Leave a field empty to show nothing.</p>
+            <Field name="facebook" label="Facebook page" maxLength={200} defaultValue={settings?.socialFacebook ?? ""} hint="For example https://www.facebook.com/yourpage" />
+            <Field name="instagram" label="Instagram profile" maxLength={200} defaultValue={settings?.socialInstagram ?? ""} hint="For example https://www.instagram.com/yourprofile/" />
+          </ActionForm>
+        </EditableSection>
+      ) : schemaReady ? (
+        <Section title="Social links">
+          <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950" data-testid="social-pending">
+            Facebook and Instagram links can be added after this database gets its latest update (migration 0023). Everything else on this page works as before.
+          </p>
+        </Section>
+      ) : null}
 
       <LogoSection
         key={`logo-${version}`}

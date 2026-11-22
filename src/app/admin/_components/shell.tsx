@@ -342,6 +342,7 @@ const NOTICES: Record<string, string> = {
   acceptanceStarted: "Acceptance started in this browser for a few hours. Open the shop below.",
   acceptanceEnded: "Acceptance ended in this browser. The shop is closed to it again.",
   storeSaved: "Store details saved.",
+  socialSaved: "Social links saved.",
   logoSaved: "Logo saved.",
   logoRemoved: "Logo removed.",
   ruleApproved: "Publication requirements approved. Products that meet them can now be published.",

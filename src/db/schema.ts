@@ -1284,9 +1284,13 @@ export const storeSettings = pgTable(
     version: version(),
     updatedAt: updatedAt(),
     updatedByUserId: userRef("updated_by_user_id"),
+    // Migration 0023: optional public profiles. Read only after a column check, so an older database keeps working.
+    socialFacebook: text("social_facebook"),
+    socialInstagram: text("social_instagram"),
   },
   (t) => [
     check("store_settings_single_row", sql`${t.id} = 1`),
+    check("store_settings_social_valid", sql`coalesce(length(${t.socialFacebook}), 0) <= 200 and coalesce(length(${t.socialInstagram}), 0) <= 200`),
     check("store_settings_version_positive", sql`${t.version} >= 1`),
     check(
       "store_settings_texts_valid",

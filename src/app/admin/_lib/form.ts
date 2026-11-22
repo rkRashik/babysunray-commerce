@@ -38,6 +38,8 @@ const LABELS: Record<string, string> = {
   contactEmail: "Email",
   contactWhatsapp: "WhatsApp",
   contactMessenger: "Messenger link",
+  facebook: "Facebook page",
+  instagram: "Instagram profile",
   approval: "Approval",
   slug: "Slug",
   nameEn: "Name (English)",

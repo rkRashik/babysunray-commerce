@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { getDb } from "@/db/client";
 import { regenerateRecoveryCodes } from "@/modules/auth/setup";
-import { approvePublicationRuleOnce, updateStoreIdentityOnce } from "@/modules/settings/store";
+import { approvePublicationRuleOnce, updateSocialLinksOnce, updateStoreIdentityOnce } from "@/modules/settings/store";
 import { formError, type FormState, text, wholeNumber } from "../_lib/form";
 import { requireAdmin } from "../_lib/session";
 
@@ -27,6 +27,20 @@ export async function updateStoreIdentityAction(_: FormState, form: FormData): P
     return formError(error, form);
   }
   redirect("/admin/settings/store?done=storeSaved");
+}
+
+export async function updateSocialLinksAction(_: FormState, form: FormData): Promise<FormState> {
+  const principal = await requireAdmin("settings:write");
+  try {
+    await updateSocialLinksOnce(getDb(), principal, text(form, "idempotencyKey"), {
+      expectedVersion: wholeNumber(text(form, "version") || "0", "Version"),
+      facebook: text(form, "facebook"),
+      instagram: text(form, "instagram"),
+    });
+  } catch (error) {
+    return formError(error, form);
+  }
+  redirect("/admin/settings/store?done=socialSaved");
 }
 
 export async function approvePublicationRuleAction(_: FormState, form: FormData): Promise<FormState> {

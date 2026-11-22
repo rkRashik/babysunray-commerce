@@ -162,6 +162,13 @@
       "when": 1795095250382,
       "tag": "0022_order_phone_search",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795300220181,
+      "tag": "0023_store_social_links",
+      "breakpoints": true
     }
   ]
 }

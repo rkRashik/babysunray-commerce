@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, sql } from "drizzle-orm";
+import { eq, getTableColumns, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { type InstallationIdentity, readInstallationIdentity } from "@/config/installation";
 import { type Db, pgErrorCode } from "@/db/database";
@@ -19,10 +19,30 @@ export type StoreSettings = typeof storeSettings.$inferSelect;
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 const LOGO_MAX_SIDE = 1200;
 
+// Migration 0023 added the social profile columns. Until a database has them, they are left out of every query (a failed
+// query would abort the surrounding transaction), so the shop and Admin keep working and only the social links wait.
+let socialReady = false;
+export async function socialColumnsReady(db: Db): Promise<boolean> {
+  if (socialReady) return true;
+  const { rows } = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from information_schema.columns where table_schema = 'public' and table_name = 'store_settings' and column_name in ('social_facebook', 'social_instagram')`,
+  );
+  socialReady = rows[0].n === 2;
+  return socialReady;
+}
+
+// Every column except the two added by 0023 (the destructured names are deliberately unused).
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const { socialFacebook: _facebook, socialInstagram: _instagram, ...BASE_COLUMNS } = getTableColumns(storeSettings);
+
 async function row(db: Db): Promise<StoreSettings | null> {
   try {
-    const [r] = await db.select().from(storeSettings).where(eq(storeSettings.id, 1));
-    return r ?? null;
+    if (await socialColumnsReady(db)) {
+      const [r] = await db.select().from(storeSettings).where(eq(storeSettings.id, 1));
+      return r ?? null;
+    }
+    const [r] = await db.select(BASE_COLUMNS).from(storeSettings).where(eq(storeSettings.id, 1));
+    return r ? { ...r, socialFacebook: null, socialInstagram: null } : null;
   } catch (error) {
     if (pgErrorCode(error) === "42P01") return null;
     throw error;
@@ -37,7 +57,14 @@ export async function storeIdentity(db: Db, env: Record<string, string | undefin
   return {
     storeName: r.storeName ?? base.storeName,
     storeLine: { en: r.lineEn ?? base.storeLine.en, bn: r.lineBn ?? base.storeLine.bn },
-    contact: { phone: r.contactPhone ?? base.contact.phone, email: r.contactEmail ?? base.contact.email, whatsapp: r.contactWhatsapp, messenger: r.contactMessenger },
+    contact: {
+      phone: r.contactPhone ?? base.contact.phone,
+      email: r.contactEmail ?? base.contact.email,
+      whatsapp: r.contactWhatsapp,
+      messenger: r.contactMessenger,
+      facebook: r.socialFacebook,
+      instagram: r.socialInstagram,
+    },
     theme: base.theme,
     logo: r.logoSha256 && r.logoWidth && r.logoHeight ? { src: `/brand/logo?v=${r.logoSha256.slice(0, 12)}`, width: r.logoWidth, height: r.logoHeight } : null,
   };
@@ -49,11 +76,12 @@ export async function storeLogo(db: Db): Promise<{ data: Buffer; contentType: st
   return r?.logoBase64 && r.logoContentType ? { data: Buffer.from(r.logoBase64, "base64"), contentType: r.logoContentType } : null;
 }
 
-/** The settings row for the Admin form (null before the first save; `schemaReady` false without migration 0021). */
-export async function storeSettingsForAdmin(db: Db, principal: Principal): Promise<{ settings: StoreSettings | null; schemaReady: boolean }> {
+/** The settings row for the Admin form (null before the first save; `schemaReady` false without migration 0021, `socialReady` false without 0023). */
+export async function storeSettingsForAdmin(db: Db, principal: Principal): Promise<{ settings: StoreSettings | null; schemaReady: boolean; socialReady: boolean }> {
   assertPermission(principal, "settings:write");
   const { rows } = await db.execute<{ ready: boolean }>(sql`select to_regclass('public.store_settings') is not null as ready`);
-  return { settings: rows[0].ready ? await row(db) : null, schemaReady: rows[0].ready };
+  if (!rows[0].ready) return { settings: null, schemaReady: false, socialReady: false };
+  return { settings: await row(db), schemaReady: true, socialReady: await socialColumnsReady(db) };
 }
 
 function field(raw: unknown, name: string, max: number, pattern?: { test: RegExp; rule: string }): string | null {
@@ -84,9 +112,34 @@ export async function updateStoreIdentity(tx: Db, input: IdentityInput & { expec
   return save(tx, input.expectedVersion, values, userId);
 }
 
+export type SocialInput = { facebook: unknown; instagram: unknown };
+
+/** Saves the public social profiles at `expectedVersion`. Empty means "not shown". Needs migration 0023. */
+export async function updateSocialLinks(tx: Db, input: SocialInput & { expectedVersion: number }, userId: string): Promise<{ version: number }> {
+  if (!(await socialColumnsReady(tx))) throw new DomainError("INVALID_INPUT", "This database needs its latest update (migration 0023) before social links can be saved.");
+  const values = {
+    socialFacebook: field(input.facebook, "facebook", 200, { test: /^https:\/\/(www\.|m\.)?facebook\.com\/[^\s/?#][^\s]*$/, rule: "must be a link to your page, starting https://www.facebook.com/" }),
+    socialInstagram: field(input.instagram, "instagram", 200, { test: /^https:\/\/(www\.)?instagram\.com\/[^\s/?#][^\s]*$/, rule: "must be a link to your profile, starting https://www.instagram.com/" }),
+  };
+  return save(tx, input.expectedVersion, values, userId);
+}
+
+export function updateSocialLinksOnce(db: Db, principal: Principal, key: string, input: SocialInput & { expectedVersion: number }): Promise<Once<{ version: number }>> {
+  const user = assertPermission(principal, "settings:write");
+  const request = { expectedVersion: input.expectedVersion, facebook: input.facebook ?? null, instagram: input.instagram ?? null };
+  return runOnce(db, { userId: user.userId, operation: "settings.store.social", key, request }, (tx) => updateSocialLinks(tx, input, actorFor(user).ref), loadVersion);
+}
+
 async function save(tx: Db, expectedVersion: number, values: Partial<StoreSettings>, userId: string): Promise<{ version: number }> {
   if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0) throw invalidInput("version", "must be a whole number");
   if (expectedVersion === 0) {
+    if (!(await socialColumnsReady(tx))) {
+      // Drizzle's insert names every column, the two of 0023 included: create the row with the columns that exist, then
+      // save the values on it like any later save (the version goes 1 → 2).
+      const { rows } = await tx.execute<{ version: number }>(sql`insert into store_settings (id, updated_by_user_id) values (1, ${userId}) on conflict do nothing returning version`);
+      if (!rows.length) throw stale();
+      return save(tx, rows[0].version, values, userId);
+    }
     const [inserted] = await tx.insert(storeSettings).values({ id: 1, ...values, updatedByUserId: userId }).onConflictDoNothing().returning({ version: storeSettings.version });
     if (!inserted) throw stale();
     return inserted;

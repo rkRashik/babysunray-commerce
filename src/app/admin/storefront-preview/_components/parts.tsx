@@ -1,4 +1,4 @@
-import { Banknote, Lock, Truck } from "lucide-react";
+import { Banknote, Lock, Mail, MessageCircle, Phone, Truck } from "lucide-react";
 import Link from "next/link";
 import { SunMark } from "@/app/_design/sun-mark";
 import type { InstallationIdentity } from "@/config/installation";
@@ -267,16 +267,42 @@ export function HowToOrder({ lang }: { lang: Lang }) {
   );
 }
 
+/** Outline marks for the two social profiles (lucide's former brand outlines, ISC); always beside a text label, never alone. */
+function SocialGlyph({ name }: { name: "facebook" | "instagram" }) {
+  return (
+    <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      {name === "facebook" ? (
+        <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+      ) : (
+        <>
+          <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+          <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+          <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 export function Footer({ lang, identity, facets, surface, policies = [] }: { lang: Lang; identity: InstallationIdentity; facets: Facets; surface: Surface; policies?: { kind: string; href: string }[] }) {
   const t = dictionary(lang);
   const other = lang === "en" ? "bn" : "en";
   const lineHere = localised(lang, identity.storeLine.en, identity.storeLine.bn);
   const line = lineHere ?? localised(other, identity.storeLine.en, identity.storeLine.bn);
-  const contact = [identity.contact.phone, identity.contact.email].filter(Boolean);
+  const c = identity.contact;
+  const icon = { size: 18, strokeWidth: 1.75 } as const;
+  const channels = [
+    c.phone ? { key: "phone", href: `tel:${c.phone.replace(/[^0-9+]/g, "")}`, label: c.phone, icon: <Phone {...icon} />, external: false } : null,
+    c.email ? { key: "email", href: `mailto:${c.email}`, label: c.email, icon: <Mail {...icon} />, external: false } : null,
+    c.whatsapp ? { key: "whatsapp", href: `https://wa.me/${c.whatsapp.replace(/[^0-9]/g, "").replace(/^0/, "880")}`, label: `WhatsApp: ${c.whatsapp}`, icon: <MessageCircle {...icon} />, external: true } : null,
+    c.messenger ? { key: "messenger", href: c.messenger, label: "Messenger", icon: <MessageCircle {...icon} />, external: true } : null,
+    c.facebook ? { key: "facebook", href: c.facebook, label: "Facebook", icon: <SocialGlyph name="facebook" />, external: true } : null,
+    c.instagram ? { key: "instagram", href: c.instagram, label: "Instagram", icon: <SocialGlyph name="instagram" />, external: true } : null,
+  ].filter((x) => x !== null);
   const link = "inline-flex min-h-11 items-center text-sf-paper/85 hover:text-sf-paper hover:underline hover:decoration-sf-sun-glow hover:underline-offset-4";
   return (
     <footer className="sf-on-dark mt-16 bg-sf-ink text-sf-paper lg:mt-24">
-      <div className="mx-auto grid max-w-7xl gap-10 px-4 pt-12 pb-8 lg:grid-cols-[1.6fr_1fr_1fr] lg:px-8 lg:pt-16">
+      <div className={`mx-auto grid max-w-7xl gap-10 px-4 pt-12 pb-8 lg:px-8 lg:pt-16 ${channels.length ? "sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]" : "lg:grid-cols-[1.6fr_1fr_1fr]"}`}>
         <div className="space-y-4">
           <SunMark className="h-6 w-10 text-sf-sun-glow" />
           <p className="fl-wordmark text-[1.75rem]">{identity.storeName}</p>
@@ -311,32 +337,25 @@ export function Footer({ lang, identity, facets, surface, policies = [] }: { lan
         <div className="space-y-3">
           <h2 className="sf-plain text-[0.9375rem] text-sf-sun-glow">{t.deliveryAndPayment}</h2>
           <p className="text-sf-paper/85">{t.cod}</p>
-          {contact.length ? (
-            <p data-testid="store-contact">
-              {t.contactLabel}:{" "}
-              {contact.map((c, i) => (
-                <span key={c} lang="en">
-                  {i ? ", " : ""}
-                  {c}
-                </span>
-              ))}
-            </p>
-          ) : null}
-          {identity.contact.whatsapp ? (
-            <p lang="en">
-              <a className={link} href={`https://wa.me/${identity.contact.whatsapp.replace(/[^0-9]/g, "").replace(/^0/, "880")}`} rel="noopener noreferrer">
-                WhatsApp: {identity.contact.whatsapp}
-              </a>
-            </p>
-          ) : null}
-          {identity.contact.messenger ? (
-            <p lang="en">
-              <a className={link} href={identity.contact.messenger} rel="noopener noreferrer">
-                Messenger
-              </a>
-            </p>
-          ) : null}
         </div>
+        {channels.length ? (
+          <div>
+            <h2 className="sf-plain mb-2 text-[0.9375rem] text-sf-sun-glow">{t.contactLabel}</h2>
+            {/* Only the channels the Owner has set (Store settings); each opens the app or page it names. */}
+            <ul data-testid="store-contact" lang="en">
+              {channels.map((c) => (
+                <li key={c.key}>
+                  <a className={`${link} gap-2.5`} href={c.href} rel={c.external ? "noopener noreferrer" : undefined} data-channel={c.key}>
+                    <span aria-hidden="true" className="inline-flex w-5 shrink-0 justify-center text-sf-sun-glow">
+                      {c.icon}
+                    </span>
+                    <span className="break-all">{c.label}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </div>
       <div className="mx-auto max-w-7xl space-y-1 border-t border-sf-paper/15 px-4 py-5 text-[0.8125rem] text-sf-paper/75 lg:px-8">
         {policies.length ? (

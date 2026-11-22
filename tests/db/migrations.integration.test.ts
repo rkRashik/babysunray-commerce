@@ -316,6 +316,7 @@ describe("migrations", () => {
       "store_settings_rule_approved_by_user_id_auth_users_id_fk",
       "store_settings_rule_consistent",
       "store_settings_single_row",
+      "store_settings_social_valid",
       "store_settings_texts_valid",
       "store_settings_updated_by_user_id_auth_users_id_fk",
       "store_settings_version_positive",

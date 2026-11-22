@@ -196,3 +196,35 @@ test("the changed pages work with the keyboard, pass axe, and fit a phone with 4
   await page.getByRole("region", { name: "Dhaka City" }).getByRole("button", { name: "Change charge" }).click();
   await check("delivery charge, editing");
 });
+
+test("social links are optional, validated, saved with the store and shown in the shop's footer only when set", async ({ page }) => {
+  await page.goto("/admin/settings/store");
+  const social = page.getByRole("region", { name: "Social links" });
+  await expect(social.getByTestId("social-links")).toContainText("Not set");
+  await social.getByRole("button", { name: "Edit social links" }).click();
+  await social.getByLabel("Facebook page").fill("https://example.test/fictionalkids");
+  await social.getByRole("button", { name: "Save social links" }).click();
+  await expect(social.getByRole("alert")).toContainText("Facebook page");
+  await expect(social.getByLabel("Facebook page")).toHaveValue("https://example.test/fictionalkids");
+  await social.getByLabel("Facebook page").fill("https://www.facebook.com/fictionalkids");
+  await social.getByLabel("Instagram profile").fill("https://www.instagram.com/fictionalkids/");
+  await social.getByRole("button", { name: "Save social links" }).click();
+  await expect(page.getByRole("status").first()).toHaveText("Social links saved.");
+  await expect(social.getByRole("link", { name: /facebook\.com\/fictionalkids/ })).toHaveAttribute("target", "_blank");
+
+  // The shop's footer lists them beside the other contact channels; an unset one is not shown.
+  await page.goto("/admin/storefront-preview/en");
+  const contact = page.getByTestId("store-contact");
+  await expect(contact.getByRole("link", { name: "Facebook" })).toHaveAttribute("href", "https://www.facebook.com/fictionalkids");
+  await expect(contact.getByRole("link", { name: "Instagram" })).toHaveAttribute("rel", "noopener noreferrer");
+
+  // Clearing them removes them from the footer again.
+  await page.goto("/admin/settings/store");
+  await social.getByRole("button", { name: "Edit social links" }).click();
+  await social.getByLabel("Facebook page").fill("");
+  await social.getByLabel("Instagram profile").fill("");
+  await social.getByRole("button", { name: "Save social links" }).click();
+  await expect(page.getByRole("status").first()).toHaveText("Social links saved.");
+  await page.goto("/admin/storefront-preview/en");
+  await expect(page.locator("[data-channel=facebook], [data-channel=instagram]")).toHaveCount(0);
+});
