@@ -1,4 +1,4 @@
-# BabySunRay Admin — User Guide
+# BabySunray Admin — User Guide
 
 This guide shows you how to run the shop day to day: adding products, taking orders, sending parcels, keeping track of cash on delivery, and reading your reports.
 
@@ -83,9 +83,11 @@ The dashboard shows what needs you, most urgent first:
 └──────────────────────────────────────────────┘
 ```
 
-Under **Needs attention**, each line tells you what happened, why it matters, the oldest orders, and has a button to the right list (for example **Verify orders**). If nothing is listed, nothing needs you right now. A delivery zone without a charge, and returned items waiting for inspection, also appear here.
+Under **Needs attention**, each line tells you what happened, why it matters, the oldest orders, and has a button to the right list (for example **Verify orders**). Urgent lines (late orders, cancellation requests, a zone without a charge) have a dark button; the others an outlined one. If nothing is listed, nothing needs you right now. A delivery zone without a charge, and returned items waiting for inspection, also appear here. The time the figures were read and **Refresh** sit beside the *Needs attention* heading.
 
-**Orders in progress** shows how many orders are in each step of the day's work. Press **Show all** to open that list. These are order counts, not sales: money counts only once you record that it was collected and settled.
+**Orders in progress** shows how many orders are in each step of the day's work. Press anywhere on a card to open that list. These are order counts, not sales: money counts only once you record that it was collected and settled.
+
+Under **Stock availability**, **At most 3 / 5 / 10 available** show the items running low in one press; any other number can be typed in the box. This is only a view: the system sets no low-stock level.
 
 A simple daily rhythm:
 
@@ -119,13 +121,15 @@ Use the **Search orders** box. You can type:
 - the customer's full mobile number — `01712 345678`, `+8801712345678` (Bangla digits work too)
 - part of the customer's name
 
-The list updates as you type. The chips under the search box (**To verify**, **To pack**, **To dispatch** …) show one group at a time, with a count on each.
+The list updates as you type. While a phone number is only partly typed, a grey note says to keep typing: a phone number is found once all 11 digits are in. The chips under the search box (**To verify**, **To pack**, **To dispatch** …) show one group at a time, with a count on each.
+
+On a computer each row shows the order number (with how it came in and when), the customer, the total, a **Status** column and the next step. The Status column lists the order's separate states one under the other — the order, its packing and delivery, the payment (for example **COD to collect**) and any return — so you see them all without scrolling sideways.
 
 > Customer names and phone numbers are never shown in the page address, so they don't end up in your browser history.
 
 ### Quick look without opening
 
-Press the **eye icon** next to an order number. A panel opens on the right with the customer, the items, the amounts and the recent history. Press **Close** or **Esc** to go back to the list. To see everything, press **Open full order**.
+Press the **eye icon** next to an order number. A panel opens on the right with the customer, the items, the amounts and the recent history. **Call** opens your phone's dialler with the customer's number and **Copy** copies it (for WhatsApp). The courier's amounts appear once money has moved; before that the panel says *Nothing yet*. Press **Close** or **Esc** to go back to the list. To see everything, press **Open full order**.
 
 ![Order quick view](images/order-quick-view.png)
 
@@ -151,8 +155,8 @@ Open an order by its number. On a computer the page has two columns: the work on
 |---|---|
 | **Status** | A progress strip (Verified, Packed, Dispatched, Delivered or Returned to sender, Closed) with the next step marked, then the four separate statuses: order, fulfilment (packing and delivery), payment and return. They are never merged into one. Cancelled and expired orders show no strip. |
 | **Next step** | The steps possible now, as buttons. **Cancel order** and **Mark returned to sender** sit apart, under *If the order cannot go ahead*. |
-| **Customer and delivery** | Name, phone, address and delivery zone. **Copy** puts the phone or address on your clipboard (for the courier's form). The print button makes the packing and shipping document. |
-| **Items** | What was ordered, at the price it was ordered at, and the expected COD. |
+| **Customer and delivery** | Name, phone, address and delivery zone. **Call** opens your phone's dialler; **Copy** puts the phone or address on your clipboard (for the courier's form or WhatsApp). The print button makes the packing and shipping document. |
+| **Items** | What was ordered, at the price it was ordered at, and the expected COD. On a phone each item is a small card with the same figures. |
 | **Cash on delivery** | The money for this order (see section 7). **Record a payment** opens the form; it opens by itself when a delivered order has nothing collected yet. |
 | **Returns and exchanges** | Open requests and their next step. **Record a return or exchange** opens the form while the return window is open. |
 | **History** | Everything that happened, oldest first; the latest step is marked. |
@@ -173,7 +177,7 @@ On a computer, tick the boxes on the left of several orders. A bar appears at th
 - **Mark N packed** — for orders waiting to be packed
 - **Dispatch N orders** — for packed orders
 
-Each order is handled separately. If one can't be done (for example someone changed it in another window), you'll see exactly which one and why — the others still go through.
+Each order is handled separately. If one can't be done (for example someone changed it in another window), you'll see exactly which one and why — the others still go through. The result stays on screen even when the list is now empty (for example after packing everything in *To pack*).
 
 > Delivery is always recorded **one order at a time**, because it's your own record, not proof from the courier.
 
@@ -204,15 +208,15 @@ A new product is a **draft** — customers can't see it yet.
 
 ### Finishing the product
 
-The product's page starts with an **overview**: the first photo, whether customers can see the product, how many variants it has, the units on hand and available, and **the one thing to do next**, with a button that goes straight there (for example *Next: add a product photo* with **Add photos**, or *Next: add the size chart measurements* with **Add measurements**). **See all** lists everything still needed. The row of buttons under it jumps to each part of the page.
+The product's page starts with an **overview**: the first photo, whether customers can see the product, how many variants it has, the units on hand and available, and **the one thing to do next**, with a button that goes straight there (for example *Next: add a product photo* with **Add photos**, or *Next: add the size chart measurements* with **Add measurements**). **See all** lists everything still needed. The row of buttons under it jumps to each part of the page, in the order they appear:
 
 | Part | What to do |
 |---|---|
-| **Variants and stock** | Each size/colour is a *variant* with its own code (SKU) and price. On a phone each variant is a card with its available, reserved and on-hand units and a **Stock** button. **Add a variant** opens the form (it is already open for a product with no variants). Click a SKU to receive or adjust its stock. |
-| **Publishing** | Three steps: complete the information, mark it reviewed, publish. A finished step shows a tick. |
-| **Details** | Description, fabric, care instructions, size guidance, category — change them with **Edit details** at the top. If you type something and try to leave without saving, you are asked first. |
+| **Photos** | Upload photos and describe each one in English and Bangla. They come first: they are what customers look at first. |
 | **Size chart** | Measurements in centimetres for each size |
-| **Photos** | Upload photos and describe each one in English and Bangla |
+| **Variants and stock** | Each size/colour is a *variant* with its own code (SKU) and price. On a phone each variant is a card with its available, reserved and on-hand units and a **Stock** button. **Add a variant** opens the form (it is already open for a product with no variants). Click a SKU to receive or adjust its stock. |
+| **Publishing** | Three steps: complete the information, mark it reviewed, publish. A finished step shows a tick. In the checklist, what is still missing is listed; what is done folds into one **N done** line you can open. |
+| **Details** | Description, fabric, care instructions, size guidance, category — change them with **Edit details** at the top. If you type something and try to leave without saving, you are asked first. |
 
 **Archive this product** is at the bottom, behind its own button, because it cannot be undone here.
 
@@ -220,7 +224,7 @@ The product's page starts with an **overview**: the first photo, whether custome
 
 ### Is it ready?
 
-The **Catalogue checklist** page shows, for all drafts, what's still missing (names, photos, measurements…). Click a number to see those products.
+The **Catalogue checklist** page shows, for all drafts, what's still missing (names, photos, measurements…). Press **N drafts** on a line to see those products; a line every draft already has shows **All set**. Archived products are left out of these lists (choose the *Archived* status on the product list to see them).
 
 On the product list, each draft shows either **Information complete** or **N missing**.
 
@@ -344,6 +348,8 @@ If the reconciliation check ever turns red, the payment records don't match — 
 
 On the **Orders & performance** tab, the bar shows orders by status; **Show the detail tables** opens the counts by source and by each status.
 
+On a phone the tabs are called **Orders**, **COD** and **Inventory**, and each order with COD still open is a small card with all six amounts (total, to collect, collected, held by the courier, settled, kept by the courier).
+
 ---
 
 ## 10. Shop settings
@@ -393,7 +399,9 @@ Customers never need an email account to order.
 ## 11. What your customers see
 
 - They browse the shop in **English or Bangla**.
-- They choose size and colour, add to bag, and order with **Cash on Delivery**. No account is needed, but they can make one (with email or Google) if they like.
+- They can sort the list (newest, or price low to high / high to low) and filter it under **Filter & sort**.
+- They choose size and colour, add to bag, and order with **Cash on Delivery**. Until a size or colour is chosen the button says which one is missing; a sold-out choice says **Sold out**. The size guide marks the chosen size and can show inches (worked out from your centimetres). No account is needed, but they can make one (with email or Google) if they like.
+- The delivery area they pick in the bag is already chosen at checkout, so the total they saw is the total they get (it is priced again by the server).
 - They get a **tracking link** to follow their order and, while it's still waiting for your call, to cancel it.
 
 > Until you officially launch, the shop is closed to the public. You can see it safely through **Storefront preview** or **Shop acceptance**.

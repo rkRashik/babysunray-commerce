@@ -1,6 +1,6 @@
 <div align="center">
 
-# BabySunRay
+# BabySunray
 
 **A bilingual online shop and back office for a baby and kidswear business in Bangladesh.**
 
@@ -8,13 +8,13 @@ English · বাংলা · Cash on delivery · Built for phones first
 
 </div>
 
-![The BabySunRay shop](docs/images/storefront.png)
+![The BabySunray shop](docs/images/storefront.png)
 
 ---
 
 ## About
 
-BabySunRay is an online shop and back office for a small clothing business. Shoppers browse in English or বাংলা, check the size chart, and order with cash on delivery, with no account needed. The owner runs everything from one Admin: products, stock, orders, cash-on-delivery money, returns, printed slips and reports.
+BabySunray is an online shop and back office for a small clothing business. Shoppers browse in English or বাংলা, check the size chart, and order with cash on delivery, with no account needed. The owner runs everything from one Admin: products, stock, orders, cash-on-delivery money, returns, printed slips and reports.
 
 It was built for how small shops in Bangladesh actually work: orders arrive from the website, Messenger and WhatsApp; every order is confirmed by phone before it is packed; and cash moves from customer to courier to shop in separate steps that each need recording.
 
@@ -30,15 +30,16 @@ It was built for how small shops in Bangladesh actually work: orders arrive from
 |---|---|
 | ![Orders](docs/images/orders.png) | ![Reports](docs/images/reports.png) |
 
-<sub>Screenshots come from the automated browser tests and use made-up products and customers. The products have no photos, so the shop shows its "No photo yet" state.</sub>
+<sub>Screenshots come from the automated browser tests and use made-up products and customers. The products have no photos, so the shop shows its "No photo yet" state, and the shop pictures keep the owner preview's "Preview only, not live" line.</sub>
 
 ## Features
 
 ### For shoppers
 
 - **Two languages:** every page, button and message works in English and বাংলা.
-- **Clear sizing:** sizes, colours and a size chart in centimetres on every product.
-- **Cash on delivery:** the delivery charge is shown before ordering, and no card or account is needed.
+- **Clear sizing:** sizes, colours and a size chart in centimetres (or inches) on every product; the button always says what to choose next, and sold-out choices say so.
+- **Find things fast:** search, filters and sorting by newest or price.
+- **Cash on delivery:** the delivery charge is shown before ordering (the area chosen in the bag carries into checkout), and no card or account is needed.
 - **Optional account:** sign up with email or Google to see past orders.
 - **Order tracking:** a private link for each order, with self-cancel while it's still waiting for the shop's call.
 - **Easy to reach the shop:** the footer lists only the contact channels the owner has set: phone, email, WhatsApp, Messenger, Facebook and Instagram.

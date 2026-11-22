@@ -117,7 +117,8 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   let romperSlug = "";
   let romperId = "";
   try {
-    await named.query("insert into store_settings (id, store_name) values (1, 'BabySunRay') on conflict (id) do update set store_name = excluded.store_name");
+    // The approved wordmark's spelling, so the name and the logo agree in every screenshot.
+    await named.query("insert into store_settings (id, store_name) values (1, 'BabySunray') on conflict (id) do update set store_name = excluded.store_name");
     ({ slug: romperSlug, id: romperId } = (await named.query<{ slug: string; id: string }>("select slug, id from products where name_en = 'Grey Button Romper' order by created_at desc limit 1")).rows[0]);
   } finally {
     await named.end();
@@ -147,13 +148,15 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
     await db.end();
   }
 
-  const capture = async (p: Page, file: string, caption: string, group: string) => {
+  // fullPage = false for anything fixed or sticky (a drawer, the sidebar after scrolling): a stitched full-page picture
+  // shows those cut off where a person on the screen never sees them so.
+  const capture = async (p: Page, file: string, caption: string, group: string, fullPage = true) => {
     await p.waitForLoadState("networkidle");
     await p.evaluate(async () => {
       await Promise.race([Promise.all([...document.images].map((img) => (img.complete ? null : new Promise((r) => { img.onload = img.onerror = () => r(null); })))), new Promise((r) => setTimeout(r, 4000))]);
       await document.fonts.ready;
     });
-    await p.screenshot({ path: path.join(OUT!, file), fullPage: true });
+    await p.screenshot({ path: path.join(OUT!, file), fullPage });
     shots.push({ file, caption, group });
   };
   const search = async (p: Page, term: string) => {
@@ -172,7 +175,7 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   await search(page, "Nobody Fictional");
   await capture(page, "desktop-04-orders-no-match.png", "Orders: empty state for a search with no match", "Orders · desktop");
   await search(page, "0171");
-  await capture(page, "desktop-05-orders-search-error.png", "Orders: an unusable search term explains what works", "Orders · desktop");
+  await capture(page, "desktop-05-orders-search-error.png", "Orders: part of a phone number while typing gets a calm hint, not an error", "Orders · desktop");
   await page.goto("/admin/orders?queue=to_pack");
   await capture(page, "desktop-06-orders-to-pack.png", "Orders: the To pack queue with its quick action", "Orders · desktop");
   await page.goto("/admin/orders?attention=true");
@@ -199,16 +202,17 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   await page.locator("[data-quickview]").nth(3).click();
   await page.getByRole("region", { name: "Items" }).waitFor();
   await page.waitForTimeout(400);
-  await capture(page, "desktop-09-quick-view.png", "Orders: quick view drawer", "Orders · desktop");
+  await capture(page, "desktop-09-quick-view.png", "Orders: quick view drawer (the screen as seen)", "Orders · desktop", false);
   await page.keyboard.press("Escape");
   await page.goto("/admin/catalogue-preparation");
-  await capture(page, "desktop-40-preparation.png", "Catalogue preparation: business language, no requirement codes", "Catalogue preparation · desktop");
+  await capture(page, "desktop-40-preparation.png", "Catalogue checklist: what drafts still need, done items marked", "Catalogue preparation · desktop");
   await page.goto("/admin/products/new");
   await page.getByLabel("Name (English)").fill("Cotton Sleep Bag");
   await page.waitForTimeout(1200);
   await capture(page, "desktop-41-new-product.png", "New product: name first, language tabs, web address made from the name", "Products · desktop");
   // The shop as customers see it (the Owner's preview, its "preview" bar hidden for the picture).
-  const hideBar = () => page.addStyleTag({ content: "*:has(> [data-testid=preview-banner]) { display: none !important } nextjs-portal { display: none !important }" });
+  // Only the development overlay is hidden; the preview's "not live" line stays (the picture must not look like a public shop).
+  const hideBar = () => page.addStyleTag({ content: "nextjs-portal { display: none !important }" });
   await page.goto("/admin/storefront-preview/en");
   await hideBar();
   await capture(page, "storefront.png", "Storefront home", "Storefront");
@@ -227,7 +231,7 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   const edit = page.getByRole("button", { name: "Edit details" });
   if (await edit.count()) {
     await edit.click();
-    await page.getByLabel("Store name").fill("BabySunRay Kids");
+    await page.getByLabel("Store name").fill("BabySunray Kids");
     await capture(page, "desktop-51-store-settings-edit.png", "Store settings: editing, with Save changes and Cancel", "Settings · desktop");
   }
   const replace = page.getByRole("button", { name: "Replace logo" });
@@ -239,12 +243,15 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   }
   await desktop.close();
 
-  // A smaller laptop: the order table scrolls sideways and keeps the row's action in view.
+  // A smaller laptop: every order column in view without sideways scrolling; the sidebar stays put while a long page scrolls.
   const laptop = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: "en-GB" });
   const small = await laptop.newPage();
   await signIn(small);
   await small.goto("/admin/orders");
-  await capture(small, "desktop-08-orders-1280.png", "Orders at 1280 px: the action column stays in view", "Orders · desktop");
+  await capture(small, "desktop-08-orders-1280.png", "Orders at 1280 px: every column in view, no sideways scrolling", "Orders · desktop");
+  await small.goto("/admin/settings/store");
+  await small.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await capture(small, "desktop-53-sidebar-scrolled-1280.png", "1280 × 800, scrolled to the end of a long page with Settings open: the sidebar stays in view", "Settings · desktop", false);
   await small.goto("/admin/dashboard");
   await small.getByTestId("generated-at").waitFor();
   await small.screenshot({ path: path.join(OUT!, "desktop-21-dashboard-1280-fold.png") });
@@ -267,7 +274,7 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
   await mobile.locator("ul[aria-label=Orders] [data-quickview]").nth(3).tap();
   await mobile.getByRole("region", { name: "Items" }).waitFor();
   await mobile.waitForTimeout(400);
-  await capture(mobile, "phone-03-quick-view.png", "Quick view on a phone", "Phone");
+  await capture(mobile, "phone-03-quick-view.png", "Quick view on a phone (the screen as seen)", "Phone", false);
   await mobile.keyboard.press("Escape");
   await mobile.goto("/admin/reports?tab=cod");
   await capture(mobile, "phone-31-reports-cod.png", "Reports COD tab on a phone", "Phone");
@@ -293,7 +300,7 @@ test("Admin operational UX review screenshots (opt-in: ADMIN_SHOTS_DIR)", async 
 <style>body{margin:0;font-family:system-ui,sans-serif;background:#f6f1ea;color:#2b211c}header{padding:24px 16px 8px;max-width:1500px;margin:auto}h1{margin:0 0 4px;font-size:24px}p{margin:0;color:#6b5d52}
 section{max-width:1500px;margin:auto;padding:8px 16px 24px}h2{font-size:18px;margin:16px 0 12px}.grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fill,minmax(420px,1fr))}
 figure{margin:0;background:#fff;border:1px solid #e3d9cc;border-radius:14px;overflow:hidden}figure a{display:block;max-height:520px;overflow:hidden;border-bottom:1px solid #eee}img{width:100%;display:block}figcaption{padding:10px 12px;font-size:14px}code{font-size:12px;color:#8a7b6e}</style></head>
-<body><header><h1>BabySunRay Admin · Phase 1 operational UX</h1><p>Real application, production-like data shapes, fictional customers and products only (babysunray_test). Select a screenshot to open it full size.</p></header>
+<body><header><h1>BabySunray Admin · operational UX</h1><p>Real application, production-like data shapes, fictional customers and products only (babysunray_test). Select a screenshot to open it full size.</p></header>
 ${groups
   .map(
     (g) =>
