@@ -1,8 +1,9 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Phone, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { CopyButton } from "../../_components/copy-button";
 import { type QuickView, orderQuickViewAction } from "../actions";
 import { bdt, eventLabel, label, StatusPill } from "./labels";
 
@@ -94,13 +95,21 @@ export function OrderQuickView() {
                 <h3 className="text-sm font-bold">Customer</h3>
                 <p className="mt-1 text-sm">
                   {order.customerName}
-                  <span className="block text-gray-700 tabular-nums">{order.customerPhone}</span>
+                  <span className="block text-gray-700 tabular-nums">{`${order.customerPhone.slice(0, 5)} ${order.customerPhone.slice(5)}`}</span>
                   <span className="block text-gray-700">{order.deliveryAddress}</span>
                   <span className="block text-gray-600">
                     {order.zone} · {label(order.source)} · placed {when.format(new Date(order.createdAt))}
                   </span>
                 </p>
                 {order.note ? <p className="mt-1 text-sm text-gray-700">Note: {order.note}</p> : null}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {/* tel: opens the phone's dialler; the number is not sent anywhere or kept in the browser history. */}
+                  <a href={`tel:${order.customerPhone}`} className="of-btn of-btn-line of-btn-sm" aria-label="Call the customer">
+                    <Phone aria-hidden="true" size={16} />
+                    Call
+                  </a>
+                  <CopyButton value={order.customerPhone} label="phone number" />
+                </div>
               </section>
               <section aria-label="Items">
                 <h3 className="text-sm font-bold">Items</h3>
@@ -127,24 +136,35 @@ export function OrderQuickView() {
                   <dd className="text-right">{bdt(order.deliveryChargePaisa)}</dd>
                   <dt className="font-bold">Total (COD)</dt>
                   <dd className="text-right font-bold">{bdt(order.totalPaisa)}</dd>
-                  <dt className="text-gray-700">Collected by courier</dt>
-                  <dd className="text-right">{bdt(order.codCollectedPaisa)}</dd>
-                  <dt className="text-gray-700">Settled to you</dt>
-                  <dd className="text-right">{bdt(order.codSettledPaisa)}</dd>
-                  <dt className="text-gray-700">Kept by courier</dt>
-                  <dd className="text-right">{bdt(order.codDeductedPaisa)}</dd>
+                  {/* The courier's three amounts once money has moved; before that one line says so. */}
+                  {order.codCollectedPaisa || order.codSettledPaisa || order.codDeductedPaisa ? (
+                    <>
+                      <dt className="text-gray-700">Collected by courier</dt>
+                      <dd className="text-right">{bdt(order.codCollectedPaisa)}</dd>
+                      <dt className="text-gray-700">Settled to you</dt>
+                      <dd className="text-right">{bdt(order.codSettledPaisa)}</dd>
+                      <dt className="text-gray-700">Kept by courier</dt>
+                      <dd className="text-right">{bdt(order.codDeductedPaisa)}</dd>
+                    </>
+                  ) : (
+                    <>
+                      <dt className="text-gray-700">Collected so far</dt>
+                      <dd className="text-right text-gray-700">Nothing yet</dd>
+                    </>
+                  )}
                 </dl>
               </section>
               <section aria-label="Recent history">
                 <h3 className="text-sm font-bold">Recent history</h3>
-                <ul className="mt-1 space-y-1 text-sm text-gray-700">
+                <ol className="mt-2 space-y-2 border-s-2 border-gray-200 ps-4 text-sm text-gray-700">
                   {order.events.map((e, n) => (
-                    <li key={`${e.event}-${n}`} className="flex justify-between gap-3">
+                    <li key={`${e.event}-${n}`} className="relative flex justify-between gap-3">
+                      <span aria-hidden="true" className={`absolute top-1.5 inset-s-[-1.3rem] h-2.5 w-2.5 rounded-full border-2 border-white ${n === 0 ? "bg-gray-800" : "bg-gray-400"}`} />
                       <span>{eventLabel(e.event)}</span>
-                      <span className="text-gray-600 tabular-nums">{when.format(new Date(e.at))}</span>
+                      <span className="shrink-0 text-gray-600 tabular-nums">{when.format(new Date(e.at))}</span>
                     </li>
                   ))}
-                </ul>
+                </ol>
               </section>
             </>
           )}

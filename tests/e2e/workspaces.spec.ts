@@ -253,3 +253,49 @@ test("policies open on an overview of all four and show one editor at a time, ke
   await expect(page.locator("[data-testid^=policy-editor-]")).toHaveCount(1);
   await expectNoAxeViolations(page);
 });
+
+test("on a 1280 × 800 laptop: every order column in view without sideways scrolling, the sidebar reachable and in place, quick view holds the page", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const sku = await seedSku(3);
+  await newOrder(page, sku);
+
+  // The orders table fits: no sideways scroll, and the status columns sit wholly left of the sticky next-step column.
+  await page.goto("/admin/orders");
+  const table = page.getByRole("table", { name: "Orders" });
+  await expect(table).toBeVisible();
+  const fit = await page.getByRole("region", { name: "Orders table" }).evaluate((el) => el.scrollWidth - el.clientWidth);
+  expect(fit).toBeLessThanOrEqual(1);
+  for (const name of ["Order", "Customer", "Total", "Status"]) await expect(table.getByRole("columnheader", { name, exact: true })).toBeInViewport({ ratio: 1 });
+  // The order's separate states are each named (one column, never merged into one word).
+  await expect(table.getByRole("row").nth(1)).toContainText("Order:");
+  await expect(table.getByRole("row").nth(1)).toContainText("Fulfilment:");
+  const sticky = (await table.locator("thead th.of-sticky-end").boundingBox())!;
+  const status = (await table.getByRole("columnheader", { name: "Status", exact: true }).boundingBox())!;
+  expect(status.x + status.width).toBeLessThanOrEqual(sticky.x + 1);
+  // Every queue chip is in view (they wrap on a desktop rather than sliding out of sight).
+  for (const chip of await page.getByRole("navigation", { name: "Order queues" }).getByRole("link").all()) await expect(chip).toBeInViewport({ ratio: 1 });
+
+  // Quick view: the page behind stays put while it is open; Escape closes it and focus returns to the button.
+  const eye = page.getByRole("button", { name: /^Quick view ORD-/ }).first();
+  await eye.click();
+  await expect(page.getByRole("dialog", { name: "Order quick view" }).getByRole("region", { name: "Items" })).toBeVisible();
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflow)).toBe("hidden");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Order quick view" })).toBeHidden();
+  await expect(eye).toBeFocused();
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflow)).not.toBe("hidden");
+
+  // The sidebar with every group open: its menu scrolls on its own and the last page in it can be reached and opened.
+  await page.goto("/admin/settings/store");
+  const nav = page.getByRole("navigation", { name: "Admin" });
+  for (const summary of await nav.locator("details:not([open]) > summary").all()) await summary.click();
+  const last = nav.getByRole("link").last();
+  await last.scrollIntoViewIfNeeded();
+  await expect(last).toBeInViewport({ ratio: 1 });
+  // At the end of a long page the sidebar is still beside it, from the top of the screen.
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect(nav).toBeInViewport();
+  const href = await last.getAttribute("href");
+  await last.click();
+  await expect(page).toHaveURL(new RegExp(`${href}$`));
+});

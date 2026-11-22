@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ImageOff, Plus, Search, Upload, X } from "lucide-react";
+import { ChevronRight, ImageOff, Plus, Search, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { productCursorCodec } from "@/api/v1/schemas";
 import { getDb } from "@/db/client";
@@ -690,6 +690,8 @@ export default async function ProductsPage({
                         ) : null}
                       </span>
                     </span>
+                    {/* Says the row opens something, as a list row on a phone does. */}
+                    <ChevronRight aria-hidden="true" size={20} className="shrink-0 self-center text-gray-400" />
                   </Link>
                 </li>
               );

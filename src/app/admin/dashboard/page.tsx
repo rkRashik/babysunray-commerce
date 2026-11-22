@@ -43,9 +43,9 @@ function detail(queue: OrderQueue, o: Queue["oldest"][number], now: Date) {
 
 // What each urgent queue means and what to do about it, in the Owner's words.
 const WHY: Partial<Record<OrderQueue, { why: string; action: string }>> = {
-  overdue: { why: "Past the 24-hour verification window. Call each customer, then confirm (stock is checked again) or cancel.", action: "Review overdue" },
-  cancellation_requests: { why: "Customers asked to cancel. Approve or reject each request; a packed order cannot be dispatched until you decide.", action: "Review requests" },
-  pending: { why: "New orders waiting for your call. Verify each one with the customer before its 24-hour deadline, then confirm it.", action: "Verify orders" },
+  overdue: { why: "Past the 24-hour verification window. Call, then confirm (stock is checked again) or cancel.", action: "Review overdue" },
+  cancellation_requests: { why: "Approve or reject each request; a packed order cannot be dispatched until you decide.", action: "Review requests" },
+  pending: { why: "Verify each with the customer before its 24-hour deadline, then confirm.", action: "Verify orders" },
 };
 
 type Attention = { key: string; tone: "bad" | "wait"; icon: LucideIcon; count: number; title: string; why: string; href: string; action: string; queue?: OrderQueue; orders?: React.ReactNode };
@@ -70,7 +70,8 @@ function AttentionRow({ a }: { a: Attention }) {
           {a.orders}
         </span>
       </span>
-      <Link href={a.href} className="of-btn of-btn-ink of-btn-sm self-start sm:self-center">
+      {/* Urgent work gets the filled button; the rest an outline, so the eye goes to the overdue and the problems first. */}
+      <Link href={a.href} className={`of-btn of-btn-sm self-start sm:self-center ${a.tone === "bad" ? "of-btn-ink" : "of-btn-line"}`}>
         {a.action}
         <ArrowRight aria-hidden="true" size={16} />
       </Link>
@@ -82,14 +83,18 @@ function AttentionRow({ a }: { a: Attention }) {
 function QueueTile({ q }: { q: Queue }) {
   const empty = q.count === 0;
   return (
-    <li className={`of-card flex flex-col gap-0.5 p-4 ${empty ? "bg-transparent" : ""}`} data-queue={q.queue}>
+    <li
+      className={`of-card relative flex flex-col gap-0.5 p-4 ${empty ? "bg-transparent" : "hover:bg-[#fdfaf5] has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-gray-900"}`}
+      data-queue={q.queue}
+    >
       <span className={`text-[1.75rem] leading-tight font-bold tabular-nums ${empty ? "text-gray-500" : ""}`} data-testid={`count-${q.queue}`}>
         {q.count}
       </span>
       <h3 className={`font-semibold ${empty ? "text-gray-600" : ""}`}>{TITLES[q.queue]}</h3>
       <p className="text-xs text-gray-600">{q.label}</p>
       {empty ? null : (
-        <Link href={`/admin/orders?queue=${q.queue}`} className="mt-auto inline-flex min-h-11 items-center gap-1 pt-1 text-sm font-semibold underline-offset-4 hover:underline lg:min-h-9">
+        // The link covers the whole card (::after), so the card is one large target; its text stays the link's name.
+        <Link href={`/admin/orders?queue=${q.queue}`} className="mt-auto inline-flex min-h-11 items-center gap-1 pt-1 text-sm font-semibold underline-offset-4 after:absolute after:inset-0 after:rounded-[inherit] hover:underline focus-visible:outline-none lg:min-h-9">
           Show all {q.count}
           <span className="sr-only"> ({q.label})</span>
           <ArrowRight aria-hidden="true" size={16} />
@@ -292,13 +297,6 @@ async function DashboardBody({ principal, rawLow }: { principal: Principal; rawL
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-gray-600" data-testid="generated-at">
-          Updated {formatTime(d.generatedAt)}
-        </p>
-        <RefreshButton />
-      </div>
-
       {setupLeft.length ? (
         <Link href="/admin/onboarding" className="of-card flex items-center gap-4 px-4 py-3 hover:bg-[#fdfaf5]" data-testid="setup-card">
           <span className="min-w-0 flex-1">
@@ -314,7 +312,18 @@ async function DashboardBody({ principal, rawLow }: { principal: Principal; rawL
         </Link>
       ) : null}
 
-      <Section title="Needs attention">
+      <Section
+        title="Needs attention"
+        action={
+          // When the figures were read, beside the heading (one row less above the day's work).
+          <span className="flex items-center gap-2">
+            <span className="text-sm text-gray-600" data-testid="generated-at">
+              Updated {formatTime(d.generatedAt)}
+            </span>
+            <RefreshButton />
+          </span>
+        }
+      >
         {attention.length ? (
           <ul className="divide-y divide-gray-200" aria-label="Things that need you">
             {attention.map((a) => (
@@ -435,8 +444,20 @@ async function DashboardBody({ principal, rawLow }: { principal: Principal; rawL
           </p>
         ) : null}
         <form method="get" action="/admin/dashboard" className="border-t border-gray-200 pt-4">
+          {/* One tap for the usual views; any other number in the field. A view only: the system sets no low-stock level. */}
+          <nav aria-label="Low stock views" className="mb-3">
+            <ul className="flex flex-wrap gap-2">
+              {[3, 5, 10].map((n) => (
+                <li key={n}>
+                  <Link href={`/admin/dashboard?low=${n}#section-stock-availability`} aria-current={d.stock.low?.threshold === n ? "page" : undefined} className="of-chip">
+                    At most {n} available
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
           <label htmlFor="low" className="block text-sm font-semibold">
-            Show SKUs with at most this many available
+            Or show SKUs with at most this many available
           </label>
           <div className="mt-1.5 flex gap-2">
             <input id="low" name="low" inputMode="numeric" defaultValue={rawLow ?? ""} className="of-input w-32" aria-describedby="low-hint" />

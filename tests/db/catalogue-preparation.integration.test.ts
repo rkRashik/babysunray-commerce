@@ -114,6 +114,18 @@ describe("product list filters", () => {
     expect([...first.items, ...second.items].map((p) => p.slug.slice(tag.length + 1)).sort()).toEqual(["empty", "inactive", "nobn", "unmeasured"]);
   });
 
+  it("leaves archived products out of a 'still missing' list unless the Archived status is chosen", async () => {
+    await pool.query("update products set status = 'archived' where id = $1", [ids.empty]);
+    try {
+      expect(await names({ limit: 50, missing: "name" })).toEqual(["nobn"]);
+      expect(await names({ limit: 50, missing: "name", status: "archived" })).toEqual(["empty"]);
+      // Without a "missing" filter an archived product is still listed (the list shows every status unless one is chosen).
+      expect(await names({ limit: 50 })).toContain("empty");
+    } finally {
+      await pool.query("update products set status = 'draft' where id = $1", [ids.empty]);
+    }
+  });
+
   it("finds a product by any of its SKUs", async () => {
     const page = await listProducts(db, { limit: 5, q: `${tag}-unmeasured-1` });
     expect(page.items.map((p) => p.id)).toEqual([ids.unmeasured]);

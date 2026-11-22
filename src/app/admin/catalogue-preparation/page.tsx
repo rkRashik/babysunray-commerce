@@ -1,3 +1,4 @@
+import { Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { getDb } from "@/db/client";
 import { preparationOverview } from "@/modules/catalogue/preparation";
@@ -7,7 +8,7 @@ import { readinessGroups } from "../_components/content";
 import { AdminShell, Section } from "../_components/shell";
 import { requireAdmin } from "../_lib/session";
 
-export const metadata = { title: "Catalogue preparation · Admin" };
+export const metadata = { title: "Catalogue checklist · Admin" };
 
 // How many draft products still need each piece of content, from the database now, grouped the way the product page
 // groups its checklist (what publishing needs under the rule in force, then optional improvements).
@@ -18,7 +19,8 @@ export default async function PreparationPage() {
   const groups = readinessGroups([...READINESS_ITEMS], rule);
 
   return (
-    <AdminShell title="Catalogue preparation" current="preparation">
+    // Titled as the menu names it, so the page is found where the link said it would be.
+    <AdminShell title="Catalogue checklist" current="preparation">
       <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="of-stat">
           <dt>Draft products</dt>
@@ -60,11 +62,20 @@ export default async function PreparationPage() {
                       {i.label}
                     </th>
                     <td className="num">
+                      {/* Done reads as done; what is left is a large link to exactly those drafts. */}
                       {unmet[i.id] === 0 ? (
-                        <span className="text-gray-500">0</span>
+                        <span className="of-pill" data-tone="ok">
+                          <Check aria-hidden="true" size={14} strokeWidth={2.5} />
+                          All set<span className="sr-only">: 0 drafts without it</span>
+                        </span>
                       ) : (
-                        <Link href={`/admin?status=draft&missing=${i.id}`} className="font-semibold underline" aria-label={`${unmet[i.id]} drafts without: ${i.label}`}>
-                          {unmet[i.id]}
+                        <Link
+                          href={`/admin?status=draft&missing=${i.id}`}
+                          className="of-btn of-btn-line of-btn-sm tabular-nums"
+                          aria-label={`${unmet[i.id]} drafts without: ${i.label}`}
+                        >
+                          {unmet[i.id]} {unmet[i.id] === 1 ? "draft" : "drafts"}
+                          <ChevronRight aria-hidden="true" size={16} />
                         </Link>
                       )}
                     </td>

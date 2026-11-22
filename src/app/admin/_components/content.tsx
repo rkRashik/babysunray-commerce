@@ -78,27 +78,39 @@ export function ReadinessList({ items, rule }: { items: ReadinessItem[]; rule: {
         </div>
       </div>
       <p className="text-sm text-gray-700">This checklist only shows what is missing. Publishing is a separate step on this page.</p>
-      {groups.map((g) =>
-        g.items.length ? (
+      {groups.map((g) => {
+        if (!g.items.length) return null;
+        const row = (i: ReadinessItem) => (
+          <li key={i.id} data-testid={`readiness-${i.id}`} data-met={i.met} className="flex gap-2.5 py-2">
+            <span aria-hidden="true" className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${i.met ? "bg-green-700 text-white" : "text-gray-400"}`}>
+              {i.met ? <Check size={13} strokeWidth={3} /> : <Circle size={18} strokeWidth={2} />}
+            </span>
+            <span>
+              <span className="font-medium">{i.label}</span> <span className="sr-only">{i.met ? "(done)" : "(not done)"}</span>
+              <span className="text-gray-700"> — {i.detail}</span>
+            </span>
+          </li>
+        );
+        const open = g.items.filter((i) => !i.met);
+        const met = g.items.filter((i) => i.met);
+        // What is still missing stays open; what is done folds into one line that opens on request.
+        return (
           <div key={g.key} data-group={g.key}>
             <h3 className="text-sm font-bold">{g.title}</h3>
             <p className="text-xs text-gray-600">{g.note}</p>
-            <ul className="mt-2 divide-y divide-gray-200 text-sm">
-              {g.items.map((i) => (
-                <li key={i.id} data-testid={`readiness-${i.id}`} data-met={i.met} className="flex gap-2.5 py-2">
-                  <span aria-hidden="true" className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${i.met ? "bg-green-700 text-white" : "text-gray-400"}`}>
-                    {i.met ? <Check size={13} strokeWidth={3} /> : <Circle size={18} strokeWidth={2} />}
-                  </span>
-                  <span>
-                    <span className="font-medium">{i.label}</span> <span className="sr-only">{i.met ? "(done)" : "(not done)"}</span>
-                    <span className="text-gray-700"> — {i.detail}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            {open.length ? <ul className="mt-2 divide-y divide-gray-200 text-sm">{open.map(row)}</ul> : null}
+            {met.length ? (
+              <details className="mt-1 text-sm">
+                <summary className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 font-medium text-green-800 lg:min-h-9">
+                  <Check aria-hidden="true" size={15} strokeWidth={2.5} />
+                  {met.length} done
+                </summary>
+                <ul className="divide-y divide-gray-200">{met.map(row)}</ul>
+              </details>
+            ) : null}
           </div>
-        ) : null,
-      )}
+        );
+      })}
     </div>
   );
 }

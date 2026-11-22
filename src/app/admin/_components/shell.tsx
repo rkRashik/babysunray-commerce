@@ -129,7 +129,10 @@ export async function AdminShell({
       >
         Skip to content
       </a>
-      <aside className="z-30 bg-of-night text-[#eadfcf] lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-64 lg:shrink-0 lg:flex-col">
+      {/* The dark column runs the page's full height; inside it the name and menu stay in view (sticky, one screen tall) and
+          the menu scrolls on its own when open groups make it taller than the screen. */}
+      <aside className="z-30 bg-of-night text-[#eadfcf] lg:w-64 lg:shrink-0">
+        <div className="lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
         <div className="flex items-center gap-3 px-4 py-3 lg:px-5 lg:pt-6 lg:pb-5">
           <span className="inline-flex shrink-0 items-center justify-center rounded-xl bg-sf-paper p-1">
             <BrandMark name={storeName} size={34} />
@@ -182,6 +185,7 @@ export async function AdminShell({
             })}
           </ul>
         </nav>
+        </div>
       </aside>
       <nav aria-label="Quick links" className="of-bar lg:hidden">
         <ul className="mx-auto grid h-[var(--of-bar-h)] max-w-lg grid-cols-4">

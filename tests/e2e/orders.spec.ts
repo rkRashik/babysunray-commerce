@@ -394,6 +394,13 @@ test("the order list packs several orders at once, confirms an overdue order wit
     await expect(dimension(page, "fulfilment")).toHaveText("Packed");
   }
 
+  // Part of a phone number, mid-typing: a calm hint (a status, not an alert), and no list of everyone's orders.
+  await page.goto("/admin/orders");
+  await page.getByLabel("Search orders").fill("0171");
+  await expect(page.getByTestId("search-hint")).toContainText("Keep typing");
+  await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
+  await expect(table).toHaveCount(0);
+
   // Filters apply as they change; nothing personal reaches the address.
   await page.goto("/admin/orders");
   await page.getByLabel("Order status").selectOption("confirmed");

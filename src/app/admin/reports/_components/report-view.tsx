@@ -134,21 +134,22 @@ export function OutstandingView({ o, charts = false }: { o: Outstanding; charts?
 /** The headline figures of the period: order activity and money recorded, kept apart so order value is never read as money. */
 export function KpiTiles({ r }: { r: PeriodReport }) {
   return (
+    // Both groups take the row's height and their cards stretch to it, so every card ends on one line whatever its note's length.
     <div className="grid gap-x-5 gap-y-4 lg:grid-cols-[2fr_3fr]" data-testid="report-kpis">
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         <h3 className="text-sm font-bold">
           Orders placed <span className="font-normal text-gray-600">(activity, not money)</span>
         </h3>
-        <dl className="grid grid-cols-2 gap-3">
+        <dl className="grid flex-1 grid-cols-2 gap-3">
           <Stat term="Orders placed" value={r.received.total.count} note="Including cancelled and unverified orders." />
           <Stat term="Order value placed" value={bdt(r.received.total.amountPaisa)} note="What these orders are worth. Not sales or money received." />
         </dl>
       </div>
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         <h3 className="text-sm font-bold">
           Money recorded <span className="font-normal text-gray-600">(by the date you entered)</span>
         </h3>
-        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <dl className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3">
           <Stat term="COD collected by courier" value={bdt(r.money.collected.amountPaisa)} note="Taken from customers by the courier." />
           <Stat term="Settled to you" value={bdt(r.money.settled.amountPaisa)} note="Paid to you by the courier." tone={r.money.settled.amountPaisa > 0 ? "ok" : undefined} />
           <Stat term="Refunded" value={bdt(r.money.refunded.amountPaisa)} note="Paid back by you to customers." />
@@ -250,7 +251,41 @@ export function PeriodReportView({ r }: { r: PeriodReport }) {
 }
 
 export function CodTable({ rows, links = true }: { rows: CodRow[]; links?: boolean }) {
+  const order = (r: CodRow) => (links ? <Link href={`/admin/orders/${r.id}`} className="inline-flex min-h-11 items-center font-bold underline">{formatOrderNumber(r.number)}</Link> : formatOrderNumber(r.number));
   return (
+    <>
+      {/* On a phone one card per order, with every amount the table has; the table from tablet width and in print. */}
+      <div className="space-y-2 sm:hidden print:hidden">
+        <p className="text-sm font-semibold">Orders with COD still open (oldest first)</p>
+        <ul className="of-card divide-y divide-gray-200 overflow-hidden" aria-label="Orders with COD still open" data-testid="cod-cards">
+          {rows.map((r) => (
+            <li key={r.id} className="px-4 py-2.5">
+              <div className="flex items-center justify-between gap-3">
+                {order(r)}
+                <span className="text-sm text-gray-700">{label(r.fulfilmentStatus)}</span>
+              </div>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 pb-1 text-sm tabular-nums">
+                {(
+                  [
+                    ["Total", r.totalPaisa],
+                    ["To collect", r.awaitingCollectionPaisa],
+                    ["Collected", r.collectedPaisa],
+                    ["Held by courier", r.heldByCourierPaisa],
+                    ["Settled", r.settledPaisa],
+                    ["Kept by courier", r.deductedPaisa],
+                  ] as const
+                ).map(([term, paisa]) => (
+                  <div key={term} className="flex justify-between gap-2">
+                    <dt className="text-gray-600">{term}</dt>
+                    <dd className="font-medium">{bdt(paisa)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="hidden sm:block print:block">
     <ScrollArea label="Orders with COD still open" hint="Scroll sideways for more columns.">
       <table className="of-table" data-testid="cod-table">
         <caption className={CAPTION}>Orders with COD still open (oldest first)</caption>
@@ -294,5 +329,7 @@ export function CodTable({ rows, links = true }: { rows: CodRow[]; links?: boole
         </tbody>
       </table>
     </ScrollArea>
+      </div>
+    </>
   );
 }

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Check, Printer } from "lucide-react";
+import { Check, Phone, Printer } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/db/client";
@@ -220,8 +220,15 @@ export default async function OrderPage({ params, searchParams }: Props) {
               <div>
                 <dt className="text-gray-600">Phone</dt>
                 <dd className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="tabular-nums">{order.customerPhone}</span>
-                  <CopyButton value={order.customerPhone} label="phone number" />
+                  <span className="tabular-nums">{`${order.customerPhone.slice(0, 5)} ${order.customerPhone.slice(5)}`}</span>
+                  <span className="flex flex-wrap gap-2">
+                    {/* tel: opens the phone's dialler; the number is not sent anywhere or kept in the browser history. */}
+                    <a href={`tel:${order.customerPhone}`} className="of-btn of-btn-line of-btn-sm" aria-label="Call the customer">
+                      <Phone aria-hidden="true" size={16} />
+                      Call
+                    </a>
+                    <CopyButton value={order.customerPhone} label="phone number" />
+                  </span>
                 </dd>
               </div>
               <div>
@@ -261,7 +268,38 @@ export default async function OrderPage({ params, searchParams }: Props) {
         </div>
 
         <Section title="Items">
-          <div className="overflow-x-auto">
+          {/* On a phone each line is a card with the same facts as the table's columns: nothing hidden, nothing to scroll. */}
+          <ul className="divide-y divide-gray-200 sm:hidden" aria-label="Items">
+            {order.items.map((i) => (
+              <li key={i.id} className="py-3 first:pt-0" data-testid="order-item">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="min-w-0 font-medium">{i.productNameEn ?? <span lang="bn">{i.productNameBn}</span>}</p>
+                  <p className="shrink-0 font-semibold tabular-nums">{bdt(i.lineTotalPaisa)}</p>
+                </div>
+                <p className="text-xs text-gray-600">
+                  <Link href={`/admin/skus/${encodeURIComponent(i.sku)}`} className="inline-flex min-h-11 items-center underline underline-offset-2">
+                    {i.sku}
+                  </Link>
+                  {[i.size, i.colour].filter(Boolean).length ? ` · ${[i.size, i.colour].filter(Boolean).join(", ")}` : null}
+                </p>
+                <dl className="flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-gray-700 tabular-nums">
+                  <div className="flex gap-1">
+                    <dt>Unit price</dt>
+                    <dd>{bdt(i.unitPricePaisa)}</dd>
+                  </div>
+                  <div className="flex gap-1">
+                    <dt>Qty</dt>
+                    <dd>{i.quantity}</dd>
+                  </div>
+                  <div className="flex gap-1">
+                    <dt>Reserved now</dt>
+                    <dd>{reservedBy.get(i.variantId) ?? 0}</dd>
+                  </div>
+                </dl>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto sm:block">
             <table className="of-table">
               <thead>
                 <tr>

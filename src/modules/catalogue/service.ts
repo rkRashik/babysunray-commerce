@@ -404,6 +404,8 @@ export async function listProducts(
         term ? matches(term) : undefined,
         categoryId ? eq(products.categoryId, categoryId) : undefined,
         missing ? sql`not ${MET[missing]}` : undefined,
+        // "Still missing" is a preparation list: archived products are left out unless the Archived status is chosen.
+        missing && !status ? sql`${products.status} <> 'archived'` : undefined,
         stock === "in" ? anyAvailable : stock === "out" ? sql`not ${anyAvailable}` : undefined,
         after
           ? sql`(${products.createdAt}, ${products.id}) > (${after.createdAt}::timestamptz, ${validateId(after.id, "cursor")}::uuid)`

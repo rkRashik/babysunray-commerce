@@ -132,7 +132,8 @@ export default async function ProductPage({ params, searchParams }: Props) {
         />
       </div>
     ) : null;
-  const jump = ["Variants and stock", "Publishing", "Details", "Size chart (cm)", "Photos"];
+  // In page order: photos first (what customers see first), then stock, publishing and the details.
+  const jump = ["Photos", "Size chart (cm)", "Variants and stock", "Publishing", "Details"];
 
   return (
     <AdminShell
@@ -250,6 +251,8 @@ export default async function ProductPage({ params, searchParams }: Props) {
           </ul>
         </nav>
       </ScrollArea>
+
+      <PhotosAndSizes product={product} draft={draft} />
 
       <Section title="Variants and stock">
         {product.variants.length === 0 ? (
@@ -475,7 +478,52 @@ export default async function ProductPage({ params, searchParams }: Props) {
         </dl>
       </Section>
 
+      {draft ? (
+        <ActionPanel label="Archive this product" danger>
+          <p className="text-sm text-gray-700">
+            Archiving keeps the product, its variants and their stock history. Nothing is deleted, but an archived product can no longer be edited and there is no way to
+            undo archiving here.
+          </p>
+          <ActionForm
+            action={archiveProductAction}
+            idempotencyKey={randomUUID()}
+            hidden={{ productId: product.id }}
+            submitLabel="Archive product"
+            variant="secondary"
+            confirm="Archive this product? It can no longer be edited afterwards, and archiving cannot be undone here."
+          />
+        </ActionPanel>
+      ) : null}
+    </AdminShell>
+  );
+}
+
+/** Photos first (what customers see first), then the size chart: placed right under the overview. */
+function PhotosAndSizes({ product, draft }: { product: Awaited<ReturnType<typeof getProductWithVariants>>; draft: boolean }) {
+  return (
       <div className="grid items-start gap-6 lg:grid-cols-2">
+        <Section
+          title="Photos"
+          action={
+            <Link href={`/admin/products/${product.id}/photos`} className={BUTTON_LINK}>
+              {draft ? "Manage photos" : "View photos"}
+            </Link>
+          }
+        >
+          {product.media.length === 0 ? (
+            <p className="text-sm text-gray-700">No photos yet. The first photo is the one customers see first.</p>
+          ) : (
+            <ul className="flex flex-wrap gap-3" aria-label="Photos">
+              {product.media.map((m) => (
+                <li key={m.id}>
+                  {/* Private photos are served by an Owner-only route; Next.js image optimisation would fetch them without the session. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`/admin/media/${m.id}?w=320`} alt={m.altEn ?? "Product photo (no English description yet)"} width={120} height={Math.round((120 * m.height) / m.width)} className="rounded border border-gray-300 bg-gray-100 object-cover" />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
         <Section
           title="Size chart (cm)"
           action={
@@ -524,47 +572,6 @@ export default async function ProductPage({ params, searchParams }: Props) {
             </div>
           )}
         </Section>
-
-        <Section
-          title="Photos"
-          action={
-            <Link href={`/admin/products/${product.id}/photos`} className={BUTTON_LINK}>
-              {draft ? "Manage photos" : "View photos"}
-            </Link>
-          }
-        >
-          {product.media.length === 0 ? (
-            <p className="text-sm text-gray-700">No photos yet. The first photo is the one customers see first.</p>
-          ) : (
-            <ul className="flex flex-wrap gap-3" aria-label="Photos">
-              {product.media.map((m) => (
-                <li key={m.id}>
-                  {/* Private photos are served by an Owner-only route; Next.js image optimisation would fetch them without the session. */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`/admin/media/${m.id}?w=320`} alt={m.altEn ?? "Product photo (no English description yet)"} width={120} height={Math.round((120 * m.height) / m.width)} className="rounded border border-gray-300 bg-gray-100 object-cover" />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
       </div>
-
-      {draft ? (
-        <ActionPanel label="Archive this product" danger>
-          <p className="text-sm text-gray-700">
-            Archiving keeps the product, its variants and their stock history. Nothing is deleted, but an archived product can no longer be edited and there is no way to
-            undo archiving here.
-          </p>
-          <ActionForm
-            action={archiveProductAction}
-            idempotencyKey={randomUUID()}
-            hidden={{ productId: product.id }}
-            submitLabel="Archive product"
-            variant="secondary"
-            confirm="Archive this product? It can no longer be edited afterwards, and archiving cannot be undone here."
-          />
-        </ActionPanel>
-      ) : null}
-    </AdminShell>
   );
 }

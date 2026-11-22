@@ -15,10 +15,11 @@ import { CodMoneySection, CodTable, CostsStockSection, KpiTiles, OrdersSection, 
 
 export const metadata = { title: "Reports · Admin" };
 
+// `short` is the phone's label, so all three tabs fit on one line there.
 const TABS = [
-  { id: "orders", label: "Orders & performance" },
-  { id: "cod", label: "COD & reconciliation" },
-  { id: "inventory", label: "Inventory & costs" },
+  { id: "orders", label: "Orders & performance", short: "Orders" },
+  { id: "cod", label: "COD & reconciliation", short: "COD" },
+  { id: "inventory", label: "Inventory & costs", short: "Inventory" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
@@ -63,24 +64,25 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
             })}
           </ul>
         </nav>
-        <form method="get" action="/admin/reports" className="flex flex-wrap items-end gap-3">
+        {/* From and To side by side even on a phone, Show under them; one row on a wider screen. */}
+        <form method="get" action="/admin/reports" className="grid grid-cols-2 items-end gap-3 sm:flex sm:flex-wrap">
           <input type="hidden" name="tab" value={tab} />
-          <div>
+          <div className="min-w-0">
             <label htmlFor="from" className="block text-sm font-semibold">
               From
             </label>
-            <input id="from" type="date" name="from" defaultValue={range?.from ?? (typeof query.from === "string" ? query.from : "")} className="of-input mt-1.5 w-auto" />
+            <input id="from" type="date" name="from" defaultValue={range?.from ?? (typeof query.from === "string" ? query.from : "")} className="of-input mt-1.5 w-full sm:w-auto" />
           </div>
-          <div>
+          <div className="min-w-0">
             <label htmlFor="to" className="block text-sm font-semibold">
               To (included)
             </label>
-            <input id="to" type="date" name="to" defaultValue={range?.to ?? (typeof query.to === "string" ? query.to : "")} className="of-input mt-1.5 w-auto" />
+            <input id="to" type="date" name="to" defaultValue={range?.to ?? (typeof query.to === "string" ? query.to : "")} className="of-input mt-1.5 w-full sm:w-auto" />
           </div>
-          <button type="submit" className="of-btn of-btn-ink">
+          <button type="submit" className="of-btn of-btn-ink col-span-2 sm:col-span-1">
             Show
           </button>
-          <span className="pb-3 text-xs text-gray-600">Bangladesh dates.</span>
+          <span className="col-span-2 text-xs text-gray-600 sm:pb-3">Bangladesh dates.</span>
         </form>
       </div>
 
@@ -141,7 +143,8 @@ async function ReportBody({ range, tab }: { range: DateRange | null; tab: Tab })
               {TABS.map((t) => (
                 <li key={t.id} className="shrink-0">
                   <Link href={tabHref(t.id)} aria-current={t.id === tab ? "page" : undefined} className="of-ltab no-underline">
-                    {t.label}
+                    <span className="sm:hidden">{t.short}</span>
+                    <span className="hidden sm:inline">{t.label}</span>
                   </Link>
                 </li>
               ))}

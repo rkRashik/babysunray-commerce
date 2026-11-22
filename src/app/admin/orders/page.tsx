@@ -105,20 +105,29 @@ function Deadline({ order, now }: { order: Row; now: Date }) {
 }
 
 /** Payment, without "nothing collected" noise before there is anything to collect; COD that is due or not settled stands out. */
-function PaymentCell({ order, hideEmpty = false }: { order: Row; hideEmpty?: boolean }) {
+function PaymentCell({ order, hideEmpty = false, labelled = false }: { order: Row; hideEmpty?: boolean; labelled?: boolean }) {
   const none = hideEmpty ? null : <span className="text-sm text-gray-500">—</span>;
   if (order.orderStatus === "cancelled") return none;
   const dispatched = order.fulfilmentStatus === "dispatched" || order.fulfilmentStatus === "delivered";
+  const prefix = labelled ? <span className="sr-only">Payment: </span> : null;
   if (order.paymentStatus === "unpaid") {
     return dispatched ? (
-      <span className="of-pill" data-tone="wait">
-        COD to collect
-      </span>
+      <>
+        {prefix}
+        <span className="of-pill" data-tone="wait">
+          COD to collect
+        </span>
+      </>
     ) : (
       none
     );
   }
-  return <StatusPill value={order.paymentStatus} />;
+  return (
+    <>
+      {prefix}
+      <StatusPill value={order.paymentStatus} />
+    </>
+  );
 }
 
 function QuickAction({ order, step, returnTo, idempotencyKey }: { order: Row; step: Step; returnTo: string; idempotencyKey: string }) {
@@ -159,10 +168,15 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const filters: Filters = { status, attention, queue, number: number || undefined, search: Boolean(term) };
   const db = getDb();
   let error: string | undefined;
+  let hint: string | undefined;
   let page: Awaited<ReturnType<typeof listOrders>> = { items: [], hasMore: false };
   const counting = orderQueueCounts(db);
   if (query.search === "1" && !term) {
     error = "That search has expired. Search again.";
+  } else if (term && !search && /^[0-9+\s-]{1,15}$/.test(term) && term.replace(/\D/g, "").length < 11) {
+    // Part of a phone number while it is still being typed (the list searches as you type): a calm hint, not an error.
+    // Only a whole number is searched; a partial one would scan every order's phone.
+    hint = "Keep typing: a phone number is found once all 11 digits are in (01XXXXXXXXX). Or search an order number or a name.";
   } else if (term && !search) {
     error = "Search with an order number (ORD-000042 or 42), a mobile number (01XXXXXXXXX) or at least two letters of the customer's name.";
   } else {
@@ -191,9 +205,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       wide
       notice={noticeFor(query.done)}
       actions={
-        <Link href="/admin/orders/new" className="of-btn of-btn-primary">
+        <Link href="/admin/orders/new" className="of-btn of-btn-primary" aria-label="New assisted order">
           <Plus aria-hidden="true" size={18} strokeWidth={2} />
-          New assisted order
+          <span className="lg:hidden">New</span>
+          <span className="hidden lg:inline">New assisted order</span>
         </Link>
       }
     >
@@ -209,8 +224,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           />
         </div>
         <ScrollArea label="Order queues" fade className="-mx-4 lg:mx-0">
+          {/* A swipeable row on a phone; on a desktop every queue is in view (the chips wrap rather than slide out of sight). */}
           <nav aria-label="Order queues" className="px-4 pb-1 lg:px-0">
-            <ul className="flex gap-2">
+            <ul className="flex gap-2 lg:flex-wrap">
               {CHIPS.map((c) => {
                 const active = c.attention ? attention && !queue : c.queue ? queue === c.queue : !attention && !queue;
                 const n = countOf(c);
@@ -268,6 +284,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
           {error}
         </p>
+      ) : hint ? (
+        <p role="status" className="rounded-xl bg-gray-100 px-4 py-3 text-sm text-gray-800" data-testid="search-hint">
+          {hint}
+        </p>
       ) : page.items.length === 0 ? (
         <div role="status" className="of-card px-5 py-10 text-center">
           <p className="font-semibold">{filtered ? "No orders match" : "No orders yet"}</p>
@@ -297,13 +317,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                     ) : null}
                     <th scope="col">Order</th>
                     <th scope="col">Customer</th>
-                    <th scope="col">Placed</th>
                     <th scope="col" className="num">
                       Total
                     </th>
-                    <th scope="col">Order status</th>
-                    <th scope="col">Fulfilment</th>
-                    <th scope="col">Payment</th>
+                    <th scope="col">Status</th>
                     <th scope="col" className="of-sticky-end">
                       <span className="sr-only">Next step</span>
                     </th>
@@ -336,29 +353,42 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                             <Eye aria-hidden="true" size={16} />
                           </button>
                         </div>
-                        <p className="text-xs text-gray-600">{label(o.source)}</p>
-                      </td>
-                      <td className="max-w-48">
-                        <p className="truncate font-medium">{o.customerName}</p>
-                        <p className="text-xs text-gray-600 tabular-nums">{phoneText(o.customerPhone)}</p>
-                      </td>
-                      <td>
-                        <p className="whitespace-nowrap tabular-nums">{day.format(o.createdAt)}</p>
-                        <p className="text-xs text-gray-600 tabular-nums">{clock.format(o.createdAt)}</p>
+                        <p className="text-xs whitespace-nowrap text-gray-600 tabular-nums">
+                          {label(o.source)} · {day.format(o.createdAt)}, {clock.format(o.createdAt)}
+                        </p>
                         <Deadline order={o} now={now} />
+                      </td>
+                      <td className="max-w-44">
+                        <p className="truncate font-medium" title={o.customerName}>
+                          {o.customerName}
+                        </p>
+                        <p className="text-xs whitespace-nowrap text-gray-600 tabular-nums">{phoneText(o.customerPhone)}</p>
                       </td>
                       <td className="num font-semibold">{bdt(o.totalPaisa)}</td>
                       <td>
-                        <StatusPill value={o.orderStatus} calm />
-                      </td>
-                      <td>
+                        {/* The separate states one under the other (order, fulfilment, payment, return), never merged into one;
+                            each says which it is to a screen reader. One column, so the table fits a 1280-pixel laptop. */}
                         <div className="flex flex-col items-start gap-1">
-                          <StatusPill value={o.fulfilmentStatus} calm />
-                          {o.returnStatus !== "none" ? <StatusPill value={o.returnStatus} /> : null}
+                          <span>
+                            <span className="sr-only">Order: </span>
+                            <StatusPill value={o.orderStatus} calm />
+                          </span>
+                          {o.orderStatus === "cancelled" && o.fulfilmentStatus === "unfulfilled" ? null : (
+                            <span>
+                              <span className="sr-only">Fulfilment: </span>
+                              <StatusPill value={o.fulfilmentStatus} calm />
+                            </span>
+                          )}
+                          <span className="empty:hidden">
+                            <PaymentCell order={o} hideEmpty labelled />
+                          </span>
+                          {o.returnStatus !== "none" ? (
+                            <span>
+                              <span className="sr-only">Return: </span>
+                              <StatusPill value={o.returnStatus} />
+                            </span>
+                          ) : null}
                         </div>
-                      </td>
-                      <td>
-                        <PaymentCell order={o} />
                       </td>
                       <td className="of-sticky-end">
                         <div className="flex justify-end">
@@ -386,7 +416,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                   <span className="font-bold tabular-nums">{bdt(o.totalPaisa)}</span>
                 </div>
                 <div className="flex items-baseline justify-between gap-3 text-sm">
-                  <span className="min-w-0 truncate font-medium">{o.customerName}</span>
+                  <span className="min-w-0 truncate">
+                    <span className="font-medium">{o.customerName}</span>
+                    <span className="text-gray-600 tabular-nums"> · {phoneText(o.customerPhone)}</span>
+                  </span>
                   <span className="shrink-0 text-gray-600 tabular-nums">
                     {day.format(o.createdAt)}, {clock.format(o.createdAt)}
                   </span>
@@ -394,7 +427,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                 <div className="flex items-end justify-between gap-3">
                   <div className="min-w-0 space-y-1.5">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <StatusPill value={o.orderStatus} calm="hide" />
+                      {/* Packed, dispatched or delivered already says it was confirmed: one pill fewer on a small card. */}
+                      {o.orderStatus === "confirmed" && o.fulfilmentStatus !== "unfulfilled" ? null : <StatusPill value={o.orderStatus} calm="hide" />}
                       <StatusPill value={o.fulfilmentStatus} calm="hide" />
                       <PaymentCell order={o} hideEmpty />
                       {o.returnStatus !== "none" ? <StatusPill value={o.returnStatus} /> : null}
@@ -408,10 +442,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               </li>
             ))}
           </ul>
-          {bulkable ? <BulkBar batch={randomUUID()} /> : null}
           <OrderQuickView />
         </>
       )}
+      {/* Outside the list, so its result stays on screen when the step empties the list (all of "To pack" packed). */}
+      {canWrite ? <BulkBar batch={randomUUID()} /> : null}
       {next || after ? (
         <nav aria-label="Pages" className="flex items-center gap-2 text-sm">
           {after ? (
