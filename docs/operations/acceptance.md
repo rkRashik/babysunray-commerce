@@ -92,7 +92,7 @@ Every link needs you to be signed in to Netlify first in that window; that is th
 | E3 | Owner window: Orders → **Payments to verify**, open the order. | [Orders](https://babysunray.com/admin/orders?queue=payment_to_verify) | *Manual payment* shows `TESTTRX0001`, *Verified as received* ৳ 0, payment **Nothing received**. |
 | E4 | **Verify: money received** with the full amount (pretend you saw it in the account). | *Manual payment* | *Verified as received* = the total, *Still due* ৳ 0, payment **Settled**; the order is still *Pending verification* (verifying money does not confirm the order). Tracking page: "Payment verified by the shop". |
 | E5 | **Confirm**, **Mark packed**, **Dispatch**, **Record delivery**. | | The *Cash on delivery* card expects ৳ 0: nothing for the courier to collect. |
-| E6 | A second advance order. Send `TESTTRX0002`. Verify only **half** the total. | | *Partly paid*, *Still due* the other half; the tracking page says part is verified. Before dispatch the page warns that the courier would collect the rest. |
+| E6 | A second advance order. Send `TESTTRX0002`. Verify only **half** the total. Confirm and pack it, then try **Dispatch**. | | *Partly paid*, *Still due* the other half; the tracking page says part is verified. There is **no Dispatch button**: the page says dispatch waits until the full amount is verified. |
 | E7 | A third advance order. Send `TESTTRX0003`; in the Owner window **Reject reference** ("No such transfer"). | | Tracking page: "There is a problem with your payment. Please contact the shop." and it can send another ID. |
 | E8 | On another order, send `TESTTRX0001` again (already verified on E1's order) and try to verify it. | | Refused: "already verified … one transfer counts once". |
 

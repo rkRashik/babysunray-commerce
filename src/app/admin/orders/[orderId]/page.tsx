@@ -207,9 +207,9 @@ export default async function OrderPage({ params, searchParams }: Props) {
             </p>
           )}
           {order.fulfilmentStatus === "packed" && request ? <p className="text-sm text-gray-700">Dispatch is blocked until the cancellation request is decided.</p> : null}
-          {order.paymentMethod !== "cod" && due > 0 && allowed.has("dispatch") ? (
+          {order.paymentMethod !== "cod" && due > 0 && order.orderStatus === "confirmed" && (order.fulfilmentStatus === "unfulfilled" || order.fulfilmentStatus === "packed") ? (
             <p className="text-sm font-semibold text-amber-900" data-testid="dispatch-due-note">
-              {bdt(due)} of the advance payment is not verified yet. If you dispatch now, the courier must collect it as cash on delivery.
+              {bdt(due)} of the advance payment is not verified yet. The order can be dispatched only after the full amount is verified.
             </p>
           ) : null}
           {paidCancel && allowed.has("cancel") && !can("payments:verify") ? <p className="text-xs text-gray-600">This order holds a verified advance payment, so only the Owner can cancel it.</p> : null}

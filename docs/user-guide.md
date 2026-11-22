@@ -516,7 +516,7 @@ Verifying a payment **does not confirm the order**. Confirm it as usual after sp
 
 If a customer paid but sent no ID, use **Record a payment the customer did not send an ID for** with the ID from your statement. If you verified something by mistake, use **Undo this verification** with a reason; the record of both stays in the history. One transaction ID can count only once, on one order.
 
-**COD and advance money are kept apart.** The **Cash on delivery** card is only for money the courier collects. If an advance order is dispatched with money still due, the page warns you that the courier must collect the rest.
+**COD and advance money are kept apart.** The **Cash on delivery** card is only for money the courier collects. An advance order **cannot be dispatched** until you have verified the full amount: the page says so and the Dispatch button stays hidden (the server refuses it too, also in bulk).
 
 **Cancelling a paid order, or a paid parcel that came back.** Only you can cancel an order that holds a verified advance payment. A prepaid parcel returned to you undelivered is treated the same way and cannot be closed until the refund is recorded. It then shows **Refund due** (Orders page *Refunds due*, Dashboard, Reports, and the customer's page says you will contact them). Pay the money back yourself, then press **Record refund paid** with the amount, method, date and reference. Nothing is refunded automatically.
 

@@ -116,7 +116,10 @@ describe("order queue counts", () => {
     expect(counts.queues.to_pack).toBe(await count(pool, "select count(*) from orders where order_status = 'confirmed' and fulfilment_status = 'unfulfilled'"));
     const attention = await count(
       pool,
-      `select count(*) from orders o where o.order_status = 'verification_expired' or (o.order_status = 'pending_verification' and o.verification_expires_at <= now()) or exists (select 1 from cancellation_requests c where c.order_id = o.id and c.status = 'open')`,
+      `select count(*) from orders o where o.order_status = 'verification_expired' or (o.order_status = 'pending_verification' and o.verification_expires_at <= now()) or exists (select 1 from cancellation_requests c where c.order_id = o.id and c.status = 'open')
+         or exists (select 1 from advance_payments a where a.order_id = o.id and a.status = 'submitted')
+         or ((o.order_status = 'cancelled' or (o.order_status = 'confirmed' and o.fulfilment_status = 'rto_received'))
+             and o.advance_received_paisa - o.advance_refunded_paisa > 0 and o.cod_collected_paisa + o.advance_received_paisa - o.refunded_paisa - o.advance_refunded_paisa > 0)`,
     );
     expect(counts.attention).toBe(attention);
   });

@@ -8,6 +8,7 @@ import { createProduct, createVariant } from "../../src/modules/catalogue/servic
 import { DomainError } from "../../src/modules/domain-error";
 import { receiveStock } from "../../src/modules/inventory/service";
 import { refundAdvanceOnce, rejectReferenceOnce, reverseAdvanceOnce, verifyAdvanceOnce } from "../../src/modules/orders/advance";
+import { bulkTransition } from "../../src/modules/orders/bulk";
 import { placeGuestOrder } from "../../src/modules/orders/guest-checkout";
 import {
   cancelOrderOnce,
@@ -212,6 +213,23 @@ describe("an advance payment order", () => {
     // The rest arrives later, recorded by the Owner from the statement (the customer sent no ID).
     await verifyAdvanceOnce(db, owner, key(), { orderId: placed.orderId, expectedVersion: order.version, advancePaymentId: null, method: "nagad", reference: "NAGADREST9", amountPaisa: order.totalPaisa - 50_000, receivedOn: today });
     expect((await detail(placed.orderId)).paymentStatus).toBe("settled");
+  });
+
+  it("an advance order cannot be dispatched, singly or in bulk, until the whole amount is verified", async () => {
+    const placed = await websiteOrder("bkash");
+    await referenceFor(db, placed.orderId, "DISPREF001");
+    let order = await detail(placed.orderId);
+    await verifyAdvanceOnce(db, owner, key(), { orderId: placed.orderId, expectedVersion: order.version, advancePaymentId: (await submissionOf(placed.orderId)).id, amountPaisa: order.totalPaisa - 100, receivedOn: today });
+    await confirmOrderOnce(db, owner, key(), { orderId: placed.orderId, expectedVersion: (await detail(placed.orderId)).version });
+    await packOrderOnce(db, owner, key(), { orderId: placed.orderId, expectedVersion: (await detail(placed.orderId)).version });
+    order = await detail(placed.orderId);
+    expect(await code(dispatchOrderOnce(db, owner, key(), { orderId: placed.orderId, expectedVersion: order.version }))).toBe("INVALID_TRANSITION");
+    const [bulk] = await bulkTransition(db, owner, key(), "dispatch", [{ orderId: placed.orderId, expectedVersion: order.version }]);
+    expect(bulk.ok).toBe(false);
+    expect(await reserved(placed.variantId)).toBe(1);
+    await verifyAdvanceOnce(db, owner, key(), { orderId: placed.orderId, expectedVersion: order.version, advancePaymentId: null, method: "bkash", reference: "DISPREF002", amountPaisa: 100, receivedOn: today });
+    await dispatchOrderOnce(db, owner, key(), { orderId: placed.orderId, expectedVersion: (await detail(placed.orderId)).version });
+    expect((await detail(placed.orderId)).fulfilmentStatus).toBe("dispatched");
   });
 
   it("a rejected reference tells the customer to contact the shop and lets them send another", async () => {

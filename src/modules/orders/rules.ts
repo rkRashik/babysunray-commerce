@@ -189,7 +189,8 @@ export function allowedActions(s: OrderState, now: Date): Set<OrderAction> {
       else allowed.add("customer_request_cancellation");
     }
     if (s.fulfilmentStatus === "unfulfilled") allowed.add("pack");
-    if (s.fulfilmentStatus === "packed" && !s.openCancellationRequest) allowed.add("dispatch");
+    // An advance-payment order leaves only once the whole amount is verified (founder decision, 22 Nov 2026).
+    if (s.fulfilmentStatus === "packed" && !s.openCancellationRequest && (s.paymentMethod === "cod" || amountDue(s) === 0)) allowed.add("dispatch");
     if (s.fulfilmentStatus === "dispatched") allowed.add("deliver").add("mark_rto");
     if (s.fulfilmentStatus === "rto") allowed.add("receive_rto");
     if (s.fulfilmentStatus === "rto" || s.fulfilmentStatus === "rto_received") allowed.add("record_rto_charge");

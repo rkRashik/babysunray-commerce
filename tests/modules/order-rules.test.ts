@@ -167,3 +167,13 @@ describe("manual advance payments in the rules (ADR-0013)", () => {
     expect(paymentStatusFor(10_000, 6_000, 0, 0, 4_000)).toBe("collected");
   });
 });
+
+describe("dispatch of an advance-payment order (founder decision, 22 Nov 2026)", () => {
+  const packed: Partial<OrderState> = { orderStatus: "confirmed", fulfilmentStatus: "packed", paymentMethod: "bkash" };
+  it("waits until the whole amount is verified; cash on delivery is unchanged", () => {
+    expect(actions(packed)).not.toContain("dispatch");
+    expect(actions({ ...packed, advanceReceivedPaisa: 9_999 })).not.toContain("dispatch");
+    expect(actions({ ...packed, advanceReceivedPaisa: 10_000 })).toContain("dispatch");
+    expect(actions({ ...packed, paymentMethod: "cod" })).toContain("dispatch");
+  });
+});

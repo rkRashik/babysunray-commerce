@@ -31,7 +31,9 @@ What still needs the founder, in the order it is needed. "Recommended" is engine
 | N3 | Run the one-session acceptance | The only proof on the live host: staff access, payments, photo upload, Google sign-in, email arriving, per-client limits | The proposed publication rule applies on staging only | Run it in one sitting with three browser windows ([acceptance.md](../operations/acceptance.md)) | About two hours | Follow Part 1 | Launch review |
 | N4 | Facebook, Instagram and Messenger links | Shown in the shop footer only when set | Optional; none were entered for you | Enter your real page addresses after N1 | None | Store settings, Social links | Nothing |
 
-### Staff and manual payments (ADR-0013): decide before real staff or real advance payments
+### Staff and manual payments (ADR-0013)
+
+**Decided by the founder on 22 Nov 2026:** P1 keep the roles as built; P2 aggregate reports yes, no settlement, refund, staff or export permission (as built); P3 full verification before dispatch (now enforced by the server); P4 and P5 an Owner-reviewed refund or resolution, never marked refunded unless returned (as built; refund amounts and deadlines still belong in the return policy, L1); P6 methods off until approved accounts are configured; P7 and P8 keep 72-hour single-use invitation and set-password links. The table below keeps the original options for reference.
 
 | # | Decision | Why it matters | Built now (engineering choice) | Recommended | What you do |
 |---|---|---|---|---|---|

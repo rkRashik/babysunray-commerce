@@ -96,6 +96,8 @@ function nextStep(o: Row, now: Date): Step {
   }
   if (o.openRequest) return { kind: "link", label: "Review request" };
   if (o.orderStatus === "confirmed" && o.fulfilmentStatus === "unfulfilled") return { kind: "action", action: "pack", label: "Mark packed" };
+  if (o.orderStatus === "confirmed" && o.fulfilmentStatus === "packed" && o.paymentMethod !== "cod" && o.codCollectedPaisa + o.advanceReceivedPaisa < o.totalPaisa)
+    return { kind: "link", label: "Verify payment" };
   if (o.orderStatus === "confirmed" && o.fulfilmentStatus === "packed")
     return { kind: "action", action: "dispatch", label: "Dispatch", confirm: "Dispatch this order? Its stock is deducted and it can no longer be cancelled." };
   if (o.orderStatus === "confirmed" && o.fulfilmentStatus === "dispatched") return { kind: "action", action: "deliver", label: "Record delivery", confirm: DELIVERY_TEXT };
