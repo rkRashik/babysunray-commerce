@@ -1,6 +1,6 @@
 # Order policy decisions
 
-**Status:** Section 1: Approved (2026-11-15), founder instruction for Gate H.10–H.12, reproduced here as given. Sections 2 to 4 (how the rules were turned into states, transitions and defaults): Draft — Founder Review.
+**Status:** Section 1: Approved (2026-11-15), founder instruction for Gate H.10–H.12, reproduced here as given. Sections 2 to 5 (how the rules were turned into states, transitions and defaults, and the manual advance payments of 22 Nov 2026): Draft — Founder Review.
 **Purpose:** The founder-approved business rules for orders, reservations, verification, cancellation, delivery charges, COD, returns, exchanges, RTO and guest tracking, and the engineering defaults chosen to implement them.
 
 These rules close open decision 5 (O-9 to O-14) and decide parts of open decisions 8, 9, 10 and 11 in [requirements.md](requirements.md). They authorise building the **internal** Orders system. They do **not** authorise public checkout (S-17 and G-7 still require approved, published delivery, return/exchange and privacy policy text), real delivery fee amounts, courier contracts or product claims.
@@ -67,9 +67,9 @@ Chosen to implement section 1 where it leaves a technical detail open. They make
 | Verification deadline | `verification_expires_at` = submission time + 24 hours (UTC), stored on the order. |
 | Enforcing expiry without a scheduler | Logical correctness does not depend on a scheduler: submission, stock adjustment and confirmation release overdue reservations first, so an expired hold never blocks a fresh order or counts as valid. Physical cleanup of all overdue orders is a repeatable batch (`expireOverdueVerifications`), run by `npm run orders:expire-verification` locally. **No scheduler runs it in production**; when hosting is chosen, the host's scheduler (or an equivalent) should run the same command every few minutes. |
 | Dispatch while a cancellation request is open | Refused until the Owner decides the request. |
-| Payment collection | Recorded only after dispatch, at most the expected COD in total; settlement at most what was collected; partial amounts allowed. |
+| Payment collection | Recorded only after dispatch, at most the expected COD in total (the order total less any verified advance payment, section 5); settlement at most what was collected; partial amounts allowed. |
 | Courier deductions (Gate H.36) | What the courier kept from the money it collected (its fee or another amount on its statement) is recorded by the Owner as its own entry, `deducted`, with the statement reference; no amount or fee is assumed. Settled plus deducted never exceeds collected. A deduction is not a refund and does not change what the customer paid or the order total. Without it, an order whose courier kept a fee could never be fully accounted for or closed. Chosen to implement rule J's separate buckets; Draft — Founder Review. |
-| Refunds | Only for an approved return, at most the money collected minus earlier refunds, and at most the returned items' value. Method is bKash, Nagad or bank transfer. The 7-working-day deadline is shown, not computed, because the working-day calendar (weekends, public holidays) is not defined. |
+| Refunds | Only for an approved return, at most the money received (COD collected plus verified advance payments) minus earlier refunds, and at most the returned items' value. Method is bKash, Nagad or bank transfer. The 7-working-day deadline is shown, not computed, because the working-day calendar (weekends, public holidays) is not defined. |
 | Exchanges | Request, receipt, inspection and Owner decision are recorded. **Executing** an exchange (sending the replacement) is not automated: the Owner creates a new assisted order for the replacement, which reserves stock normally. Who pays for the replacement's delivery and how a price difference is handled are **not decided** (section 4). |
 | Return window | Up to 7 × 24 hours after the recorded delivery time, that moment included. |
 | Closing a delivered order (Gate H.17) | Allowed only after the return window has ended (more than 7 × 24 hours after delivery), in addition to the conditions in section 2. Before that the Admin shows when the order can be closed; a database check (`orders_closed_after_return_window`) refuses an earlier close even from a direct write. Chosen so that neither closing nor COD settlement can end the customer's right to ask for a return (rule E). It adds no return condition and no refund rule. RTO orders, which were never delivered, are unaffected. The tracking link, which expires 30 days after closing, therefore works for the whole return window. |
@@ -81,9 +81,26 @@ Chosen to implement section 1 where it leaves a technical detail open. They make
 
 ## 4. Not decided (no customer promise is made)
 
+- Refunds for a cancelled prepaid order: amount (all or less a fee), deadline and method; overpayments; whether a prepaid order must be fully paid before dispatch (section 5).
+
 - Exchange execution: replacement delivery charge and price differences.
 - Working-day calendar for the 7-working-day refund deadline.
 - Return inspection criteria (open decision 9) beyond pass or fail with a note.
 - Delivery charge amounts, and any district-level zones (O-8).
 - Public delivery, return/exchange and privacy policy text (S-17, G-7).
 - Whether a delivered order may ever be closed before its 7-day return window has passed (for example when the customer says they will not return anything). The engineering default since Gate H.17 refuses it (section 3).
+
+## 5. Manual advance payments (22 Nov 2026; Draft — Founder Review)
+
+The founder's instruction of 22 Nov 2026 (requirements PM-1 to PM-6) added optional bKash, Nagad and bank transfer advance payments beside cash on delivery, verified by hand. How they were built ([ADR-0013](../adr/0013-staff-access-and-manual-payments.md)):
+
+| Topic | Choice |
+|---|---|
+| Payment method | Chosen at submission and stored on the order (`cod` by default). A manual method can be chosen only while the Owner has it enabled. |
+| Payment status | Counts money received: COD collected plus advance money the Owner verified, against the total. A submitted transaction reference counts for nothing. |
+| What the courier collects | At most the order total less verified advance money. |
+| Verification | Owner only (`payments:verify`): the amount that actually arrived (partial allowed, never more than still due), its date, and its reference; one reference counts once across all orders. Undoing a mistake is a reversing entry. |
+| Order and stock | Verifying money changes neither the order status nor stock: the Owner still confirms the order (rule B), and after the 24-hour window confirmation reserves again only if available (rule D). A late payment never revives a reservation. |
+| Dispatch with money due | Allowed, with a warning that the courier must collect the rest as cash on delivery (whether to forbid it is open). |
+| Cancellation and RTO | An order holding verified advance money can be cancelled only by someone who may verify payments. It then shows "Refund due" until the refund actually paid is recorded; a prepaid parcel that came back undelivered (RTO received) shows the same and cannot be closed until then. Nothing is refunded automatically and no amount or deadline is promised. |
+| Customer view | The private tracking page shows the receiving details and the amount still due, the reference state (awaiting verification, verified, a problem: contact the shop) and, for a cancelled prepaid order, that the shop will contact them. |

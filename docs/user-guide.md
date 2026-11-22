@@ -21,6 +21,9 @@ You don't need any technical knowledge. If you can use Facebook or WhatsApp, you
 11. [What your customers see](#11-what-your-customers-see)
 12. [Good habits and safety](#12-good-habits-and-safety)
 13. [Quick help](#13-quick-help)
+14. [Staff and access](#14-staff-and-access)
+15. [Advance payments: bKash, Nagad and bank transfer](#15-advance-payments-bkash-nagad-and-bank-transfer)
+16. [Customer sign-in with Google](#16-customer-sign-in-with-google)
 
 ---
 
@@ -29,7 +32,9 @@ You don't need any technical knowledge. If you can use Facebook or WhatsApp, you
 1. Open your shop's address and add **/admin** at the end (for example `yourshop.com/admin`).
 2. Type your email and password, then press **Sign in**.
 
-**Forgot your password?** Use one of the **recovery codes** you saved when the account was created. Open **/admin/recover**, type your email and one code, and choose a new password. Each code works once.
+**Staff** sign in the same way, with their own email and password ([section 14](#14-staff-and-access)). A staff member who forgets their password asks you for a set-password link.
+
+**Forgot your password?** (Owner) Use one of the **recovery codes** you saved when the account was created. Open **/admin/recover**, type your email and one code, and choose a new password. Each code works once.
 
 > **Tip:** Keep your recovery codes somewhere safe and offline (a notebook, a locked drawer). You can make new ones in **Settings → Account security**.
 
@@ -296,6 +301,8 @@ On the full order page, the **Cash on delivery** card shows four figures, each w
 
 > **Delivered is not the same as paid.** An order can be delivered while the money is still with the courier. The **COD to collect** and **Not settled** chips on the Orders page show exactly these.
 
+Advance payments by bKash, Nagad or bank transfer are separate from COD: see [section 15](#15-advance-payments-bkash-nagad-and-bank-transfer).
+
 ---
 
 ## 8. Returns and cancellations
@@ -305,6 +312,7 @@ On the full order page, the **Cash on delivery** card shows four figures, each w
 - Before you confirm, the customer can cancel themselves from their tracking link.
 - After you confirm, they can **ask** to cancel. You'll see it in **Cancellation requests** on the dashboard. Open the order and approve or reject.
 - You can cancel an order yourself any time before it's dispatched. Held stock goes back for sale.
+- Cancelling never moves money. If the order holds an advance payment you verified, only you can cancel it, and it then shows **Refund due** until you record the refund you paid ([section 15](#15-advance-payments-bkash-nagad-and-bank-transfer)).
 
 **Returns (within 7 days of delivery)**
 
@@ -400,7 +408,7 @@ Customers never need an email account to order.
 
 - They browse the shop in **English or Bangla**.
 - They can sort the list (newest, or price low to high / high to low) and filter it under **Filter & sort**.
-- They choose size and colour, add to bag, and order with **Cash on Delivery**. Until a size or colour is chosen the button says which one is missing; a sold-out choice says **Sold out**. The size guide marks the chosen size and can show inches (worked out from your centimetres). No account is needed, but they can make one (with email or Google) if they like.
+- They choose size and colour, add to bag, and order with **Cash on Delivery** (or pay in advance by a method you turned on, [section 15](#15-advance-payments-bkash-nagad-and-bank-transfer)). Until a size or colour is chosen the button says which one is missing; a sold-out choice says **Sold out**. The size guide marks the chosen size and can show inches (worked out from your centimetres). No account is needed, but they can make one (with email or Google) if they like.
 - The delivery area they pick in the bag is already chosen at checkout, so the total they saw is the total they get (it is priced again by the server).
 - They get a **tracking link** to follow their order and, while it's still waiting for your call, to cancel it.
 
@@ -415,7 +423,8 @@ The pages under **Opening the shop** help you get ready:
 
 ## 12. Good habits and safety
 
-- **Never share your password** or recovery codes — not even with staff.
+- **Never share your password** or recovery codes — not even with staff. Give each helper their own account with the smallest role that fits ([section 14](#14-staff-and-access)), and disable it the day they leave.
+- **Count a payment only after you see it in your own account.** A transaction ID from a customer is not money.
 - **Sign out** on shared computers.
 - **Don't use real customer data for practice.** Use made-up names and numbers.
 - **Confirm by phone** before pressing *Confirm*. It protects you from fake orders.
@@ -433,5 +442,90 @@ The pages under **Opening the shop** help you get ready:
 | A product can't be published | Open it — the **Publication** section lists exactly what's missing |
 | A search says "expired" | Searches are forgotten after 15 minutes for privacy. Just search again |
 | Orders can't be taken for an area | Set its charge in **Delivery charges** |
-| Forgot password | Use a recovery code at **/admin/recover** |
+| Forgot password | Owner: use a recovery code at **/admin/recover**. Staff: the Owner sends a set-password link from **Staff & access** |
+| A staff member sees "This page could not be shown" | Their role does not include that page. Change their role if they need it |
+| A customer says they paid | Open **Payments to verify**, check your account, then verify or reject |
+| "This transaction reference is already verified" | That transfer already counts on an order. Check the statement: one transfer counts once |
 | The page looks out of date | Press **Refresh** (Dashboard, Reports) or reload the page |
+
+---
+
+## 14. Staff and access
+
+You can give other people their own Admin accounts. Each person signs in with **their own email and password**; you never share yours, and you never see theirs.
+
+**Choose a role.** A role decides what someone can see and change. The page **Settings → Staff & access** explains each one under *What each role can do*:
+
+| Role | Can | Cannot |
+|---|---|---|
+| **Owner** (you) | Everything | — |
+| **Store Manager** | Products and photos, product reviews, stock (receiving, counts, adjustments), everyday orders, dashboard and reports | Money, refunds, return decisions, publishing, settings, payment methods, staff, exports |
+| **Orders Staff** | See orders and the customer details needed to deliver them; create assisted orders; confirm, pack, dispatch, record delivery; cancel unpaid orders; record return requests; send tracking links | Mark money received, verify payments, refunds; change products, prices or stock; settings; staff |
+| **Catalogue Staff** | Create and edit draft products, photos, categories, size charts and variants; check readiness | Review or publish products; see orders; stock changes; settings |
+| **Inventory Staff** | Look up products and stock, receive stock, start stock counts and enter what they counted | Apply a count or adjust stock (a Manager or you do that); orders; settings |
+
+The menu only shows each person the pages they may use. If they type the address of another page, they see *This page could not be shown*: the check happens on the server, not just in the menu.
+
+**Invite someone**
+
+1. Open **Settings → Staff & access**.
+2. Under **Invite someone**, type their email and choose a role, then press **Send invitation**.
+3. If email is set up, they receive a link by email. If not, the page shows the link **once**: copy it and send it to them privately (for example in WhatsApp). The link works **once, for 72 hours**.
+4. They open the link, type their name and choose a password (at least 15 characters), then sign in at **/admin** like you.
+
+Sending a new invitation to the same address stops the old link. You can **Revoke** an unused link under *Invitations and links*.
+
+**Change someone's access.** Under *People with access*, open **Manage …'s access**:
+
+- **Change role** — takes effect on their next page.
+- **Disable access** — signs them out everywhere at once; they cannot sign in until you **Re-enable access**. Use this the day someone leaves.
+- **Sign out everywhere** — ends their sessions (for example a lost phone); their password still works.
+- **Email (or create) a set-password link** — for a forgotten password. Their old password keeps working until they use the link.
+
+Your own Owner access can never be changed, disabled or signed out from this page, so you cannot lock yourself out by mistake.
+
+**Who did what.** *Access history* lists every invitation, role change, disable and sign-out with the person who did it. On each order, *History* names the person who took each step.
+
+---
+
+## 15. Advance payments: bKash, Nagad and bank transfer
+
+**Cash on delivery** is always offered. You can also let customers **pay in advance** by bKash, Nagad or bank transfer. This is **not an online payment**: the customer sends money from their own app or bank to your account, then gives you the transaction ID. You check your own account before it counts. Nothing is connected to bKash, Nagad or a bank.
+
+**Set up a method**
+
+1. Open **Settings → Payment methods**.
+2. Press **Set up** on bKash, Nagad or Bank transfer.
+3. Enter the receiving details exactly as customers should see them: account name and number (and the bank name for a bank transfer). For bKash and Nagad choose **Merchant** (customers use *Payment*) or **Personal** (customers use *Send Money*). Check with the provider that the account may receive business payments.
+4. Optionally add a short instruction in English and Bangla.
+5. Tick **Offer … to customers** and the confirmation that the account is the store's, then **Save payment method**.
+
+Untick **Offer … to customers** to stop offering it. Orders already placed keep their records. Never type a PIN, password or OTP anywhere: none is needed.
+
+**What the customer does.** At checkout they choose **Cash on Delivery** or **Pay in advance by …**. After ordering they see your account details and the exact amount, send the money, then open their private order link and enter the **transaction ID**. Their page says **awaiting the shop's verification** until you check it. An ID alone never shows as paid.
+
+**What you do**
+
+1. On the Orders page, open **Payments to verify** (also on the Dashboard under *Needs attention*).
+2. Open the order. The **Manual payment** card shows the ID the customer sent.
+3. Check your bKash, Nagad or bank account for that transfer.
+4. If it arrived: enter the amount that actually arrived and the date, then press **Verify: money received**. If less arrived, enter less: the rest stays **Still due**.
+5. If it is not there: press **Reject reference** with a short reason. The customer is asked to contact you and can send another ID.
+
+Verifying a payment **does not confirm the order**. Confirm it as usual after speaking to the customer. If the 24-hour window passed, confirming reserves the stock again only if it is still available.
+
+If a customer paid but sent no ID, use **Record a payment the customer did not send an ID for** with the ID from your statement. If you verified something by mistake, use **Undo this verification** with a reason; the record of both stays in the history. One transaction ID can count only once, on one order.
+
+**COD and advance money are kept apart.** The **Cash on delivery** card is only for money the courier collects. If an advance order is dispatched with money still due, the page warns you that the courier must collect the rest.
+
+**Cancelling a paid order, or a paid parcel that came back.** Only you can cancel an order that holds a verified advance payment. A prepaid parcel returned to you undelivered is treated the same way and cannot be closed until the refund is recorded. It then shows **Refund due** (Orders page *Refunds due*, Dashboard, Reports, and the customer's page says you will contact them). Pay the money back yourself, then press **Record refund paid** with the amount, method, date and reference. Nothing is refunded automatically.
+
+Reports show advance payments in their own table, apart from COD, and the reconciliation check still covers them.
+
+---
+
+## 16. Customer sign-in with Google
+
+When Google sign-in is set up for the website, customers can press **Continue with Google** at checkout or on **My order**, choose their Google account and come back to the same page, signed in. Orders they place while signed in are listed under *My orders*. Signing in is optional: guests order exactly as before.
+
+A customer account never opens the Admin, even if it uses the same email as you or a staff member. Customers sign out with **Sign out** on *My order*.

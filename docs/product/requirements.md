@@ -1,8 +1,8 @@
 # BabySunray: Product Requirements
 
-**Status:** Draft — Founder Review (revision A.6)
+**Status:** Draft — Founder Review (revision A.7)
 **Purpose:** The single source of truth for what BabySunray's website and BabySunRay Admin must do. Technology choices live in [ADR-0001](../adr/0001-application-stack.md). Visual design is not specified here.
-**Last updated:** 2026-11-16
+**Last updated:** 2026-11-22
 
 ## How to read this document
 
@@ -174,6 +174,19 @@ Order data uses **separate** lifecycle dimensions. A change to one must not over
 
 O-9 to O-14 were left to the founder. **Decided in Revision A.9** (founder instruction, Gate H.10–H.12, 15 Nov 2026): the rules are in [order-policy-decisions.md](order-policy-decisions.md), section 1; the states, transitions and engineering defaults derived from them are in sections 2 and 3 of that document (Draft — Founder Review). This document still proposes no amounts.
 
+### 4.1 Manual advance payments (founder instruction, 22 Nov 2026)
+
+Cash on delivery stays the normal payment. No payment gateway is integrated.
+
+| ID | Requirement | Basis |
+|---|---|---|
+| PM-1 | Cash on delivery stays the default and is always offered. | F |
+| PM-2 | The Owner may offer bKash, Nagad and bank transfer as manual advance payments: enable or disable each, enter the store's receiving details and short instructions, and preview them. A method is shown to customers only when enabled with complete details the Owner supplied and approved. Nothing is prefilled; no wallet PIN, OTP, card number, banking password or gateway credential is collected or stored. | F |
+| PM-3 | The checkout shows Cash on Delivery and the enabled manual methods, in English and Bangla, without presenting a manual transfer as an integrated bKash or Nagad payment. | F |
+| PM-4 | After ordering, the customer sees the receiving details and the exact amount, sends money with their own app or bank, and submits the transaction reference through the order's private tracking link or account. A submitted reference never shows as paid: the customer sees whether instructions were given, the reference was submitted, payment awaits verification, was verified, or needs contact with the shop. | F |
+| PM-5 | Only the Owner, or an explicitly approved financial permission, records a payment as verified, after checking the actual receiving account; references can be rejected or flagged, corrections recorded, and the history seen. Version checks, idempotency and audit apply; no amount is verified twice; advance payments are a separate, append-only path, never courier-collected COD; money is integer paisa. | F |
+| PM-6 | The 24-hour reservation rule (O-12) is not weakened: a late payment never restores an expired reservation or oversells. Money received for an order that cannot be fulfilled is flagged for a manual refund or resolution; nothing is refunded automatically. *Open:* refund amounts, deadlines and fees for cancelled prepaid orders, overpayments, and whether a prepaid order must be paid before dispatch (decision register). | F + Q |
+
 ## 5. Catalogue and inventory
 
 | ID | Requirement | Basis |
@@ -203,10 +216,11 @@ A private area for the founder, with security boundaries that anticipate later s
 | OF-4 | Every Admin page and API enforces authentication and authorisation. Each is covered by a negative test. | P |
 | OF-5 | Authentication uses an established solution, not a custom-designed protocol. It includes session expiry, CSRF protection and a recovery path for a lost device. Which solution is open. | P + Q |
 | OF-6 | Privileged and sensitive actions (exports, stock adjustments, status changes) are written to an audit log with actor and time. | P |
-| OF-7 | Staff roles are not built now. Permission checks are written so roles can be added without rewriting them. | F |
+| OF-7 | Staff roles are not built now. Permission checks are written so roles can be added without rewriting them. *Replaced by the founder's instruction of 22 Nov 2026 (OF-11).* | F |
 | OF-8 | **COD courier settlement:** for each cash-on-delivery consignment the owner can record the amount expected, the amount the courier remitted, courier fees or deductions, the date received, and any unresolved difference. All amounts and fees are entered by the owner. None are assumed here. How courier statements are reconciled is to be defined. *Founder rule J (A.9): manual recording of collection and settlement. Statement reconciliation stays P.* | F + P (was P) |
 | OF-9 | Audit and ledger entries record the real acting identity (extends I-3 and OF-6). Before an authentication solution exists, entries carry an explicit non-user source label; the system never invents or reuses a person's identity. Truthful actor auditing: implementation approved by the founder (Gate G.3). | P |
 | OF-10 | The approved authentication solution (OF-5) handles passwords: no hand-written password hashing or session protocol. Admin and Staff permissions are enforced on the server for every privileged operation, and session or token lifetime suits the client type (API-10). Roles themselves are not built now (OF-7). | P |
+| OF-11 | **Staff accounts** (founder instruction, 22 Nov 2026). People who work in the Admin have their own accounts with limited roles: Owner (everything, including staff, settings, money, refunds, policies, publication and launch work), Store Manager, Orders Staff, Catalogue Staff and Inventory Staff. The Owner invites staff by a secure, short-lived, one-time link; staff set their own password; the Owner changes roles, disables or re-enables access, ends sessions and sees invitation status and access history. Staff can never become or create an Owner; customer accounts never give Admin access; permissions are checked on the server for every page, action and API; audit records name the real person. *Proposed:* the exact permission set of each role, the 72-hour link lifetime and set-password links for lost staff passwords ([ADR-0013](../adr/0013-staff-access-and-manual-payments.md)). | F + P |
 
 ## 7. Data portability, reports and recovery
 
@@ -399,6 +413,17 @@ As of 19 Nov 2026. Basis labels are unchanged except where the founder's instruc
 | S-17, G-7 | Publication built; founder approval mandatory | A reviewed policy version is published only by the founder with an explicit approval box; the exact text is copied into an append-only record. Published policies appear in the shop's footer, product page and checkout; unpublished ones do not appear at all. No policy text is written by the system. |
 | S-15, API-11 | Extended, not verified live | Per-client checkout limit (10 per hour) and per-client sign-in limits behind Netlify's own client-address header when `TRUSTED_PROXY=netlify`; no other address header is trusted. |
 
+### 9.8 Implementation status (staff access and manual payments, ADR-0013)
+
+As of 22 Nov 2026, built and covered by automated tests on the isolated test database; not yet applied to or tried on staging (migrations 0024 and 0025 pending there). Details: [ADR-0013](../adr/0013-staff-access-and-manual-payments.md), [acceptance.md](../operations/acceptance.md).
+
+| ID | Status | Notes |
+|---|---|---|
+| OF-11, OF-4, OF-6, OF-9 | Built | Four staff roles with named permissions, Staff & access page, one-time invitation and set-password links (emailed when email is set up, otherwise shown once), role change, disable, sign out everywhere, access history; order history names the acting person. |
+| PM-1 to PM-5 | Built | Payment methods page, payment choice at checkout and for assisted orders, instructions after ordering and on the tracking page, transaction reference submission, Owner verification, rejection, undo, separate ledger kinds, queues, dashboard, reports and exports. |
+| PM-6 | Built (rules); refund policy open | Verifying never confirms an order or reserves stock; cancelling a paid order needs the payment permission and shows a refund due until the Owner records the refund paid by hand. |
+| S-14 | Unchanged; boundaries tested | Google sign-in reviewed: redirect destinations limited to this site, state kept on the server, no Admin access from a customer session. A real Google sign-in is still not verified. |
+
 ## 10. Phasing (proposed)
 
 | Phase | Outcome | Basis |
@@ -414,7 +439,7 @@ Local development does not require approved hosting. **Production deployment** r
 
 ## 11. Out of scope for now
 
-Multi-tenant or SaaS features, partner or profit-sharing logic, online card payment, staff roles, and SMS or one-time codes as a required dependency, unless the founder adds them. Search, accounts, wishlists and reviews are **undecided**, not excluded (S-14).
+Multi-tenant or SaaS features, partner or profit-sharing logic, online card payment and payment gateways, and SMS or one-time codes as a required dependency, unless the founder adds them. (Staff roles were added by the founder on 22 Nov 2026: OF-11.) Courier APIs and WhatsApp automation are deferred ([future-integrations.md](../architecture/future-integrations.md)). Search, accounts, wishlists and reviews are **undecided**, not excluded (S-14).
 
 Also out of scope: a separate backend server, Express, microservices, a monorepo or an API gateway (ADR-0001 keeps one modular monolith); and multi-tenant SaaS, subscriptions, billing infrastructure, white-label dashboards and customer onboarding platforms, even though a customised copy may be reused or sold (B-12, RU-6).
 

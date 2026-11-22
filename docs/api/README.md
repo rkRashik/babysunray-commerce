@@ -7,7 +7,7 @@ The contract itself is `GET /api/v1/openapi.json` (OpenAPI 3.1, generated from `
 
 ## What exists
 
-Owner-only endpoints for the draft catalogue, physical stock and internal (Owner-assisted) orders. There are no public endpoints and no checkout, and nothing publishes a product. The table matches the OpenAPI document (`GET /api/v1/openapi.json`, version 1.6.0); a contract test checks that the documented operations are exactly the implemented ones.
+Endpoints for any Admin account whose role holds the listed permission (the Owner holds all of them; staff roles hold subsets, [ADR-0013](../adr/0013-staff-access-and-manual-payments.md)), for the draft catalogue, physical stock and internal (Owner-assisted) orders. There are no public endpoints and no checkout, and nothing publishes a product. The table matches the OpenAPI document (`GET /api/v1/openapi.json`, version 1.7.0); a contract test checks that the documented operations are exactly the implemented ones.
 
 | Endpoint | Permission | Does |
 |---|---|---|
@@ -31,7 +31,7 @@ Owner-only endpoints for the draft catalogue, physical stock and internal (Owner
 | `POST /api/v1/orders/{orderId}/transitions` | `orders:write` | `confirm`, `pack`, `dispatch`, `deliver`, `mark_rto`, `receive_rto`, `cancel`, `close` |
 | `POST /api/v1/orders/{orderId}/cancellation-review` | `orders:write` | Approve or reject a customer's cancellation request |
 | `POST /api/v1/orders/{orderId}/payments`, `.../rto-charge` | `payments:record` | Courier collection or settlement (201); the actual RTO charge |
-| `POST /api/v1/orders/{orderId}/returns`, `.../returns/{returnId}/steps` | `orders:write` (refund step: `payments:record`) | Open a return or exchange (201); receive, approve, reject, refund, complete |
+| `POST /api/v1/orders/{orderId}/returns`, `.../returns/{returnId}/steps` | `orders:write` (approve and reject: `returns:decide`; refund: `payments:record`) | Open a return or exchange (201); receive, approve, reject, refund, complete |
 | `POST /api/v1/orders/{orderId}/inspections/{quarantineItemId}` | `stock:receive` | Restock (once) or reject a returned or RTO item |
 | `POST /api/v1/orders/{orderId}/tracking-link`, `.../tracking-link/revoke` | `orders:write` | New guest tracking link (201; token shown once); revoke it |
 | `GET /api/v1/delivery-zones`, `PUT /api/v1/delivery-zones/{code}` | `orders:read` / `settings:write` | Configured zones; set a zone's charge and active flag |
@@ -133,6 +133,8 @@ Version 1.4.0 added product content: `category`, `fabric` (with `confirmedAt`), 
 Version 1.5.0 (Gate H.31–H.32) added the product `status` value `published` (no product can be published yet: no publication rule is approved, and no endpoint publishes), the `status=published` list filter, and `409 PRODUCT_NOT_EDITABLE` on `POST /products/{productId}/variants` (only a draft product gets new variants) and on `POST /products/{productId}/archive` (a published product is withdrawn first). It also added courier deductions: `kind: "deducted"` in `POST /orders/{orderId}/payments` and in the order's `payments`, and `codDeductedPaisa` on the order; settled plus deducted never exceeds collected, and `paymentStatus: "settled"` now means every collected taka is settled or recorded as deducted. A strict 1.4.0 client would notice the new status value only once products can be published, and the new payment kind once a deduction is recorded.
 
 Version 1.6.0 (Gate H.41) added `POST /cod/statement-checks`, a read-only comparison of a courier statement with the recorded COD money; it changes no order or payment.
+
+Version 1.7.0 (ADR-0013) added staff access and manual advance payments: every endpoint now serves any Admin account whose role holds its permission (until then only the Owner existed); approving or rejecting a return needs `returns:decide`; orders gained `paymentMethod`, `advanceReceivedPaisa` and `advanceRefundedPaisa`, the optional `paymentMethod` on `POST /orders` (409 `PAYMENT_METHOD_UNAVAILABLE` for a method that is not enabled), and the payment kinds `advance_received`, `advance_reversed` and `advance_refunded`. `paymentStatus` now counts verified advance money with COD collected. Verifying advance payments and staff management are BabySunRay Admin only. A strict 1.6.0 client would notice the new kinds only once an advance payment is recorded.
 
 ## Testing
 

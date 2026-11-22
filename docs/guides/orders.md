@@ -18,6 +18,10 @@ The business rules are in [order-policy-decisions.md](../product/order-policy-de
 
 `placeGuestOrder` (`src/modules/orders/guest-checkout.ts`) places a website order for an anonymous customer through the same `submitOrder`, with a customer audit actor (never a user), its own idempotency record (`guest_checkout_submissions`, migration `0013`: key digest and an HMAC of the request, no customer data), a refusal if any shown price or the delivery charge changed (`QUOTE_CHANGED`), only SKUs of products with a current internal review, and the tracking link created in the same transaction and returned once. Its HTTP transport (`src/api/guest-checkout.ts`) has **no route**: no page, route or Server Action imports either (a unit test checks), and the launch gate refuses. Design: [ADR-0007](../adr/0007-guest-checkout-foundation.md); contract: [launch-readiness.md](../operations/launch-readiness.md), section 5.
 
+## Manual advance payments
+
+`src/modules/orders/advance.ts` ([ADR-0013](../adr/0013-staff-access-and-manual-payments.md), [order-policy-decisions.md](../product/order-policy-decisions.md) section 5). The order's `payment_method` is chosen at submission (`cod` by default; a manual method only while enabled in `payment_methods`, `src/modules/settings/payments.ts`). A customer reference (`submitReference`, through `POST /api/track/payment`) only creates an `advance_payments` row in status `submitted`. Money moves only through `verifyAdvance` (`payments:verify`): an `advance_received` ledger row, `orders.advance_received_paisa` and the derived payment status, in one transaction, at most the amount still due, one reference once across orders (unique index). `rejectReference`, `reverseAdvance` (an `advance_reversed` row) and `refundAdvance` (`advance_refunded`, `payments:record`, cancelled orders only) complete it. None of them changes order status or stock. Queues: `payment_to_verify`, `refund_due`.
+
 ## Known limits
 
 - Exchange execution is a separate order (who pays the replacement's delivery is not decided).

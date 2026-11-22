@@ -1,61 +1,148 @@
 # Founder acceptance: walkthrough and setup
 
 **Status:** Draft — Founder Review
-**Purpose:** How the founder runs the whole shop on the staging site, step by step in a browser, before any public launch. Part 1 is for the founder and needs no technical knowledge. Part 2 is the one-time technical setup, for whoever runs the commands. Design: [ADR-0011](../adr/0011-founder-acceptance-and-customer-sign-in.md).
+**Purpose:** The one comprehensive session in which the founder tries the whole shop and Admin on the staging site before any public launch: products, stock, customers (including Google), cash on delivery and manual advance payments, cancellations and refunds, staff roles, reports and tracking. Part 1 is for the founder and needs no technical knowledge. Part 2 is the one-time technical setup, for whoever runs the commands. Design: [ADR-0011](../adr/0011-founder-acceptance-and-customer-sign-in.md), [ADR-0013](../adr/0013-staff-access-and-manual-payments.md).
 
-The site `https://babysunray.com` runs on Netlify behind visitor protection and is connected to the **staging** database. Everything below writes real records to that staging database only, never to a real shop. **Use made-up customer names and phone numbers.** The public shop stays closed: only a browser holding an acceptance pass started in the Admin can open it.
+The site `https://babysunray.com` runs on Netlify behind visitor protection and is connected to the **staging** database. Everything below writes records to that staging database only, never to a real shop. **Use made-up names, phone numbers and transaction IDs, and never send real money.** The public shop stays closed: only a browser holding an acceptance pass started in the Admin can open it.
 
 ## What has been proven, and what has not
 
+"Verified in tests" means automated tests passed on an isolated test database with fictional data. It is not the same as working on the live staging site; that is what this session checks.
+
 | Area | State |
 |---|---|
-| The whole order journey (publish, shop as a customer, place an order, confirm, pack, dispatch, deliver, record cash, track) | **Verified in tests** on an isolated test database (`tests/e2e/acceptance.spec.ts`). **Not yet done by you on staging.** That is this walkthrough. |
-| Duplicate submissions, the last unit sold twice, a price or stock change during checkout, a lost answer retried, cancelling | **Verified in tests** (`tests/db/guest-checkout.integration.test.ts`, `tests/e2e/orders.spec.ts`). Steps 17 and 18 below repeat the visible ones on staging. |
-| Returns, inspection and restocking | **Verified in tests**. Not part of the original 19 steps; step 20 is optional. |
-| Staging is staging-marked, Google sign-in is offered, the per-client checkout limit is on, the image CDN is configured, both delivery areas have a charge, 0 products published | **Verified on protected staging** (read-only, 22 Nov 2026) on the Shop acceptance and Launch readiness pages. |
-| Customer email accounts | **Configured** (Store settings says the email service is set up). Whether an email actually arrives is **not verified**: step 10 checks it. |
-| Photo upload from the live site, Google's real sign-in, the per-client limits under real traffic | **Not yet verified.** Steps 4, 10 and 17. |
-| Database updates 0022 (an index) and 0023 (the Facebook and Instagram fields) | **Not applied on staging.** See section "Database updates" below. Social links stay uneditable until then; everything else works. |
-| The public launch gate | **Closed**, by design. Nothing in this walkthrough opens it. |
-
-The system is not "verified" until you have completed this list on the staging site.
+| Order journey: publish, shop, order, confirm, pack, dispatch, deliver, record cash, track | **Verified in tests** (`tests/e2e/acceptance.spec.ts`). Not yet done by you on staging. |
+| Staff: invite, accept, sign in, each role's allowed and refused actions (pages, actions, API), role change, disable, sign out everywhere, set-password link, audit names the person | **Verified in tests** (`tests/db/staff.integration.test.ts`, `tests/e2e/staff-payments.spec.ts`). Not yet done by you. |
+| Manual payments: off by default, setup checks, checkout choice, instructions with the exact amount, transaction ID, "awaiting verification", Owner verification, duplicate and over-payment refused, partial payment, reject, undo, late payment after expiry, paid cancellation and refund, reports reconcile | **Verified in tests** (`tests/db/manual-payments.integration.test.ts`, `tests/e2e/staff-payments.spec.ts`). Not yet done by you. |
+| Google sign-in: start at Google, return only to this site, server-side state, no Admin access from a customer session | **Verified in tests** without Google (`tests/db/customer-google.integration.test.ts`). **A real Google sign-in has never been done**: step C2. |
+| Customer email accounts and staff invitation emails | Email is configured on staging. Whether an email actually arrives is **not verified**: steps C1 and F1. |
+| Photo upload from the live site, the per-client limits under real traffic | **Not verified.** Steps A2 and J. |
+| Database updates 0022 to 0025 | **Not applied on staging yet.** They must be applied (Part 2) before this session: 0024 and 0025 are needed by staff access and payments. |
+| The public launch gate | **Closed**, by design. Nothing in this session opens it. |
 
 ---
 
-# Part 1. The walkthrough
+# Part 1. The session
 
-Use **two browser windows**: a normal one for the Admin (the shop's back office) and a **private (incognito) window** as the customer. Open the links below in the right one. Every link needs you to be signed in to Netlify first; that is the visitor protection working.
+**About two hours.** Do it in one sitting, in order. If a step fails, do not repeat it more than once: take a screenshot, note the step (for example "E3") and what the page said, and carry on with the next part if you can. Tell me afterwards.
 
-**Test or real?** Everything here is **test only**, except where a step says *real setting*. Name your test product something obvious, like "ACCEPTANCE TEST Romper", so you can tell it from anything real. Never type a real customer's details.
+**Three browser windows**, because each keeps its own sign-in:
 
-**Made-up details to use:** customer name `Test Customer`, phone `01711000070`, address `House 70, Road 7, Test Area, Dhaka`.
+| Window | Use it as | How |
+|---|---|---|
+| **Owner** | You, in the Admin | Your normal browser window |
+| **Customer** | A shopper | A private (incognito) window of the same browser |
+| **Staff** | Your test employees | A different browser (for example Edge if you use Chrome), or a separate browser profile |
 
-**If something goes wrong in any step:** do not repeat it more than once. Take a screenshot, note the step number and what the page said, and stop; then tell me. Nothing you do here can affect a real customer.
+Every link needs you to be signed in to Netlify first in that window; that is the visitor protection working.
 
-| # | Do this | Where | You should see | If it does not work |
-|---|---|---|---|---|
-| 1 | **Sign in** to the Admin. | [Admin login](https://babysunray.com/admin/login) | The Dashboard. | Check the address is `babysunray.com` and that you are signed in to Netlify. |
-| 2 | **Check the delivery charges.** *Real setting.* Do not invent amounts. If both areas already show a charge, leave them. If one is missing, enter your real charge (or a clearly fake one such as 1 taka, and change it back later). | [Delivery charges](https://babysunray.com/admin/settings/delivery) | Dhaka City and Outside Dhaka both active, each with a charge. | An area without a charge cannot take orders: the checkout says so. |
-| 3 | **Create a test product.** Name in English and Bangla, a short description in both, fabric (write only what is true, tick the confirmation), care instructions, a category. | [New product](https://babysunray.com/admin/products/new) | A draft product page. | The page names the missing field in red. |
-| 4 | **Complete it.** Add two sizes (for example 0-3M and 3-6M) with one colour and a price each; the size chart in cm; a photo you own (under 5 MB) with a short description in both languages. | The product page (the buttons under the overview jump to each part) | The yellow "missing" list on the product shrinks until everything is met. | If the photo will not upload, note the exact message: photo upload from the live site is not yet verified. |
-| 5 | **Receive stock** for each size. Give one size 5 units and the other 1 unit. | The size's page (select its code in *Variants and stock*) | On hand shows what you received. | |
-| 6 | **Mark the content as reviewed**, then **Publish to the shop**. | The product page, *Publishing* | "Published". The page says the *proposed* rule applied (acceptance only). | The card lists what is still missing. |
-| 7 | **Optional:** write, review and publish a policy. Only wording you approve; nothing is made up for you. | [Policies](https://babysunray.com/admin/policies) | The shop footer and checkout then link to it. | |
-| 8 | **Start acceptance in the customer window.** In the private window: sign in to the Admin, open Shop acceptance, press **Start acceptance in this browser**, then sign out of the Admin in that window. | [Shop acceptance](https://babysunray.com/admin/acceptance) | "Holds an acceptance pass". | Without a pass the shop shows "not found": that is correct. |
-| 9 | **Shop as the customer.** English and Bangla. Browse, search, **sort** by price, **filter** by size, open your product, open the **size guide**, choose a size and colour, **Add to Bag**, change the quantity. Check the sold-out size cannot be bought. | [Shop, English](https://babysunray.com/en) · [Shop, Bangla](https://babysunray.com/bn) | Real prices and stock; a strip at the top saying this is acceptance. The button says "Select a size" until you choose, and "Sold out" for the size with no stock. | |
-| 10 | **Optional:** make a customer account with an email address you own (and/or **Continue with Google**). | [My order](https://babysunray.com/en/order) | A verification email arrives (check spam). Google shows your name and gives no Admin access. | If no email arrives, email delivery is not working: note it. Ordering never needs an account. |
-| 11 | **Check out.** In the Bag choose the delivery area, press **Checkout**. The area should already be selected and the total unchanged. Enter the made-up details and **Place order**. | [Bag](https://babysunray.com/en/cart) | "Order received", an order number, and a **private tracking link shown once**. Copy it into a private note, not a chat. | A red message says what to fix. If the connection drops, press the button again: it never makes two orders. |
-| 12 | **Find the order.** | [Orders](https://babysunray.com/admin/orders) | "Pending verification" with the same number and total. The size's *reserved* count has gone up. | |
-| 13 | **Process it.** *Confirm* (pretend you phoned them), *Mark packed*, *Dispatch*, *Record delivery*. | The order page | Each step appears in *History*. Dispatch takes the item out of stock; delivery is your own record, no courier is connected. | |
-| 14 | **Record the cash.** In *Cash on delivery*: **Courier collected**, then **Settled to me**. Use the order's own total. | The order page | Payment shows "Settled". Delivered did not count as collected until you recorded it. | |
-| 15 | **Check the numbers.** Stock on hand dropped once; history is complete; reports agree. | [Reports](https://babysunray.com/admin/reports) · [Dashboard](https://babysunray.com/admin/dashboard) | COD collected and settled equal the order total. The reconciliation check says passed. | A red reconciliation message means the money records disagree: stop and tell me. |
-| 16 | **Track as the customer.** Paste the link from step 11 in the private window. | (your saved link) | The same order, Confirmed then Delivered. | |
-| 17 | **Failure and recovery.** (a) Order 2 of the size with 1 unit in stock. (b) Press **Place order** twice quickly on another order. (c) Cancel a pending order from its tracking page. | The shop and the tracking page | (a) a clear "not enough stock" message and nothing created; (b) one order only; (c) "Cancelled" and the stock released. | |
-| 18 | **Withdraw the test product.** | The product page | It is gone from the shop at once. | |
-| 19 | **Read what still blocks launch.** | [Launch readiness](https://babysunray.com/admin/launch-readiness) | The public gate closed, with each reason and its next step. | |
-| 20 | **Optional: a return.** On a delivered test order, *Returns and exchanges, Record a return or exchange*, then *Goods received: send to inspection*, then *Passed: back to stock*. Use a clearly fake refund amount; recording a refund moves no money. | The order page | Returned goods wait in *Inspection* and are not for sale until you pass them. | |
+**Made-up details to use**
 
-When you are done, press **End acceptance in this browser** on the Shop acceptance page (or wait 8 hours). Test orders and money records stay in the staging database; they never reach a real shop.
+| What | Use |
+|---|---|
+| Customers | `Test Customer One`, `01711000071`, `House 71, Road 7, Test Area, Dhaka`; `Test Customer Two`, `01711000072`, `House 72, Road 7, Test Area, Dhaka` |
+| Email addresses (customers and staff) | Addresses you own. With Gmail add a tag: `yourname+cust1@gmail.com`, `yourname+orders@gmail.com`, `yourname+manager@gmail.com` all arrive in your inbox |
+| Test bKash receiving details | Account name `TEST ONLY Shop`, number `01300000001` (not a real account: no money is ever sent) |
+| Transaction IDs | `TESTTRX0001`, `TESTTRX0002`, … (made up) |
+
+## A. Products and stock (Owner window)
+
+| # | Do this | Where | You should see |
+|---|---|---|---|
+| A1 | Sign in. Check both delivery charges are set (real setting: change nothing that is already right). | [Admin](https://babysunray.com/admin/login), [Delivery charges](https://babysunray.com/admin/settings/delivery) | Both areas active with a charge. |
+| A2 | Create **4 test products** named so you recognise them (`ACCEPTANCE TEST Romper`, `… Frock`, `… Set`, `… Cap`): English and Bangla names and descriptions, fabric (true wording only, tick the confirmation), care, a category, a size chart. Give them **several sizes and colours** with **different prices**. Upload **three photos** to one product and one photo to the others (your own photos, under 5 MB). | [New product](https://babysunray.com/admin/products/new) | The yellow "missing" list shrinks to nothing. The three photos show in order and can be reordered. If an upload fails, note the exact message. |
+| A3 | **Receive stock** on each size: most 5 units, one size **only 1 unit**, one size **0**. | Each size's page under *Variants and stock* | On hand shows exactly what you received; the stock movement list names you. |
+| A4 | **Review and publish** all four. | Each product, *Publishing* | "Published". |
+
+## B. Payment methods (Owner window)
+
+| # | Do this | Where | You should see |
+|---|---|---|---|
+| B1 | Open Payment methods. | [Payment methods](https://babysunray.com/admin/settings/payments) | Cash on delivery "Always offered"; bKash, Nagad and Bank transfer **Not set up**. |
+| B2 | bKash → **Set up**: the test details above, *Merchant*, tick **Offer bKash to customers** but **not** the confirmation, **Save**. | | Refused: "confirm that this account may receive …". What you typed is still there. |
+| B3 | Tick the confirmation, **Save**. | | "Offered to customers", with the details as customers will see them. |
+
+## C. Customers (Customer window)
+
+| # | Do this | Where | You should see |
+|---|---|---|---|
+| C0 | **Start acceptance** in this window: sign in to the Admin, open Shop acceptance, **Start acceptance in this browser**, then sign out of the Admin here. | [Shop acceptance](https://babysunray.com/admin/acceptance) | "Holds an acceptance pass". |
+| C1 | Create a customer account with **email and password** (`yourname+cust1@gmail.com`), confirm it from the email. | [Account](https://babysunray.com/en/account) | A confirmation email arrives (check spam), then you are signed in. If nothing arrives, note it. |
+| C2 | Sign out, then **Continue with Google** with your Google account. | [My order](https://babysunray.com/en/order) | Google asks you to choose an account, then you come back to *My order*, signed in with your Google name. This is the first real Google sign-in: if it fails, note the exact page and message. |
+| C3 | Open `https://babysunray.com/admin` in this window while signed in as a customer. | | The Admin sign-in page: a customer account never opens the Admin. |
+
+## D. Cash on delivery orders (Customer, then Owner)
+
+| # | Do this | Where | You should see |
+|---|---|---|---|
+| D1 | Signed in with Google: put two items in the Bag (two products, one with 2 units), choose the delivery area, **Checkout**, *Test Customer One*, keep **Cash on Delivery**, **Place order**. Save the tracking link in a private note. | [Shop](https://babysunray.com/en) | "Order received", a number, the tracking link **shown once**. *My order* lists the order. |
+| D2 | Owner window: open the order. | [Orders](https://babysunray.com/admin/orders) | *Pending verification*, payment **Nothing received**, paid by **cash on delivery**. On each item's size page, *reserved* went up. |
+| D3 | **Confirm**, **Mark packed**, **Dispatch**, **Record delivery**. | The order page | Each step in *History* with your name. Dispatch lowers on hand and reserved once. |
+| D4 | **Record a payment**: *Courier collected* the total, then *Settled to me* the total. | *Cash on delivery* card | Payment **Settled**. |
+| D5 | Customer window: open the tracking link. | Your saved link | The same order, Delivered, no full name, phone or address shown. |
+| D6 | As a guest (sign out first): order the size with **1 unit** but ask for 2. Then press **Place order** twice quickly on a normal order. | Shop | "Not enough stock" and nothing created; then one order only. |
+| D7 | From that order's tracking link: **Cancel order**. | Tracking page | "Cancelled"; in the Owner window its stock is released (reserved down, on hand unchanged). |
+
+## E. Advance payment orders (Customer, then Owner)
+
+| # | Do this | Where | You should see |
+|---|---|---|---|
+| E1 | Guest, *Test Customer Two*: order one item, and at the last step choose **Pay in advance by bKash**, **Place order**. | Checkout | The payment card: bKash, `01300000001`, the **exact total**, "This is not an online payment". The tracking link. **Send no money.** |
+| E2 | Open the tracking link. Type `TESTTRX0001`, **Send transaction ID**. | Tracking page | "Transaction ID received: awaiting the shop's verification". Nothing says paid. |
+| E3 | Owner window: Orders → **Payments to verify**, open the order. | [Orders](https://babysunray.com/admin/orders?queue=payment_to_verify) | *Manual payment* shows `TESTTRX0001`, *Verified as received* ৳ 0, payment **Nothing received**. |
+| E4 | **Verify: money received** with the full amount (pretend you saw it in the account). | *Manual payment* | *Verified as received* = the total, *Still due* ৳ 0, payment **Settled**; the order is still *Pending verification* (verifying money does not confirm the order). Tracking page: "Payment verified by the shop". |
+| E5 | **Confirm**, **Mark packed**, **Dispatch**, **Record delivery**. | | The *Cash on delivery* card expects ৳ 0: nothing for the courier to collect. |
+| E6 | A second advance order. Send `TESTTRX0002`. Verify only **half** the total. | | *Partly paid*, *Still due* the other half; the tracking page says part is verified. Before dispatch the page warns that the courier would collect the rest. |
+| E7 | A third advance order. Send `TESTTRX0003`; in the Owner window **Reject reference** ("No such transfer"). | | Tracking page: "There is a problem with your payment. Please contact the shop." and it can send another ID. |
+| E8 | On another order, send `TESTTRX0001` again (already verified on E1's order) and try to verify it. | | Refused: "already verified … one transfer counts once". |
+
+## F. Staff (Owner window, then Staff window)
+
+| # | Do this | Where | You should see |
+|---|---|---|---|
+| F1 | Invite `yourname+orders@gmail.com` as **Orders Staff** and `yourname+manager@gmail.com` as **Store Manager**. | [Staff & access](https://babysunray.com/admin/staff) | "Invitation emailed". Read *What each role can do*. (If email were off, the page would show the link once instead.) |
+| F2 | Staff window: open the Orders Staff email's link, enter a name and a password, **Create my account**, sign in. | Email link | Signed in; under the shop name it says **Orders Staff**. The menu has no Dashboard, Reports, Exports, Payment methods, Store settings or Staff & access. |
+| F3 | As Orders Staff: confirm and pack one of your test orders. | Orders | Works; *History* shows the staff member's name. The order page shows no *Verify*, *Record a payment* or refund buttons, and says only the Owner can verify payments. |
+| F4 | As Orders Staff, type these addresses: `/admin/staff`, `/admin/settings/payments`, `/admin/exports`, `/admin/reports`. | Address bar | Each: "This page could not be shown". |
+| F5 | As Orders Staff: try to cancel the advance order verified in E4 (if not dispatched) or E6. | Order page | No cancel button for a paid order ("only the Owner can cancel it"). |
+| F6 | Sign out, accept the Manager invitation, sign in as **Store Manager**. Open Reports, edit a product's description, start a stock count and apply it. | | Allowed. No Staff & access, Payment methods, Exports or Publish button. |
+| F7 | Owner window: change Orders Staff to **Catalogue Staff**. Staff window (signed in as that person): reload Orders. | Staff & access | Orders are no longer available; Products are. |
+| F8 | Owner: **Disable access** for one staff account. Staff window: reload. | | Signed out at once; signing in again fails. *Access history* lists every change with your name. |
+| F9 | Owner: **Re-enable access**, then **Email a set-password link**. Use it in the Staff window. | | The old password stops working; the new one works. |
+
+## G. Cancellations and refunds (Owner window)
+
+| # | Do this | Where | You should see |
+|---|---|---|---|
+| G1 | A new **advance** order, not paid: **Cancel order**. | Order page | Cancelled, stock released, no refund due. |
+| G2 | A new **advance** order: send `TESTTRX0004`, verify the full amount, then **Cancel order**. | | Cancelled, stock released, a red **Refund due** box. Orders → **Refunds due** lists it; the Dashboard's *Needs attention* too. The tracking page says the shop will contact them. |
+| G3 | **Record the advance refund**: try one taka more than due, then the exact amount (bKash, today, reference `TESTREFUND1`). Pay nothing for real. | *Manual payment* | One taka more is refused; then *Refunded* shows the amount and the order leaves *Refunds due*. |
+| G4 | Optional: on a delivered test order, record a return, receive it, pass inspection, approve and record a fake refund. | *Returns and exchanges* | Returned goods wait in *Inspection* until passed; then back in stock. |
+
+## H. Numbers, history and privacy (Owner window)
+
+| # | Do this | Where | You should see |
+|---|---|---|---|
+| H1 | Look at each test size's page. | Size pages | On hand fell once per dispatched unit; reserved is 0 for finished or cancelled orders. |
+| H2 | Dashboard and Reports for today. | [Dashboard](https://babysunray.com/admin/dashboard), [Reports](https://babysunray.com/admin/reports) | COD and advance money in separate figures; *Advance payments verified* matches what you verified; the reconciliation check **passed**. |
+| H3 | Each order's *History*. | Order pages | Every step with who did it (you, a staff name, the customer or the system). |
+| H4 | Export orders and payments. | [Exports](https://babysunray.com/admin/exports) | The files have the payment method and advance columns. Delete the files afterwards. |
+| H5 | Check what customers can see. | Tracking pages | Masked name and phone, no address, no other customer's orders. |
+
+## I. Close down
+
+| # | Do this | Where |
+|---|---|---|
+| I1 | **Withdraw** the four test products. | Each product page |
+| I2 | Payment methods: untick **Offer bKash to customers** (the test number must never be shown to a real customer), or replace it with your real, approved details. | [Payment methods](https://babysunray.com/admin/settings/payments) |
+| I3 | Disable the test staff accounts. | [Staff & access](https://babysunray.com/admin/staff) |
+| I4 | **End acceptance in this browser** in the Customer window, and read Launch readiness. | [Shop acceptance](https://babysunray.com/admin/acceptance), [Launch readiness](https://babysunray.com/admin/launch-readiness) |
+
+Test orders, customers, staff accounts and money records stay in the staging database; they never reach a real shop.
+
+## J. Not checked by this session
+
+Per-client limits under real traffic, Cloudinary copies of published photos, and the decisions in the [decision register](../product/storefront-launch-decisions.md) (role permissions, refunds for prepaid orders, whether advance orders must be paid before dispatch).
 
 ---
 
@@ -63,30 +150,35 @@ When you are done, press **End acceptance in this browser** on the Shop acceptan
 
 Run these yourself in an interactive terminal from this repository. They read `.env.staging.local`; never paste its values anywhere. Keep Netlify visitor protection on. The production database does not exist yet and is created last ([production-migration.md](production-migration.md)).
 
-## Database updates (migrations)
+## Database updates (migrations) and the release order
 
-The repository has migrations 0000 to 0023. The newest staging migration report on this computer (19 Nov) shows 22 applied (0000 to 0021), so two are pending. 0023 is confirmed pending by the live Social links card; 0022 cannot be seen from the site, and the migration command's own `before` count settles it:
+The repository has migrations 0000 to 0025. The newest staging migration report on this computer (19 Nov) shows 22 applied (0000 to 0021), so up to four are pending:
 
 | Migration | What it does | If it is missing |
 |---|---|---|
 | 0022 `order_phone_search` | One index on the order's phone number. No data changes. | Order search by phone works, slower on a large table. |
-| 0023 `store_social_links` | Two optional text columns for the Facebook and Instagram links and a length check. No data changes. | The Social links card says the update is needed; nothing else is affected. |
+| 0023 `store_social_links` | Two optional text columns for the Facebook and Instagram links and a length check. No data changes. | The Social links card says the update is needed. |
+| 0024 `staff_access` | The staff invitation table; the role, audit-event and rate-limit checks accept the new values. No data changes. | **Needed by the new code:** Staff & access and invitations fail. |
+| 0025 `manual_payments` | The payment methods and advance payment tables; three order columns with defaults (every existing order stays cash on delivery); money checks re-created to count verified advance money (same result for every existing order). | **Needed by the new code:** orders, checkout and reports fail. |
 
-Both are additive (`npm run migrations:review -- --after 21` reports "additive", nothing destructive). The procedure, in this order (the migration command refuses without a fresh backup of the same database):
+All four are additive (`npm run migrations:review -- --after 21`: nothing destructive; each dropped check is re-created in the same migration, only wider). The old code keeps working on the new schema, so migrate **before** deploying. The order, each step only after the previous one succeeded (the migration command refuses without a fresh backup of the same database):
 
 1. `npm run staging:preflight`: lists missing settings, connects to nothing.
-2. `npm run backup:create:staging -- --out D:\BabySunray-staging`: an encrypted copy of the database (passphrase asked twice). The newest backup on this computer is from 19 Nov, older than the 24 hours the migration accepts. Optional but sensible: `npm run media:backup:staging -- --out D:\BabySunray-staging` for the photos.
-3. `npm run db:migrate:staging -- --backup <that file> --report D:\BabySunray-staging\migrate-<date>.json`: shows the host and asks you to type it back; applies the migrations in one transaction; audits the privileges. The report's `after` must read 24 applied (`before` 22, or 23 if 0022 was already applied), with `privilegeFindings` empty (the `privilegeWarnings` about Supabase's own role are known and expected).
-4. After it: open [Store settings](https://babysunray.com/admin/settings/store). The Social links card should now be editable and all other details unchanged. Add a Facebook and an Instagram link (full `https://` addresses; empty ones stay hidden), then open the [shop preview](https://babysunray.com/admin/storefront-preview/en) and look at the footer.
+2. `npm run backup:create:staging -- --out D:\BabySunray-staging`: an encrypted copy of the database (passphrase asked twice). Optional but sensible: `npm run media:backup:staging -- --out D:\BabySunray-staging` for the photos.
+3. `npm run db:migrate:staging -- --backup <that file> --report D:\BabySunray-staging\migrate-<date>.json`: shows the host and asks you to type it back; applies the pending migrations in one transaction; audits the privileges (the new tables get the application role's grants and row-level-security policy automatically). The report's `after` must read 26 applied, with `privilegeFindings` empty (the `privilegeWarnings` about Supabase's own role are known and expected).
+4. Push the reviewed commits to `main` (`git push origin main`). Netlify builds and deploys `main` only; visitor protection stays on (check that the site still asks for the Netlify sign-in in a private window).
+5. After the deploy: sign in, open [Staff & access](https://babysunray.com/admin/staff) and [Payment methods](https://babysunray.com/admin/settings/payments) (both load; every method "Not set up"), [Store settings](https://babysunray.com/admin/settings/store) (Social links editable) and [Launch readiness](https://babysunray.com/admin/launch-readiness) (public gate closed).
 
-The row "Database update 0020" on the Shop acceptance page only proves the acceptance tables exist; it does not report the newer updates. The Social links card is the live sign for 0023.
+If step 3 fails, nothing was changed (one transaction) and the old site keeps working; send me the report. Never deploy the new code to a database without 0024 and 0025.
+
+The row "Database update 0020" on the Shop acceptance page only proves the acceptance tables exist; it does not report the newer updates.
 
 ## One-time setup
 
 | Step | What | How |
 |---|---|---|
 | 1 | Get the new code | `git pull` |
-| 2 | Back up staging, then apply pending database updates | Section above. |
+| 2 | Back up staging, apply pending database updates, then deploy | Section above, steps 1 to 5. |
 | 3 | An Owner account on staging (only if you cannot sign in) | Set `ADMIN_SETUP_TOKEN` (below), redeploy, open `https://babysunray.com/admin/setup`. Emergency alternative: `npm run auth:bootstrap-owner:staging`. |
 | 4 | Google OAuth client "BabySunRay Production" (Google Cloud project BabySunRay-Commerce) | Authorised JavaScript origin `https://babysunray.com`; redirect URI exactly `https://babysunray.com/api/auth/callback/google`. Scopes `openid`, `email`, `profile` only. In "Testing" mode add your own Google account as a test user. |
 | 5 | Netlify environment variables | The list below. Then **Deploys → Trigger deploy** so the functions read them. |
@@ -119,4 +211,4 @@ Not needed now: `MAINTENANCE_SECRET` (no scheduler can reach the site through vi
 
 ## Not verified before your run
 
-Google's real sign-in, an email actually arriving, photo upload from the live site (about 6 MB per request on Netlify; keep photos below 5 MB), Cloudinary copies of published photos, Netlify's client address header and the per-client limits under real traffic. Report anything that does not behave as described.
+Google's real sign-in, an email actually arriving (customer confirmation and staff invitations), staff access and manual payments on the live site, photo upload from the live site (about 6 MB per request on Netlify; keep photos below 5 MB), Cloudinary copies of published photos, Netlify's client address header and the per-client limits under real traffic. Report anything that does not behave as described.

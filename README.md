@@ -40,6 +40,7 @@ It was built for how small shops in Bangladesh actually work: orders arrive from
 - **Clear sizing:** sizes, colours and a size chart in centimetres (or inches) on every product; the button always says what to choose next, and sold-out choices say so.
 - **Find things fast:** search, filters and sorting by newest or price.
 - **Cash on delivery:** the delivery charge is shown before ordering (the area chosen in the bag carries into checkout), and no card or account is needed.
+- **Or pay in advance:** by bKash, Nagad or bank transfer when the owner turns them on: the shop's details and the exact amount after ordering, then the transaction ID on the private order page. It counts only once the owner has checked the money arrived.
 - **Optional account:** sign up with email or Google to see past orders.
 - **Order tracking:** a private link for each order, with self-cancel while it's still waiting for the shop's call.
 - **Easy to reach the shop:** the footer lists only the contact channels the owner has set: phone, email, WhatsApp, Messenger, Facebook and Instagram.
@@ -48,6 +49,8 @@ It was built for how small shops in Bangladesh actually work: orders arrive from
 
 - **Orders in one place:** search by order number, name or phone, and take the next step in one tap. Pack or dispatch many orders at once.
 - **Quick view:** see the customer, items and payment without leaving the list.
+- **Staff with limited roles:** invite a manager or helpers for orders, products or stock by a one-time link; each sees only their own work, and the owner can change a role or switch someone off at once.
+- **Advance payments checked by hand:** customers' transaction IDs wait in one list until the owner verifies or rejects them; refunds due on cancelled prepaid orders stay visible until recorded.
 - **Products:** bilingual content, photos, variants, size charts, a readiness checklist and spreadsheet import.
 - **Honest stock:** items are held when an order arrives and leave stock only when the parcel is sent. Physical stock counts are built in.
 - **Cash on delivery tracking:** collected, settled and courier fees are recorded separately, with a reconciliation check.
@@ -102,10 +105,10 @@ Full setup, configuration and testing: **[developer docs](docs/README.md)**.
 
 | | |
 |---|---|
-| **Built and tested** | The shop, guest checkout with cash on delivery, customer accounts, order tracking, and the whole Admin, with unit, database and browser tests |
+| **Built and tested** | The shop, guest checkout with cash on delivery or a manual advance payment, customer accounts, order tracking, staff roles, and the whole Admin, with unit, database and browser tests |
 | **Running on staging** | A private Netlify site on a test database, where the owner rehearses real orders through "founder acceptance" |
 | **Not public yet** | Public checkout is closed until the owner approves the delivery, return and privacy policies and the launch |
-| **Not built** | Online card or mobile-wallet payments, courier integrations, automatic messages to customers, and an AI shopping assistant |
+| **Not built** | Online card or mobile-wallet payment gateways, courier integrations, automatic messages to customers, and an AI shopping assistant |
 
 ---
 
