@@ -71,7 +71,7 @@
     "ask": [
       "Bash(git init)",
       "Bash(git init *)",
-      "Bash(git commit *)",
+      "Bash(git commit *--amend*)",
       "Bash(git push)",
       "Bash(git push *)",
       "Bash(git reset *)",
@@ -85,7 +85,7 @@
       "Bash(rm *)",
       "PowerShell(git init)",
       "PowerShell(git init *)",
-      "PowerShell(git commit *)",
+      "PowerShell(git commit *--amend*)",
       "PowerShell(git push)",
       "PowerShell(git push *)",
       "PowerShell(git reset *)",
